@@ -68,7 +68,8 @@ export function recoveryFromAttempt(attempt: {
     (attempt.resultJson.kind === 'completed' ||
       attempt.resultJson.kind === 'failed' ||
       attempt.resultJson.kind === 'awaiting_review' ||
-      attempt.resultJson.kind === 'awaiting_user_input')
+      attempt.resultJson.kind === 'awaiting_user_input' ||
+      attempt.resultJson.kind === 'registered_intent')
       ? attempt.resultJson.kind
       : null
   return attemptRecoveryJudgment({

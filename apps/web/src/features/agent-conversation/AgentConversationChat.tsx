@@ -6,7 +6,6 @@ import {
 import { Alert, Button, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  pageLocatorLabel,
   parseConversationStreamFrame,
   type AiConversationEventView,
   type AiConversationView,
@@ -34,7 +33,8 @@ import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationDraft } from './use-agent-conversation-draft'
-import { useCurrentPageLocator } from './use-current-page-locator'
+import { currentPageAttachmentLabel } from './page-locator-attachment'
+import { useCurrentPageAttachment } from './use-current-page-locator'
 
 const AGENT_ID = 'conversation-general'
 
@@ -63,11 +63,18 @@ function mergeEvents(
 export function AgentConversationChat() {
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const conversationView = useAgentConversationStore((state) => state.view)
-  const attachedPageLocator = useAgentConversationStore((state) => state.attachedPageLocator)
+  const attachedPageAttachment = useAgentConversationStore(
+    (state) => state.attachedPageAttachment,
+  )
   const attachCurrentPage = useAgentConversationStore((state) => state.attachCurrentPage)
   const detachCurrentPage = useAgentConversationStore((state) => state.detachCurrentPage)
-  const syncDefaultPageLocator = useAgentConversationStore((state) => state.syncDefaultPageLocator)
-  const currentPageLocator = useCurrentPageLocator()
+  const restoreCurrentPageAfterSend = useAgentConversationStore(
+    (state) => state.restoreCurrentPageAfterSend,
+  )
+  const syncDefaultPageAttachment = useAgentConversationStore(
+    (state) => state.syncDefaultPageAttachment,
+  )
+  const currentPageAttachment = useCurrentPageAttachment()
   const persistConversation = useAgentConversationStore((state) => state.persistConversation)
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
@@ -85,8 +92,8 @@ export function AgentConversationChat() {
   }, [events])
 
   useEffect(() => {
-    syncDefaultPageLocator(currentPageLocator)
-  }, [conversationId, conversationView, currentPageLocator, syncDefaultPageLocator])
+    syncDefaultPageAttachment(currentPageAttachment)
+  }, [conversationId, conversationView, currentPageAttachment, syncDefaultPageAttachment])
 
   useEffect(() => {
     useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
@@ -258,11 +265,16 @@ export function AgentConversationChat() {
         sendIdempotencyKey,
       })
       try {
+        const attachment = useAgentConversationStore.getState().attachedPageAttachment
         const result = await sendAgentConversationText(
           conversationIdRef.current,
           {
             text: nextText,
-            pageLocator: useAgentConversationStore.getState().attachedPageLocator,
+            ...(attachment?.kind === 'page_locator'
+              ? { pageLocator: attachment.locator }
+              : attachment?.kind === 'departure_creation_task'
+                ? { primaryTaskId: attachment.taskId }
+                : {}),
           },
           sendIdempotencyKey,
         )
@@ -279,6 +291,7 @@ export function AgentConversationChat() {
           sending: false,
           sendIdempotencyKey: null,
         })
+        restoreCurrentPageAfterSend(currentPageAttachment)
         if (!conversationIdRef.current) {
           persistConversation({
             id: result.conversationId,
@@ -296,7 +309,15 @@ export function AgentConversationChat() {
         })
       }
     },
-    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation, updateDraft],
+    [
+      conversationIdRef,
+      currentPageAttachment,
+      draftEpochRef,
+      draftRevisionRef,
+      persistConversation,
+      restoreCurrentPageAfterSend,
+      updateDraft,
+    ],
   )
 
   const messages = useMemo(
@@ -312,28 +333,25 @@ export function AgentConversationChat() {
 
   return (
     <div className={chatStyles.root}>
-      {errorText ? <Alert type="error" showIcon message={errorText} /> : null}
-      {attachedPageLocator ? (
+      {errorText ? <Alert type="error" showIcon title={errorText} /> : null}
+      {attachedPageAttachment ? (
         <div className={chatStyles.pageContext}>
-          <Tag className={chatStyles.pageContextChip} data-testid="current-page-chip">
-            {pageLocatorLabel(attachedPageLocator)}
-            <Button
-              type="text"
-              size="small"
-              aria-label="移除当前页面"
-              onClick={detachCurrentPage}
-            >
-              移除
-            </Button>
+          <Tag
+            className={chatStyles.pageContextChip}
+            data-testid="current-page-chip"
+            closable={{ 'aria-label': '移除当前页面' }}
+            onClose={detachCurrentPage}
+          >
+            {currentPageAttachmentLabel(attachedPageAttachment)}
           </Tag>
         </div>
-      ) : currentPageLocator ? (
+      ) : currentPageAttachment ? (
         <div className={chatStyles.pageContext}>
           <Button
             type="link"
             size="small"
             aria-label="获取当前页面"
-            onClick={() => attachCurrentPage(currentPageLocator)}
+            onClick={() => attachCurrentPage(currentPageAttachment)}
           >
             获取当前页面
           </Button>

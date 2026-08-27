@@ -66,7 +66,11 @@ export async function saveAgentConversationDraft(
 
 export async function sendAgentConversationText(
   conversationId: string | null,
-  payload: { text: string; pageLocator?: PageLocator | null },
+  payload: { text: string } & (
+    | { pageLocator: PageLocator; primaryTaskId?: never }
+    | { primaryTaskId: string; pageLocator?: never }
+    | { pageLocator?: never; primaryTaskId?: never }
+  ),
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   const path = conversationId
@@ -77,6 +81,7 @@ export async function sendAgentConversationText(
     {
       text: payload.text,
       ...(payload.pageLocator ? { pageLocator: payload.pageLocator } : {}),
+      ...(payload.primaryTaskId ? { primaryTaskId: payload.primaryTaskId } : {}),
     },
     {
       silentError: true,

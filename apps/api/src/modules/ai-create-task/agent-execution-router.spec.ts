@@ -1,6 +1,7 @@
 import {
   AI_CREATE_AGENT_DEFINITION_REF,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  DEPARTURE_CREATION_GOAL_INTENT_KEY,
 } from '@xiaotuanbao/ai-contracts'
 import { AgentTaskType, InputBatchTaskRole } from '@prisma/client'
 import { AgentExecutionRouter } from './agent-execution-router'
@@ -116,6 +117,51 @@ describe('AgentExecutionRouter', () => {
     ).toEqual({
       kind: 'task_creation_proposal',
       registeredIntentKey: 'future.task.proposal',
+      taskType: AgentTaskType.departure_creation,
+      requiredPermissionKey: 'departure:write',
+    })
+  })
+  it('does not let a registered intent override a frozen primary task', () => {
+    const routerWithIntent = new AgentExecutionRouter([
+      {
+        intentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+        kind: 'task_creation_proposal',
+        taskType: AgentTaskType.departure_creation,
+        requiredPermissionKey: 'departure:write',
+      },
+    ])
+
+    expect(
+      routerWithIntent.route({
+        associations: { taskRefs: [departureTask] },
+        registeredIntent: { key: DEPARTURE_CREATION_GOAL_INTENT_KEY },
+      }),
+    ).toMatchObject({
+      kind: 'execution_definition',
+      source: 'task',
+      taskId: 'task-1',
+    })
+  })
+
+  it('does not let a partner page locator choose a definition for a create-departure intent', () => {
+    const routerWithIntent = new AgentExecutionRouter([
+      {
+        intentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+        kind: 'task_creation_proposal',
+        taskType: AgentTaskType.departure_creation,
+        requiredPermissionKey: 'departure:write',
+      },
+    ])
+
+    expect(
+      routerWithIntent.route({
+        associations: { taskRefs: [] },
+        pageAttachment: page('partner'),
+        registeredIntent: { key: DEPARTURE_CREATION_GOAL_INTENT_KEY },
+      }),
+    ).toEqual({
+      kind: 'task_creation_proposal',
+      registeredIntentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
       taskType: AgentTaskType.departure_creation,
       requiredPermissionKey: 'departure:write',
     })

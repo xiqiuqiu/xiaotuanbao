@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
+import { useAgentConversationRuntimeStore } from '@/features/agent-conversation/agent-conversation-runtime.store'
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
 import {
@@ -54,6 +55,10 @@ import {
   switchRouteSourceToManual,
 } from '../utils/departure-wizard-form'
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
+import {
+  latestConversationEventSequence,
+  proposedTaskToClaim,
+} from '../utils/wizard-task-claim'
 
 const AUTOSAVE_DEBOUNCE_MS = 800
 
@@ -82,6 +87,9 @@ function useCreateDepartureWizardController() {
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
   const conversationId = useAgentConversationStore((state) => state.conversationId)
+  const conversationView = useAgentConversationStore((state) => state.view)
+  const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
+  const conversationEvents = useAgentConversationRuntimeStore((state) => state.events)
   const search = useSearch({ strict: false }) as { copyFrom?: string; taskId?: string }
   const copyFromId = search.copyFrom?.trim()
   const searchTaskId = search.taskId?.trim()
@@ -99,6 +107,7 @@ function useCreateDepartureWizardController() {
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const persistInFlightRef = useRef<Promise<void> | null>(null)
+  const taskClaimInFlightRef = useRef<Promise<void> | null>(null)
   const confirmIdempotencyKeyRef = useRef<string | null>(null)
   const taskIdRef = useRef(taskId)
   const draftVersionRef = useRef(draftVersion)
@@ -106,6 +115,22 @@ function useCreateDepartureWizardController() {
   const pendingReviewRef = useRef<AiReviewPackageView | null>(null)
   const templateSelectGenerationRef = useRef(0)
   const templateSelectAbortRef = useRef<AbortController | null>(null)
+  const claimCursorRef = useRef<{
+    conversationId: string | null
+    afterSequence: number
+    armed: boolean
+  } | null>(null)
+
+  if (!claimCursorRef.current) {
+    const runtimeMatches = Boolean(conversationId) && runtimeConversationId === conversationId
+    claimCursorRef.current = {
+      conversationId,
+      afterSequence: runtimeMatches
+        ? latestConversationEventSequence(conversationEvents)
+        : 0,
+      armed: !conversationId || runtimeMatches,
+    }
+  }
 
   useEffect(() => {
     taskIdRef.current = taskId
@@ -160,6 +185,10 @@ function useCreateDepartureWizardController() {
   const persistDraft = useCallback(async () => {
     if (!user) {
       throw new Error('请先登录')
+    }
+
+    if (taskClaimInFlightRef.current) {
+      await taskClaimInFlightRef.current
     }
 
     if (persistInFlightRef.current) {
@@ -232,6 +261,63 @@ function useCreateDepartureWizardController() {
     })
     await persistInFlightRef.current
   }, [applySavedDraft, infoForm, syncTaskSearch, user])
+
+  useEffect(() => {
+    const cursor = claimCursorRef.current
+    if (!cursor) return
+
+    const latestSequence = latestConversationEventSequence(conversationEvents)
+    if (cursor.conversationId !== conversationId) {
+      const startedWhileWizardOpen = cursor.conversationId === null && conversationId !== null
+      cursor.conversationId = conversationId
+      cursor.afterSequence = startedWhileWizardOpen ? 0 : latestSequence
+      cursor.armed = startedWhileWizardOpen || runtimeConversationId === conversationId
+      if (!startedWhileWizardOpen) return
+    }
+
+    if (!cursor.armed) {
+      if (conversationId && runtimeConversationId === conversationId) {
+        cursor.afterSequence = latestSequence
+        cursor.armed = true
+      }
+      return
+    }
+
+    const proposedTaskId = proposedTaskToClaim({
+      conversationId,
+      runtimeConversationId,
+      events: conversationEvents,
+      afterSequence: cursor.afterSequence,
+      currentTaskId: taskIdRef.current,
+      historical: conversationView === 'history',
+    })
+    cursor.afterSequence = Math.max(cursor.afterSequence, latestSequence)
+    if (!proposedTaskId || taskClaimInFlightRef.current) return
+
+    const claim = getAiCreateTask(proposedTaskId).then((task) => {
+      if (task.departureId || taskIdRef.current) return
+      applySavedDraft(task, { keepDirty: true })
+      syncTaskSearch(task.id)
+    })
+    const trackedClaim = claim
+      .catch((error) => {
+        message.error(error instanceof Error ? error.message : '认领 AI 建团任务失败')
+      })
+      .finally(() => {
+        if (taskClaimInFlightRef.current === trackedClaim) {
+          taskClaimInFlightRef.current = null
+        }
+      })
+    taskClaimInFlightRef.current = trackedClaim
+  }, [
+    applySavedDraft,
+    conversationEvents,
+    conversationId,
+    conversationView,
+    message,
+    runtimeConversationId,
+    syncTaskSearch,
+  ])
 
   const scheduleAutosave = useCallback(() => {
     dirtyRef.current = true

@@ -7,8 +7,10 @@ import {
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  DEPARTURE_CREATION_GOAL_INTENT_KEY,
   CONVERSATION_GENERAL_INSTRUCTIONS,
   CONVERSATION_RECALL_TOOL_NAMES,
+  CONVERSATION_ROUTING_TOOL,
   aiCreateCapabilityDefinitionForTool,
   aiCreateCapabilityDefinitionRegistry,
   conversationGeneralCapabilityDefinitionRegistry,
@@ -18,6 +20,7 @@ import {
   requestContextSchema,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
+  type HeadlessRegisteredIntentResult,
   type RequestContext,
   type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
@@ -25,7 +28,9 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
+  AgentTaskType,
   AiAgentAttemptStatus,
+  AiCreatePhase,
   AiConversationEventKind,
   AiConversationInteractionStatus,
   AiInputBatchStatus,
@@ -79,6 +84,7 @@ import { isOpenAgentTaskStatus } from './agent-task.runtime'
 import {
   AgentExecutionRouter,
   type AgentExecutionRoute,
+  type AgentExecutionRoutingInput,
   type FrozenAgentAssociation,
 } from './agent-execution-router'
 import { lockConversationRuntime } from './ai-create-task.lock'
@@ -105,13 +111,25 @@ import { projectPendingReviewPackage } from './review-package.projection'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
+const CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES = [
+  ...CONVERSATION_RECALL_TOOL_NAMES,
+  CONVERSATION_ROUTING_TOOL.name,
+] as const
+
 @Injectable()
 export class AiWorkflowProcessor {
   private readonly logger = new Logger(AiWorkflowProcessor.name)
   private readonly workerId = process.env.HOSTNAME?.trim() || `worker-${randomUUID()}`
   private parseInFlight = 0
   private agentInFlight = 0
-  private readonly executionRouter = new AgentExecutionRouter()
+  private readonly executionRouter = new AgentExecutionRouter([
+    {
+      intentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+      kind: 'task_creation_proposal',
+      taskType: AgentTaskType.departure_creation,
+      requiredPermissionKey: 'departure:write',
+    },
+  ])
 
   constructor(
     private readonly prisma: PrismaService,
@@ -517,7 +535,13 @@ export class AiWorkflowProcessor {
             },
           )
           await flusher.flush()
-          await this.persistOutcome(routedJob, executionRoute, prepared.attemptId, outcome)
+          await this.persistOutcome(
+            routedJob,
+            executionRoute,
+            routing.input,
+            prepared.attemptId,
+            outcome,
+          )
           return outcome
         })
         if (result.kind === 'failed') {
@@ -684,6 +708,7 @@ export class AiWorkflowProcessor {
 
   private async resolveExecutionRoute(job: ClaimedJob): Promise<{
     route: AgentExecutionRoute
+    input: AgentExecutionRoutingInput
     pageAttachment?: ResolvedPageContext
   }> {
     const [pageAttachment, taskLinks, interaction, versionEvent] = await Promise.all([
@@ -747,25 +772,27 @@ export class AiWorkflowProcessor {
       ? frozenAssociation(reviewPackage.id, reviewPackage.attempt, reviewPackage.taskId)
       : undefined
 
+    const input: AgentExecutionRoutingInput = {
+      associations: {
+        ...(interactionAssociation ? { interaction: interactionAssociation } : {}),
+        ...(reviewAssociation ? { reviewPackage: reviewAssociation } : {}),
+        taskRefs: taskLinks
+          .filter(
+            (link) =>
+              link.role === InputBatchTaskRole.primary ||
+              link.role === InputBatchTaskRole.created,
+          )
+          .map((link) => ({
+            taskId: link.taskId,
+            role: link.role,
+            taskType: link.task.type,
+          })),
+      },
+      ...(pageAttachment ? { pageAttachment } : {}),
+    }
     return {
-      route: this.executionRouter.route({
-        associations: {
-          ...(interactionAssociation ? { interaction: interactionAssociation } : {}),
-          ...(reviewAssociation ? { reviewPackage: reviewAssociation } : {}),
-          taskRefs: taskLinks
-            .filter(
-              (link) =>
-                link.role === InputBatchTaskRole.primary ||
-                link.role === InputBatchTaskRole.created,
-            )
-            .map((link) => ({
-              taskId: link.taskId,
-              role: link.role,
-              taskType: link.task.type,
-            })),
-        },
-        ...(pageAttachment ? { pageAttachment } : {}),
-      }),
+      route: this.executionRouter.route(input),
+      input,
       ...(pageAttachment ? { pageAttachment } : {}),
     }
   }
@@ -1181,7 +1208,7 @@ export class AiWorkflowProcessor {
         businessFacts,
         unresolvedState: { hasPendingReview: false, reviewPackageId: null },
         modelId,
-        toolNames: CONVERSATION_RECALL_TOOL_NAMES,
+        toolNames: CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES,
         systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
@@ -1196,7 +1223,7 @@ export class AiWorkflowProcessor {
       })
       const budgetedContext = buildBudgetedContext({
         modelId,
-        toolNames: CONVERSATION_RECALL_TOOL_NAMES,
+        toolNames: CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES,
         systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
@@ -1370,6 +1397,7 @@ export class AiWorkflowProcessor {
   private async persistOutcome(
     job: ClaimedJob,
     route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
+    routingInput: AgentExecutionRoutingInput,
     attemptId: string,
     result: HeadlessExecutionResult,
   ): Promise<void> {
@@ -1387,6 +1415,21 @@ export class AiWorkflowProcessor {
       }
       await this.scheduleRetry(job, errorCode, attemptId)
       return
+    }
+    if (result.kind === 'registered_intent') {
+      const intentRoute = this.executionRouter.route({
+        ...routingInput,
+        registeredIntent: result.intent,
+      })
+      if (intentRoute.kind === 'task_creation_proposal') {
+        await this.persistTaskCreationProposal(job, route, attemptId, result, intentRoute)
+        return
+      }
+      result = {
+        kind: 'completed',
+        message: result.message,
+        ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
+      }
     }
     if (result.kind === 'awaiting_review' && !job.taskId) {
       await this.persistFailure(job, 'INVALID_FORMAT', result, attemptId)
@@ -1568,6 +1611,154 @@ export class AiWorkflowProcessor {
           },
         })
       }
+      await tx.aiConversation.update({
+        where: { id: job.conversationId },
+        data: { lastActivityAt: new Date(), updatedAt: new Date() },
+      })
+    })
+
+    for (const eventId of published) {
+      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
+      if (event) {
+        this.conversationService.publish(job.conversationId, event)
+      }
+    }
+  }
+
+  private async persistTaskCreationProposal(
+    job: ClaimedJob,
+    currentRoute: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
+    attemptId: string,
+    result: HeadlessRegisteredIntentResult,
+    proposal: Extract<AgentExecutionRoute, { kind: 'task_creation_proposal' }>,
+  ): Promise<void> {
+    if (
+      proposal.taskType !== AgentTaskType.departure_creation ||
+      result.intent.key !== DEPARTURE_CREATION_GOAL_INTENT_KEY ||
+      !result.intent.goal
+    ) {
+      await this.persistFailure(job, 'INVALID_FORMAT', undefined, attemptId)
+      return
+    }
+    const goal = result.intent.goal
+
+    const [authorization, permissionKeys] = await Promise.all([
+      this.recheckAuthorization(job, currentRoute),
+      this.authService.getPermissionKeysForUser(job.inputBatch.creatorUserId),
+    ])
+    if (!authorization.ok || !permissionKeys.includes(proposal.requiredPermissionKey)) {
+      const denied: HeadlessExecutionResult = {
+        kind: 'failed',
+        error: AiCollaborationError.fromCode('PERMISSION_DENIED').toJSON(),
+        ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
+      }
+      await this.persistFailure(job, 'PERMISSION_DENIED', denied, attemptId)
+      return
+    }
+
+    const published: string[] = []
+    await this.prisma.$transaction(async (tx) => {
+      await lockConversationRuntime(tx, job.organizationId, job.conversationId)
+      if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
+      const currentJob = await tx.aiWorkflowJob.findUniqueOrThrow({ where: { id: job.id } })
+      const currentAttempt = await tx.aiAgentAttempt.findUnique({
+        where: { id: attemptId },
+        select: { generation: true },
+      })
+      if (!currentAttempt || currentAttempt.generation !== currentJob.generation) {
+        return
+      }
+
+      const task = await tx.agentTask.create({
+        data: {
+          organizationId: job.organizationId,
+          ownerUserId: job.inputBatch.creatorUserId,
+          type: AgentTaskType.departure_creation,
+          goal,
+          status: AgentTaskStatus.active,
+          departureCreationTask: {
+            create: {
+              currentPhase: AiCreatePhase.basic_info,
+              draft: {
+                create: {
+                  version: 1,
+                  snapshot: { mode: 'manual', routeName: '' },
+                },
+              },
+            },
+          },
+          conversationLinks: {
+            create: {
+              organizationId: job.organizationId,
+              conversationId: job.conversationId,
+              linkedByUserId: job.inputBatch.creatorUserId,
+              linkReason: 'agent_task_creation_proposal',
+              metadata: { inputBatchId: job.inputBatchId },
+            },
+          },
+          activities: {
+            create: {
+              organizationId: job.organizationId,
+              actorUserId: job.inputBatch.creatorUserId,
+              kind: TaskActivityKind.goal,
+              summary: '通过 Agent 对话创建发团任务',
+              payload: {
+                inputBatchId: job.inputBatchId,
+                registeredIntentKey: result.intent.key,
+              },
+            },
+          },
+        },
+      })
+      await tx.inputBatchTaskLink.create({
+        data: {
+          organizationId: job.organizationId,
+          inputBatchId: job.inputBatchId,
+          taskId: task.id,
+          role: InputBatchTaskRole.created,
+        },
+      })
+      await tx.aiAgentAttempt.update({
+        where: { id: attemptId },
+        data: {
+          status: AiAgentAttemptStatus.completed,
+          resultJson: result as unknown as Prisma.InputJsonValue,
+          ...attemptDiagnosticUpdate(result),
+          endedAt: new Date(),
+        },
+      })
+      await this.writeManifestUsage(tx, attemptId, result)
+      await tx.aiInputBatch.update({
+        where: { id: job.inputBatchId },
+        data: { status: AiInputBatchStatus.ready_for_agent },
+      })
+      await tx.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          taskId: task.id,
+          status: AiWorkflowJobStatus.pending,
+          claimedAt: null,
+          claimedBy: null,
+          leaseExpiresAt: null,
+          nextAttemptAt: new Date(),
+          lastErrorCode: null,
+        },
+      })
+      const statusEvent = await this.conversationService.appendEvent(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        kind: AiConversationEventKind.batch_status,
+        payload: {
+          batchId: job.inputBatchId,
+          status: AiInputBatchStatus.ready_for_agent,
+          attemptId,
+          createdTaskId: task.id,
+          continuation: true,
+        },
+      })
+      published.push(statusEvent.id)
       await tx.aiConversation.update({
         where: { id: job.conversationId },
         data: { lastActivityAt: new Date(), updatedAt: new Date() },

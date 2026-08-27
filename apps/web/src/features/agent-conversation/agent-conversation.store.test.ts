@@ -12,7 +12,7 @@ describe('agent conversation store #370', () => {
       returnLocation: null,
       historyRailCollapsed: false,
       globalOpen: false,
-      attachedPageLocator: null,
+      attachedPageAttachment: null,
       pageContextDismissed: false,
     })
   })
@@ -132,60 +132,55 @@ describe('agent conversation page locator #371', () => {
 
   it('attaches the current page on a new conversation and drops it when switching history', () => {
     useAgentConversationStore.getState().startNewConversation({
-      kind: 'partner',
-      objectId: 'partner-1',
-      section: 'accounts',
+      kind: 'page_locator',
+      locator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
-      kind: 'partner',
-      objectId: 'partner-1',
-      section: 'accounts',
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
     })
 
     useAgentConversationStore.getState().persistConversation({
       id: 'c-new',
       title: '刚发出的新会话',
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
-      kind: 'partner',
-      objectId: 'partner-1',
-      section: 'accounts',
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
     })
     useAgentConversationStore.getState().openHistoricalConversation({
       id: 'c-1',
       title: '历史会话',
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toBeNull()
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
   })
 
   it('does not restore a dismissed locator until the user captures the page again', () => {
     useAgentConversationStore.getState().startNewConversation({
-      kind: 'departure',
-      objectId: 'departure-1',
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
     useAgentConversationStore.getState().detachCurrentPage()
-    useAgentConversationStore.getState().syncDefaultPageLocator({
-      kind: 'departure',
-      objectId: 'departure-1',
+    useAgentConversationStore.getState().syncDefaultPageAttachment({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toBeNull()
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
 
     useAgentConversationStore.getState().attachCurrentPage({
-      kind: 'departure',
-      objectId: 'departure-1',
-      section: 'overview',
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
-      kind: 'departure',
-      objectId: 'departure-1',
-      section: 'overview',
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
     })
   })
 
   it('keeps the attached locator when the first send persists a new conversation', () => {
     useAgentConversationStore.getState().startNewConversation({
-      kind: 'departure',
-      objectId: 'departure-1',
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
     useAgentConversationStore.getState().persistConversation({
       id: 'c-new',
@@ -194,7 +189,27 @@ describe('agent conversation page locator #371', () => {
     expect(useAgentConversationStore.getState()).toMatchObject({
       conversationId: 'c-new',
       view: 'new',
-      attachedPageLocator: { kind: 'departure', objectId: 'departure-1' },
+      attachedPageAttachment: {
+        kind: 'page_locator',
+        locator: { kind: 'departure', objectId: 'departure-1' },
+      },
+    })
+  })
+
+  it('attaches the wizard task when it is persisted after the active conversation starts', () => {
+    useAgentConversationStore.getState().persistConversation({
+      id: 'c-new',
+      title: '新建川西发团',
+    })
+
+    useAgentConversationStore.getState().syncDefaultPageAttachment({
+      kind: 'departure_creation_task',
+      taskId: 'task-1',
+    })
+
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'departure_creation_task',
+      taskId: 'task-1',
     })
   })
 
@@ -204,16 +219,16 @@ describe('agent conversation page locator #371', () => {
       title: '历史会话',
     })
     useAgentConversationStore.getState().attachCurrentPage({
-      kind: 'departure',
-      objectId: 'departure-1',
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
     useAgentConversationStore.getState().persistConversation({
       id: 'c-1',
       title: '历史会话（已更新）',
     })
-    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
-      kind: 'departure',
-      objectId: 'departure-1',
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
   })
 
@@ -223,8 +238,8 @@ describe('agent conversation page locator #371', () => {
       title: '历史会话',
     })
     useAgentConversationStore.getState().attachCurrentPage({
-      kind: 'departure',
-      objectId: 'departure-1',
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
 
     useAgentConversationStore.getState().openHistoricalConversation({
@@ -232,9 +247,9 @@ describe('agent conversation page locator #371', () => {
       title: '历史会话',
     })
 
-    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
-      kind: 'departure',
-      objectId: 'departure-1',
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
     })
   })
 })
