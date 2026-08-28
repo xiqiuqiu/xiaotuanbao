@@ -27,6 +27,8 @@ WORKDIR /app
 RUN pnpm --filter api deploy --prod --legacy /out \
   && cd /out \
   && ./node_modules/.bin/prisma generate \
+  && test -f /out/dist/main.js \
+  && test -f /out/dist/workflow-worker.main.js \
   && rm -rf /out/src /out/test /out/scripts /out/*.ts /out/tsconfig*.json /out/jest*.js /out/nest-cli.json /out/Dockerfile \
   && rm -rf /root/.cache/pnpm /root/.cache/prisma /root/.cache/prisma-nodejs /root/.local/share/pnpm /tmp/pnpm* /tmp/*
 

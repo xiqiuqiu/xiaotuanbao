@@ -7,10 +7,11 @@
 ```caddyfile
 {$DOMAIN} {
     root * /srv/web
-    encode gzip zstd
+
+    @notAgentStream not path /api/agent/conversations/*/stream
+    encode @notAgentStream gzip zstd
 
     handle /api/agent/conversations/*/stream {
-        encode off
         reverse_proxy api:3000 {
             flush_interval -1
             header_up Accept-Encoding identity
@@ -40,7 +41,7 @@
 | `handle /api/agent/conversations/*/stream` | 会话 SSE：关闭压缩并立即 flush，避免首个 token 被反向代理缓冲 |
 | `handle /api/*` | 其余 API 请求反向代理到 `api:3000` |
 | `try_files {path} /index.html` | SPA 路由刷新回退 |
-| `encode gzip zstd` | 静态资源与普通 API 响应压缩 |
+| `encode @notAgentStream gzip zstd` | 静态资源与普通 API 响应压缩；SSE 路径不启用压缩 |
 
 ## 环境变量
 

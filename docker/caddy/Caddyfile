@@ -1,9 +1,10 @@
 {$DOMAIN} {
     root * /srv/web
-    encode gzip zstd
+
+    @notAgentStream not path /api/agent/conversations/*/stream
+    encode @notAgentStream gzip zstd
 
     handle /api/agent/conversations/*/stream {
-        encode off
         reverse_proxy api:3000 {
             flush_interval -1
             header_up Accept-Encoding identity
