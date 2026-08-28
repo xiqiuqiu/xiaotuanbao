@@ -64,24 +64,51 @@ export async function saveAgentConversationDraft(
   )
 }
 
+type SendAgentConversationPayload = {
+  text: string
+  files?: File[]
+  replyToEventId?: string
+  interactionId?: string
+  interactionVersion?: number
+  selectedOptionId?: string
+} & (
+  | { pageLocator: PageLocator; primaryTaskId?: never }
+  | { primaryTaskId: string; pageLocator?: never }
+  | { pageLocator?: never; primaryTaskId?: never }
+)
+
+function appendConversationMessageFields(form: FormData, payload: SendAgentConversationPayload) {
+  form.append('text', payload.text)
+  if (payload.replyToEventId) form.append('replyToEventId', payload.replyToEventId)
+  if (payload.interactionId) form.append('interactionId', payload.interactionId)
+  if (payload.interactionVersion != null) {
+    form.append('interactionVersion', String(payload.interactionVersion))
+  }
+  if (payload.selectedOptionId) form.append('selectedOptionId', payload.selectedOptionId)
+  if (payload.pageLocator) form.append('pageLocator', JSON.stringify(payload.pageLocator))
+  if (payload.primaryTaskId) form.append('primaryTaskId', payload.primaryTaskId)
+  for (const file of payload.files ?? []) {
+    form.append('files', file)
+  }
+}
+
 export async function sendAgentConversationText(
   conversationId: string | null,
-  payload: {
-    text: string
-    replyToEventId?: string
-    interactionId?: string
-    interactionVersion?: number
-    selectedOptionId?: string
-  } & (
-    | { pageLocator: PageLocator; primaryTaskId?: never }
-    | { primaryTaskId: string; pageLocator?: never }
-    | { pageLocator?: never; primaryTaskId?: never }
-  ),
+  payload: SendAgentConversationPayload,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   const path = conversationId
     ? `/agent/conversations/${conversationId}/messages`
     : '/agent/conversations/messages'
+  const files = payload.files ?? []
+  if (files.length > 0) {
+    const form = new FormData()
+    appendConversationMessageFields(form, payload)
+    return request.post<SendAiConversationMessageResult>(path, form, {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey, 'Content-Type': 'multipart/form-data' },
+    })
+  }
   return request.post<SendAiConversationMessageResult>(
     path,
     {

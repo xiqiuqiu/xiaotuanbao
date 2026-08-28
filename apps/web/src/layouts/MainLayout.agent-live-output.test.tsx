@@ -84,6 +84,21 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       Toggle: () => null,
     },
   ),
+  useAttachments: () => ({
+    attachments: [],
+    enabled: true,
+    dragOver: false,
+    fileInputRef: { current: null },
+    containerRef: { current: null },
+    processFiles: async () => {},
+    handleFileUpload: async () => {},
+    handleDragOver: () => {},
+    handleDragLeave: () => {},
+    handleDrop: async () => {},
+    removeAttachment: () => {},
+    consumeAttachments: () => [],
+  }),
+  CopilotChatInput: () => null,
   CopilotChatView: ({
     messages,
   }: {
