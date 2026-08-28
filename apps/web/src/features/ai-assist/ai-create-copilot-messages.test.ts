@@ -572,6 +572,7 @@ describe('AI create chat status projection', () => {
             batchId: 'batch-1',
             createdTaskId: 'task-1',
             createdTaskGoal: '创建 9 月 15 日出发的 8 天行程',
+            createdTaskType: 'departure_creation',
             continuation: true,
           },
           createdAt: '2026-08-27T00:00:01.000Z',
@@ -613,6 +614,7 @@ describe('AI create chat status projection', () => {
             taskId: 'task-1',
             title: '创建 9 月 15 日出发的 8 天行程',
             status: 'awaiting_review',
+            taskType: 'departure_creation',
           }),
         }),
         expect.objectContaining({
@@ -621,6 +623,7 @@ describe('AI create chat status projection', () => {
           content: expect.objectContaining({
             reviewPackageId: 'pkg-1',
             taskId: 'task-1',
+            taskType: 'departure_creation',
           }),
         }),
       ]),

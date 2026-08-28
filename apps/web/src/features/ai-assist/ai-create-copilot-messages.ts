@@ -188,6 +188,7 @@ export type ReviewPackageActivityContent = {
   reviewPackageId: string
   fieldKeys: string[]
   taskId?: string
+  taskType?: string
 }
 
 export type AgentTaskActivityContent = {
@@ -343,6 +344,7 @@ export function latestBatchStatus(
 function reviewPackageFromPayload(
   payload: Record<string, unknown>,
   fallbackTaskId?: string,
+  fallbackTaskType?: string,
 ): ReviewPackageActivityContent | null {
   const reviewPackageId = payload.reviewPackageId
   if (typeof reviewPackageId !== 'string' || reviewPackageId.length === 0) {
@@ -355,7 +357,18 @@ function reviewPackageFromPayload(
     typeof payload.taskId === 'string' && payload.taskId.length > 0
       ? payload.taskId
       : fallbackTaskId
-  return { reviewPackageId, fieldKeys, ...(taskId ? { taskId } : {}) }
+  const taskType =
+    typeof payload.createdTaskType === 'string' && payload.createdTaskType.length > 0
+      ? payload.createdTaskType
+      : typeof payload.taskType === 'string' && payload.taskType.length > 0
+        ? payload.taskType
+        : fallbackTaskType
+  return {
+    reviewPackageId,
+    fieldKeys,
+    ...(taskId ? { taskId } : {}),
+    ...(taskType ? { taskType } : {}),
+  }
 }
 
 function searchRouteTemplatesFromPayload(
@@ -593,7 +606,11 @@ export function toCopilotChatMessages(
           } satisfies InteractionActivityContent,
         })
       }
-      const reviewNotice = reviewPackageFromPayload(event.payload, taskId)
+      const reviewNotice = reviewPackageFromPayload(
+        event.payload,
+        taskId,
+        taskId ? taskTypes.get(taskId) : undefined,
+      )
       if (reviewNotice) {
         messages.push({
           id: `review-${reviewNotice.reviewPackageId}`,

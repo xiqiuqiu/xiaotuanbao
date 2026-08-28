@@ -133,7 +133,7 @@ function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult
       diagnostic,
     }
   }
-  if (routing?.decision === 'request_clarification') {
+  if (routing && 'interaction' in routing) {
     return {
       kind: 'awaiting_user_input',
       interaction: routing.interaction,

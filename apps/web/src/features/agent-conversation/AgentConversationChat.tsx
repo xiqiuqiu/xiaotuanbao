@@ -245,7 +245,7 @@ function createAgentTaskActivityRenderer(
 }
 
 function createReviewPackageActivityRenderer(
-  openTask: (taskId: string) => void,
+  openTask: (taskId: string, taskType?: string) => void,
 ): ReactActivityMessageRenderer<ReviewPackageActivityContent> {
   return {
     activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
@@ -286,7 +286,11 @@ function createReviewPackageActivityRenderer(
           </Typography.Paragraph>
           <div className={chatStyles.activityActions}>
             {content.taskId ? (
-              <Button type="primary" size="small" onClick={() => openTask(content.taskId!)}>
+              <Button
+                type="primary"
+                size="small"
+                onClick={() => openTask(content.taskId!, content.taskType)}
+              >
                 查看审核内容
               </Button>
             ) : (

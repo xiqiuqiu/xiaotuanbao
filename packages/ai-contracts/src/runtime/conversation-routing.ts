@@ -1,10 +1,17 @@
 import { z } from 'zod'
-import {
+import { registeredTaskDescriptors } from './task-descriptor'
+
+export {
   DEPARTURE_CREATION_GOAL_INTENT_KEY,
   DEPARTURE_CREATION_ROUTING_DECISION,
 } from './task-descriptor'
 
-export { DEPARTURE_CREATION_GOAL_INTENT_KEY, DEPARTURE_CREATION_ROUTING_DECISION }
+const registeredTaskCreationDecisionSchema = z
+  .string()
+  .min(1)
+  .refine((value) => registeredTaskDescriptors.findByRoutingDecision(value) != null, {
+    message: '未登记的会话路由决策',
+  })
 
 export const registeredAgentIntentSchema = z
   .object({
@@ -21,10 +28,10 @@ const clarificationOptionSchema = z
   })
   .strict()
 
-export const conversationRoutingInputSchema = z.discriminatedUnion('decision', [
+export const conversationRoutingInputSchema = z.union([
   z
     .object({
-      decision: z.literal(DEPARTURE_CREATION_ROUTING_DECISION),
+      decision: registeredTaskCreationDecisionSchema,
       goal: z.string().trim().min(1).max(500),
     })
     .strict(),
@@ -37,11 +44,11 @@ export const conversationRoutingInputSchema = z.discriminatedUnion('decision', [
     .strict(),
 ])
 
-export const conversationRoutingOutputSchema = z.discriminatedUnion('decision', [
+export const conversationRoutingOutputSchema = z.union([
   z
     .object({
       status: z.literal('accepted'),
-      decision: z.literal(DEPARTURE_CREATION_ROUTING_DECISION),
+      decision: registeredTaskCreationDecisionSchema,
       registeredIntent: registeredAgentIntentSchema,
     })
     .strict(),

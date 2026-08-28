@@ -6,8 +6,13 @@ import {
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
+const taskCreationDecisions = registeredTaskDescriptors.taskCreationRoutingDecisions() as [
+  string,
+  ...string[],
+]
+
 const modelRoutingInputSchema = z.object({
-  decision: z.enum(['propose_departure_creation', 'request_clarification']),
+  decision: z.enum([...taskCreationDecisions, 'request_clarification']),
   goal: z.string().optional(),
   prompt: z.string().optional(),
   options: z
@@ -34,7 +39,7 @@ export function createConversationRoutingTool() {
           },
         }
       }
-      if (parsed.decision !== 'request_clarification') {
+      if (!('prompt' in parsed)) {
         throw new Error(`未登记的会话路由决策: ${parsed.decision}`)
       }
       return {
