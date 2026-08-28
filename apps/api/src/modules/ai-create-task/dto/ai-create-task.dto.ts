@@ -203,6 +203,16 @@ export class SendAiConversationMessageDto {
   selectedOptionId?: string
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== 'string' || value.trim() === '') {
+      return value
+    }
+    try {
+      return JSON.parse(value) as Record<string, unknown>
+    } catch {
+      return value
+    }
+  })
   @IsObject()
   pageLocator?: Record<string, unknown>
 

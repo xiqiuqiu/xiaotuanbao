@@ -20,6 +20,8 @@ const routerState = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 
+let queuedFiles: File[] = []
+
 function MockReasoningMessage({ content }: { content: string }) {
   const [open, setOpen] = useState(true)
   return (
@@ -79,14 +81,25 @@ vi.mock('@copilotkit/react-core/v2', () => {
     onSubmitMessage,
     onStop,
     isRunning,
+    onAddFile,
   }: {
     value?: string
     onChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
     onStop?: () => void
     isRunning?: boolean
+    onAddFile?: () => void
   }) => (
     <div>
+      <button
+        type="button"
+        data-testid="copilot-add-menu-button"
+        aria-label="添加附件"
+        disabled={!onAddFile}
+        onClick={() => onAddFile?.()}
+      >
+        添加附件
+      </button>
       <textarea
         aria-label="询问小团宝业务"
         value={value ?? ''}
@@ -142,6 +155,37 @@ vi.mock('@copilotkit/react-core/v2', () => {
       },
     ),
     CopilotChatInput: MockCopilotChatInput,
+    useAttachments: () => ({
+      attachments: queuedFiles.map((file) => ({
+        id: file.name,
+        filename: file.name,
+        status: 'ready',
+        source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+      })),
+      enabled: true,
+      dragOver: false,
+      fileInputRef: { current: null },
+      containerRef: { current: null },
+      processFiles: async (files: File[]) => {
+        queuedFiles = [...queuedFiles, ...files]
+      },
+      handleFileUpload: async () => {},
+      handleDragOver: () => {},
+      handleDragLeave: () => {},
+      handleDrop: async () => {},
+      removeAttachment: () => {},
+      consumeAttachments: () => {
+        const files = queuedFiles
+        queuedFiles = []
+        return files.map((file) => ({
+          id: file.name,
+          filename: file.name,
+          status: 'ready',
+          source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+          metadata: { file },
+        }))
+      },
+    }),
     CopilotChatView: ({
       input: Input = MockCopilotChatInput,
       inputValue,
@@ -150,6 +194,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       onStop,
       isRunning,
       messages,
+      onAddFile,
     }: {
       input?: typeof MockCopilotChatInput
       inputValue?: string
@@ -157,6 +202,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       onSubmitMessage?: (value: string) => void
       onStop?: () => void
       isRunning?: boolean
+      onAddFile?: () => void
       messages?: Array<{
         id?: string
         role?: string
@@ -191,6 +237,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
           onSubmitMessage={onSubmitMessage}
           onStop={onStop}
           isRunning={isRunning}
+          onAddFile={onAddFile}
         />
       </div>
     ),
@@ -223,6 +270,7 @@ describe('AgentConversationChat page locator #371', () => {
       hash: '',
     }
     vi.mocked(sendAgentConversationText).mockReset()
+    queuedFiles = []
     useAgentConversationRuntimeStore.getState().clear()
     useAgentConversationStore.getState().reset()
   })
@@ -346,6 +394,58 @@ describe('AgentConversationChat page locator #371', () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 700))
     expect(composer).toHaveValue('需要保留的超长说明')
+  })
+
+  it('enables the composer attachment button so User can queue files', async () => {
+    render(<AgentConversationChat />)
+    expect(await screen.findByTestId('copilot-add-menu-button')).toBeEnabled()
+  })
+
+  it('sends queued files with the message instead of dropping them', async () => {
+    const user = userEvent.setup()
+    const file = new File([new Uint8Array([1, 2, 3])], '团期.png', { type: 'image/png' })
+    queuedFiles = [file]
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-new',
+      events: [],
+      lastSequence: 1,
+    } as never)
+    render(<AgentConversationChat />)
+    await screen.findByText('当前合作伙伴往来账款')
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '请根据附件回答')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      null,
+      {
+        text: '请根据附件回答',
+        files: [file],
+        pageLocator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+      },
+      expect.any(String),
+    )
+  })
+
+  it('sends files without typed text using the default attachment prompt', async () => {
+    const user = userEvent.setup()
+    const file = new File([new Uint8Array([1, 2, 3])], '团期.png', { type: 'image/png' })
+    queuedFiles = [file]
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-new',
+      events: [],
+      lastSequence: 1,
+    } as never)
+    render(<AgentConversationChat />)
+    await screen.findByTestId('copilot-add-menu-button')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      null,
+      {
+        text: '请根据附件回答。',
+        files: [file],
+        pageLocator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+      },
+      expect.any(String),
+    )
   })
 })
 

@@ -91,6 +91,34 @@ describe('agent conversation service', () => {
     )
   })
 
+  it('sends files as multipart form data with the page locator', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], '团期.png', { type: 'image/png' })
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 1 })
+    await sendAgentConversationText(
+      'c-1',
+      {
+        text: '请根据附件回答。',
+        files: [file],
+        pageLocator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+      },
+      'key-files',
+    )
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/messages',
+      expect.any(FormData),
+      {
+        silentError: true,
+        headers: { 'Idempotency-Key': 'key-files', 'Content-Type': 'multipart/form-data' },
+      },
+    )
+    const form = post.mock.calls[0]?.[1] as FormData
+    expect(form.get('text')).toBe('请根据附件回答。')
+    expect(form.get('pageLocator')).toBe(
+      JSON.stringify({ kind: 'partner', objectId: 'partner-1', section: 'accounts' }),
+    )
+    expect(form.getAll('files')).toEqual([file])
+  })
+
   it('stops the current batch with an idempotency key', async () => {
     post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 3 })
     await stopAgentConversationBatch('c-1', 'batch-1', 'key-stop')

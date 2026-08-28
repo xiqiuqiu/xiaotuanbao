@@ -56,6 +56,12 @@ import { useAgentConversationDraft } from './use-agent-conversation-draft'
 import { currentPageAttachmentLabel } from './page-locator-attachment'
 import { useCurrentPageAttachment } from './use-current-page-locator'
 import { formatReviewFieldList } from '@/features/ai-assist/review-field-labels'
+import {
+  DEFAULT_TASKLESS_ATTACHMENT_TEXT,
+  filesFromAttachmentSources,
+  MATERIAL_ACCEPT,
+  useConversationComposerAttachments,
+} from '@/features/ai-assist/conversation-composer-attachments'
 
 /** CopilotKit runtime 注册名（apps/agent）；不是 conversation-general 领域指令版本。 */
 const COPILOTKIT_RUNTIME_AGENT_ID = 'ai-create-readonly-assist'
@@ -453,6 +459,7 @@ function useAgentConversationChatController() {
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [pendingUploadCount, setPendingUploadCount] = useState(0)
   const [editingQueueBatchId, setEditingQueueBatchId] = useState<string | null>(null)
   const [pendingInteractionId, setPendingInteractionId] = useState<string | null>(null)
   const commandPendingRef = useRef(false)
@@ -622,17 +629,19 @@ function useAgentConversationChatController() {
   }, [applyServerDraft, conversationId])
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, files: File[] = [], restoreFiles?: () => Promise<void>) => {
       const current = useAgentConversationRuntimeStore.getState()
       const nextText = (text || current.pendingText || current.draft).trim()
-      if (current.sending || !nextText) {
+      if (current.sending || (!nextText && files.length === 0)) {
         return
       }
       setErrorText(null)
+      const outboundText = nextText || DEFAULT_TASKLESS_ATTACHMENT_TEXT
       const sendIdempotencyKey = current.sendIdempotencyKey ?? crypto.randomUUID()
+      setPendingUploadCount(files.length)
       useAgentConversationRuntimeStore.getState().hydrate({
         conversationId: conversationIdRef.current,
-        pendingText: nextText,
+        pendingText: outboundText,
         draft: '',
         sending: true,
         sendIdempotencyKey,
@@ -642,7 +651,8 @@ function useAgentConversationChatController() {
         const result = await sendAgentConversationText(
           conversationIdRef.current,
           {
-            text: nextText,
+            text: outboundText,
+            ...(files.length > 0 ? { files } : {}),
             ...(attachment?.kind === 'page_locator'
               ? { pageLocator: attachment.locator }
               : attachment?.kind === 'departure_creation_task'
@@ -664,22 +674,25 @@ function useAgentConversationChatController() {
           sending: false,
           sendIdempotencyKey: null,
         })
+        setPendingUploadCount(0)
         restoreCurrentPageAfterSend(currentPageAttachment)
         if (!conversationIdRef.current) {
           persistConversation({
             id: result.conversationId,
-            title: nextText.slice(0, 40),
+            title: outboundText.slice(0, 40),
           })
         }
       } catch (error) {
         setErrorText(getAssistErrorText(error))
         updateDraft(nextText)
+        setPendingUploadCount(0)
         useAgentConversationRuntimeStore.getState().hydrate({
           conversationId: conversationIdRef.current,
           pendingText: null,
           sending: false,
           sendIdempotencyKey: null,
         })
+        await restoreFiles?.()
       }
     },
     [
@@ -827,8 +840,9 @@ function useAgentConversationChatController() {
         pendingText,
         liveAssistant,
         sessionReasoning,
+        pendingUploadCount,
       }),
-    [liveAssistant, pendingText, sessionReasoning, visibleEvents],
+    [liveAssistant, pendingText, pendingUploadCount, sessionReasoning, visibleEvents],
   )
   const isRunning = isCopilotChatRunning(visibleEvents, null, pendingText, liveAssistant)
   const stoppableBatchId = currentStoppableBatchId(visibleEvents)
@@ -879,6 +893,100 @@ function useAgentConversationChatController() {
     stoppableBatchId,
     updateDraft,
   }
+}
+
+function AgentConversationComposer({
+  draft,
+  isRunning,
+  messages,
+  messageView,
+  pendingText,
+  queuedMessagesContextValue,
+  send,
+  stop,
+  stoppableBatchId,
+  updateDraft,
+}: {
+  draft: string
+  isRunning: boolean
+  messages: ReturnType<typeof projectConversationFrame>
+  messageView: { reasoningMessage: { header: typeof AgentReasoningHeader } }
+  pendingText: string | null
+  queuedMessagesContextValue: QueuedMessagesContextValue
+  send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  stop: () => Promise<void>
+  stoppableBatchId: string | null
+  updateDraft: (value: string) => void
+}) {
+  const {
+    attachments,
+    consumeAttachments,
+    processFiles,
+    removeAttachment,
+    handleFileUpload,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    dragOver,
+    fileInputRef,
+    containerRef,
+  } = useConversationComposerAttachments()
+
+  return (
+    <div
+      ref={containerRef}
+      className={chatStyles.chat}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={(event) => {
+        void handleDrop(event)
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        multiple
+        accept={MATERIAL_ACCEPT}
+        onChange={(event) => {
+          void handleFileUpload(event)
+        }}
+      />
+      <QueuedMessagesContext.Provider value={queuedMessagesContextValue}>
+        <CopilotChatView
+          className={chatStyles.chat}
+          messages={messages}
+          isRunning={isRunning}
+          messageView={messageView}
+          input={QueueAwareChatInput}
+          inputValue={pendingText ? '' : draft}
+          onInputChange={updateDraft}
+          attachments={attachments}
+          onRemoveAttachment={(id) => {
+            removeAttachment(id)
+          }}
+          onAddFile={() => fileInputRef.current?.click()}
+          dragOver={dragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(event) => {
+            void handleDrop(event)
+          }}
+          onSubmitMessage={(value) => {
+            const files = filesFromAttachmentSources(consumeAttachments())
+            void send(value, files, () => processFiles(files))
+          }}
+          onStop={
+            stoppableBatchId
+              ? () => {
+                  void stop()
+                }
+              : undefined
+          }
+        />
+      </QueuedMessagesContext.Provider>
+    </div>
+  )
 }
 
 export function AgentConversationChat() {
@@ -953,29 +1061,18 @@ export function AgentConversationChat() {
             threadId={conversationId ?? 'new'}
             labels={{ chatInputPlaceholder: '询问小团宝业务…' }}
           >
-            <div className={chatStyles.chat}>
-              <QueuedMessagesContext.Provider value={queuedMessagesContextValue}>
-                <CopilotChatView
-                  className={chatStyles.chat}
-                  messages={messages}
-                  isRunning={isRunning}
-                  messageView={messageView}
-                  input={QueueAwareChatInput}
-                  inputValue={pendingText ? '' : draft}
-                  onInputChange={updateDraft}
-                  onSubmitMessage={(value) => {
-                    void send(value)
-                  }}
-                  onStop={
-                    stoppableBatchId
-                      ? () => {
-                          void stop()
-                        }
-                      : undefined
-                  }
-                />
-              </QueuedMessagesContext.Provider>
-            </div>
+            <AgentConversationComposer
+              draft={draft}
+              isRunning={isRunning}
+              messages={messages}
+              messageView={messageView}
+              pendingText={pendingText}
+              queuedMessagesContextValue={queuedMessagesContextValue}
+              send={send}
+              stop={stop}
+              stoppableBatchId={stoppableBatchId}
+              updateDraft={updateDraft}
+            />
           </CopilotChatConfigurationProvider>
         </CopilotKit>
       )}
