@@ -88,7 +88,7 @@ export function useDraftLifecycle(options: {
       }
       try {
         await flush()
-        return isDirtyRef.current()
+        return false
       } catch {
         return true
       }

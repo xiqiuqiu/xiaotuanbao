@@ -149,4 +149,21 @@ describe('useDraftLifecycle', () => {
     expect(persist).toHaveBeenCalledTimes(1)
     expect(blocked).toBe(false)
   })
+
+  it('allows leaving when persist skips an incomplete draft', async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    renderHook(() =>
+      useDraftLifecycle({
+        persist,
+        isDirty: () => true,
+      }),
+    )
+
+    const blocked = await navigationGuard.shouldBlockFn?.({
+      current: { pathname: '/departure/new' },
+      next: { pathname: '/departure' },
+    })
+    expect(persist).toHaveBeenCalledTimes(1)
+    expect(blocked).toBe(false)
+  })
 })
