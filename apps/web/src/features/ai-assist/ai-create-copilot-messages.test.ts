@@ -572,6 +572,7 @@ describe('AI create chat status projection', () => {
             batchId: 'batch-1',
             createdTaskId: 'task-1',
             createdTaskGoal: '创建 9 月 15 日出发的 8 天行程',
+            createdTaskType: 'departure_creation',
             continuation: true,
           },
           createdAt: '2026-08-27T00:00:01.000Z',
@@ -613,6 +614,7 @@ describe('AI create chat status projection', () => {
             taskId: 'task-1',
             title: '创建 9 月 15 日出发的 8 天行程',
             status: 'awaiting_review',
+            taskType: 'departure_creation',
           }),
         }),
         expect.objectContaining({
@@ -621,6 +623,77 @@ describe('AI create chat status projection', () => {
           content: expect.objectContaining({
             reviewPackageId: 'pkg-1',
             taskId: 'task-1',
+            taskType: 'departure_creation',
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('falls back to the registered default title when the event has no goal #439', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-1',
+            createdTaskId: 'task-1',
+            createdTaskType: 'departure_creation',
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'agent-task',
+          content: expect.objectContaining({
+            taskId: 'task-1',
+            taskType: 'departure_creation',
+            title: '创建发团',
+            status: 'ready_for_agent',
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('does not use the departure default title for an unregistered task type #439', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-1',
+            createdTaskId: 'task-1',
+            createdTaskType: 'unknown.task',
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'agent-task',
+          content: expect.objectContaining({
+            taskId: 'task-1',
+            taskType: 'unknown.task',
+            title: '任务',
+            status: 'ready_for_agent',
           }),
         }),
       ]),

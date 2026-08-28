@@ -14,6 +14,7 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { useAgentConversationRuntimeStore } from '@/features/agent-conversation/agent-conversation-runtime.store'
+import { agentTaskCompletedNavigation } from '@/features/agent-conversation/task-descriptor-navigation'
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
 import {
@@ -424,9 +425,7 @@ function useCreateDepartureWizardController() {
         if (cancelled) return
         if (task.departureId) {
           void navigate({
-            to: '/departure/$departureId',
-            params: { departureId: task.departureId },
-            search: { tab: 'overview' },
+            ...agentTaskCompletedNavigation(task.departureId),
             replace: true,
           })
           return
@@ -640,9 +639,7 @@ function useCreateDepartureWizardController() {
       queryClient.invalidateQueries({ queryKey: ['departures'] })
       queryClient.invalidateQueries({ queryKey: ['route-templates'] })
       navigate({
-        to: '/departure/$departureId',
-        params: { departureId: departure.id },
-        search: { tab: 'overview' },
+        ...agentTaskCompletedNavigation(departure.id),
         replace: true,
       })
     },

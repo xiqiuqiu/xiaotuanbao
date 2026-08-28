@@ -35,6 +35,7 @@ import {
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
   DEPARTURE_REVIEW_TARGET_KIND,
+  DEPARTURE_CREATION_TASK_DESCRIPTOR,
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
@@ -1248,14 +1249,15 @@ export class AiCreateTaskService {
     snapshot: DepartureCreationDraftSnapshot,
   ): Promise<AiCreateTaskSummary> {
     const task = await this.prisma.$transaction(async (tx) => {
+      const descriptor = DEPARTURE_CREATION_TASK_DESCRIPTOR
       const genericTask = await tx.agentTask.create({
         data: {
           organizationId,
           ownerUserId: userId,
           type: AgentTaskType.departure_creation,
           goal: snapshot.routeName.trim()
-            ? `创建发团：${snapshot.routeName.trim()}`
-            : '创建发团',
+            ? `${descriptor.defaultTitle}：${snapshot.routeName.trim()}`
+            : descriptor.defaultTitle,
           status: AgentTaskStatus.active,
           departureCreationTask: {
             create: {
@@ -1273,7 +1275,7 @@ export class AiCreateTaskService {
               organizationId,
               actorUserId: userId,
               kind: TaskActivityKind.goal,
-              summary: '创建发团',
+              summary: descriptor.defaultTitle,
               payload: { goalVersion: 1 },
             },
           },

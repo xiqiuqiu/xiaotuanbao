@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common'
 import {
   AgentTaskStatus,
-  AgentTaskType,
   TaskActivityKind,
 } from '@prisma/client'
+import { registeredTaskDescriptors } from '@xiaotuanbao/ai-contracts'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { isolateOpenTaskRuntime } from './agent-task.runtime'
@@ -167,11 +167,13 @@ export class AgentTaskService {
     if (!task) {
       throw new NotFoundException('Agent 任务不存在')
     }
-    if (task.type === AgentTaskType.departure_creation) {
-      const permissionKeys = await this.authService.getPermissionKeysForUser(userId)
-      if (!permissionKeys.includes('departure:write')) {
-        throw new ForbiddenException('无权继续该建团任务')
-      }
+    const descriptor = registeredTaskDescriptors.findByTaskType(task.type)
+    if (!descriptor) {
+      throw new ForbiddenException('无权继续该任务')
+    }
+    const permissionKeys = await this.authService.getPermissionKeysForUser(userId)
+    if (!permissionKeys.includes(descriptor.requiredPermissionKey)) {
+      throw new ForbiddenException('无权继续该建团任务')
     }
   }
 }

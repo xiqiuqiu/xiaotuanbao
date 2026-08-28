@@ -1,4 +1,9 @@
 import {
+  matchTaskWorkspaceAttachment,
+  registeredTaskDescriptors,
+  type AgentTaskPageAttachment,
+} from '@xiaotuanbao/ai-contracts'
+import {
   pageLocatorLabel,
   parsePageLocatorFromLocation,
   type PageLocator,
@@ -6,36 +11,42 @@ import {
 
 export type AgentCurrentPageAttachment =
   | { kind: 'page_locator'; locator: PageLocator }
-  | { kind: 'departure_creation_task'; taskId: string }
-
-const TASK_ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/
-
-function searchParam(search: string | undefined, key: string): string | null {
-  const value = new URLSearchParams(search?.startsWith('?') ? search.slice(1) : search).get(key)
-  return value?.trim() || null
-}
+  | AgentTaskPageAttachment
 
 export function currentPageAttachmentFromLocation(
   pathname: string,
   search?: string,
 ): AgentCurrentPageAttachment | null {
+  const taskAttachment = matchTaskWorkspaceAttachment(pathname, search)
+  if (taskAttachment) {
+    return taskAttachment
+  }
   const locator = parsePageLocatorFromLocation(pathname, search)
-  if (locator) {
-    return { kind: 'page_locator', locator }
-  }
-  if (pathname !== '/departure/new') {
-    return null
-  }
-  const taskId = searchParam(search, 'taskId')
-  return taskId && TASK_ID_PATTERN.test(taskId)
-    ? { kind: 'departure_creation_task', taskId }
-    : null
+  return locator ? { kind: 'page_locator', locator } : null
 }
 
 export function currentPageAttachmentLabel(attachment: AgentCurrentPageAttachment): string {
-  return attachment.kind === 'page_locator'
-    ? pageLocatorLabel(attachment.locator)
-    : '当前建团工作'
+  if (attachment.kind === 'page_locator') {
+    return pageLocatorLabel(attachment.locator)
+  }
+  return registeredTaskDescriptors.getByTaskType(attachment.taskType).attachmentLabel
+}
+
+export type ConversationSendContext =
+  | { pageLocator: PageLocator; primaryTaskId?: never }
+  | { primaryTaskId: string; pageLocator?: never }
+  | { pageLocator?: never; primaryTaskId?: never }
+
+export function conversationSendContextFromAttachment(
+  attachment: AgentCurrentPageAttachment | null,
+): ConversationSendContext {
+  if (!attachment) {
+    return {}
+  }
+  if (attachment.kind === 'page_locator') {
+    return { pageLocator: attachment.locator }
+  }
+  return { primaryTaskId: attachment.taskId }
 }
 
 export function nextPageAttachment(input: {

@@ -494,6 +494,7 @@ describe('AgentConversationChat task and review activities', () => {
             batchId: 'batch-1',
             createdTaskId: 'task-1',
             createdTaskGoal: '创建 9 月 15 日出发的 8 天行程',
+            createdTaskType: 'departure_creation',
             continuation: true,
           },
           createdAt: '2026-08-27T00:00:01.000Z',

@@ -1,4 +1,8 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
+import {
+  DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  registeredTaskDescriptors,
+} from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
   AiInputBatchStatus,
@@ -184,12 +188,14 @@ export type ReviewPackageActivityContent = {
   reviewPackageId: string
   fieldKeys: string[]
   taskId?: string
+  taskType?: string
 }
 
 export type AgentTaskActivityContent = {
   taskId: string
   title: string
   status: string
+  taskType?: string
 }
 
 export type SearchRouteTemplatesActivityContent = {
@@ -338,6 +344,7 @@ export function latestBatchStatus(
 function reviewPackageFromPayload(
   payload: Record<string, unknown>,
   fallbackTaskId?: string,
+  fallbackTaskType?: string,
 ): ReviewPackageActivityContent | null {
   const reviewPackageId = payload.reviewPackageId
   if (typeof reviewPackageId !== 'string' || reviewPackageId.length === 0) {
@@ -350,7 +357,18 @@ function reviewPackageFromPayload(
     typeof payload.taskId === 'string' && payload.taskId.length > 0
       ? payload.taskId
       : fallbackTaskId
-  return { reviewPackageId, fieldKeys, ...(taskId ? { taskId } : {}) }
+  const taskType =
+    typeof payload.createdTaskType === 'string' && payload.createdTaskType.length > 0
+      ? payload.createdTaskType
+      : typeof payload.taskType === 'string' && payload.taskType.length > 0
+        ? payload.taskType
+        : fallbackTaskType
+  return {
+    reviewPackageId,
+    fieldKeys,
+    ...(taskId ? { taskId } : {}),
+    ...(taskType ? { taskType } : {}),
+  }
 }
 
 function searchRouteTemplatesFromPayload(
@@ -508,6 +526,7 @@ export function toCopilotChatMessages(
   const taskSlots = new Map<string, number>()
   const batchTaskIds = new Map<string, string>()
   const taskTitles = new Map<string, string>()
+  const taskTypes = new Map<string, string>()
   const upsertStatus = (content: BatchStatusActivityContent) => {
     const key = content.batchId ?? 'current'
     const item: ChatMessage = {
@@ -557,6 +576,9 @@ export function toCopilotChatMessages(
     if (taskId && typeof event.payload.createdTaskGoal === 'string') {
       taskTitles.set(taskId, event.payload.createdTaskGoal)
     }
+    if (taskId && typeof event.payload.createdTaskType === 'string') {
+      taskTypes.set(taskId, event.payload.createdTaskType)
+    }
     if (event.kind === 'user_message') {
       messages.push({
         id: `event-${event.sequence}`,
@@ -584,7 +606,11 @@ export function toCopilotChatMessages(
           } satisfies InteractionActivityContent,
         })
       }
-      const reviewNotice = reviewPackageFromPayload(event.payload, taskId)
+      const reviewNotice = reviewPackageFromPayload(
+        event.payload,
+        taskId,
+        taskId ? taskTypes.get(taskId) : undefined,
+      )
       if (reviewNotice) {
         messages.push({
           id: `review-${reviewNotice.reviewPackageId}`,
@@ -621,10 +647,15 @@ export function toCopilotChatMessages(
       const payload = event.payload
       const status = String(payload.status ?? '')
       if (taskId) {
+        const taskType = taskTypes.get(taskId)
+        const descriptor = taskType
+          ? registeredTaskDescriptors.findByTaskType(taskType)
+          : DEPARTURE_CREATION_TASK_DESCRIPTOR
         upsertTask({
           taskId,
-          title: taskTitles.get(taskId) ?? '创建发团',
+          title: taskTitles.get(taskId) ?? descriptor?.defaultTitle ?? '任务',
           status,
+          ...(taskType ? { taskType } : {}),
         })
       }
       const progress = progressFromPayload(payload)
