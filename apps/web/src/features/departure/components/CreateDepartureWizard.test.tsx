@@ -1079,8 +1079,40 @@ describe('CreateDepartureWizard', () => {
         to: '/departure/$departureId',
         params: { departureId: 'departure-1' },
         search: { tab: 'overview' },
+        replace: true,
       })
     })
+  })
+
+  it('opens the already-created departure without stacking another wizard history entry', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: 'departure-1',
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 1,
+        snapshot: { mode: 'manual', routeName: '喀纳斯阿勒泰10日线' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    renderWizard()
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/departure/$departureId',
+        params: { departureId: 'departure-1' },
+        search: { tab: 'overview' },
+        replace: true,
+      })
+    })
+    expect(screen.queryByText('该 AI 建团任务已创建正式发团，正在打开详情')).not.toBeInTheDocument()
   })
 
   it('restores template defaultDayCount from the server draft snapshot', async () => {
@@ -1223,6 +1255,7 @@ describe('CreateDepartureWizard', () => {
         to: '/departure/$departureId',
         params: { departureId: 'departure-1' },
         search: { tab: 'overview' },
+        replace: true,
       })
     })
   })

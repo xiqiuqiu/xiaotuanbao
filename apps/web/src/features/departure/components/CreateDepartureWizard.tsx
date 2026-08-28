@@ -424,8 +424,10 @@ function useCreateDepartureWizardController() {
       .then(async (task) => {
         if (cancelled) return
         if (task.departureId) {
-          message.info('该 AI 建团任务已创建正式发团，正在打开详情')
-          void navigate(agentTaskCompletedNavigation(task.departureId))
+          void navigate({
+            ...agentTaskCompletedNavigation(task.departureId),
+            replace: true,
+          })
           return
         }
 
@@ -636,7 +638,10 @@ function useCreateDepartureWizardController() {
       confirmIdempotencyKeyRef.current = null
       queryClient.invalidateQueries({ queryKey: ['departures'] })
       queryClient.invalidateQueries({ queryKey: ['route-templates'] })
-      navigate(agentTaskCompletedNavigation(departure.id))
+      navigate({
+        ...agentTaskCompletedNavigation(departure.id),
+        replace: true,
+      })
     },
     onError: (error) => {
       const conflict = readAiCreateTaskConflict(error)

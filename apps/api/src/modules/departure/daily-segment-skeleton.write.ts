@@ -1,6 +1,9 @@
 import type { Prisma } from '@prisma/client'
 import { formatDateOnly, parseDateOnly } from './departure-date.utils'
-import { enumerateDateOnlyDays, segmentCoversDay } from './daily-segment-skeleton.utils'
+import {
+  enumerateDateOnlyDays,
+  uncoveredTourDaysForSegments,
+} from './daily-segment-skeleton.utils'
 
 /** Fill uncovered calendar days as one-day segments; then normalize sortOrder. */
 export async function fillMissingDailySkeletonInTx(
@@ -15,9 +18,7 @@ export async function fillMissingDailySkeletonInTx(
   })
 
   const days = enumerateDateOnlyDays(startDate, endDate)
-  const missingDays = days.filter(
-    (day) => !existing.some((segment) => segmentCoversDay(segment, day)),
-  )
+  const missingDays = uncoveredTourDaysForSegments(startDate, endDate, existing)
 
   if (missingDays.length > 0) {
     await tx.itinerarySegment.createMany({

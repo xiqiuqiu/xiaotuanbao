@@ -18,13 +18,10 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
-import {
-  enumerateDateOnlyDays,
-  segmentCoversDay,
-} from './daily-segment-skeleton.utils'
-import { normalizeSegmentSortOrderInTx } from './daily-segment-skeleton.write'
+import { enumerateDateOnlyDays } from './daily-segment-skeleton.utils'
+import { fillMissingDailySkeletonInTx } from './daily-segment-skeleton.write'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
-import { formatDateOnly, parseDateOnly } from './departure-date.utils'
+import { formatDateOnly } from './departure-date.utils'
 import { aggregatePayableOverview, countPayableGenerated } from './segment-payable-overview.utils'
 import {
   normalizeOptionalText,
@@ -280,7 +277,6 @@ export class SegmentService {
       })
 
       const preservedWithResources = segments.filter((segment) => segment.resources.length > 0).length
-      let working = segments
       let removedCount = 0
 
       if (mode === 'rebuild_empty') {
@@ -291,38 +287,19 @@ export class SegmentService {
           await tx.itinerarySegment.deleteMany({ where: { id: { in: emptyIds } } })
           removedCount = emptyIds.length
         }
-        working = segments.filter((segment) => segment.resources.length > 0)
       }
 
-      const missingDays = days.filter(
-        (day) => !working.some((segment) => segmentCoversDay(segment, day)),
+      const filled = await fillMissingDailySkeletonInTx(
+        tx,
+        departure.id,
+        departure.startDate,
+        departure.endDate,
       )
-
-      if (missingDays.length > 0) {
-        // createMany via shared helper would re-query; keep inline after rebuild_empty working set.
-        await tx.itinerarySegment.createMany({
-          data: missingDays.map((day) => {
-            const dayIndex = days.indexOf(day)
-            return {
-              departureId: departure.id,
-              name: `第${dayIndex + 1}天`,
-              startDate: parseDateOnly(day),
-              endDate: parseDateOnly(day),
-              dayCount: 1,
-              sortOrder: dayIndex,
-              destination: null,
-              notes: null,
-            }
-          }),
-        })
-      }
-
-      await normalizeSegmentSortOrderInTx(tx, departure.id)
 
       return {
         mode,
         dayCount: days.length,
-        createdCount: missingDays.length,
+        createdCount: filled.createdCount,
         removedCount,
         preservedWithResources,
       }

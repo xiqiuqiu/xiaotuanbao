@@ -314,14 +314,13 @@ describe('Daily segment skeleton (e2e) #202', () => {
     ).toHaveLength(3)
   })
 
-  it('date change does not silently delete resource-bearing segments; fill_missing can extend', async () => {
+  it('extending the tour period fills uncovered days without duplicating existing itinerary segments', async () => {
     const departure = await createDeparture({
-      name: `${testPrefix}-reschedule`,
+      name: `${testPrefix}-extend`,
       startDate: '2026-12-01',
       endDate: '2026-12-02',
     })
 
-    await generateDaily(departure.id).expect(201)
     const before = await listSegments(departure.id)
     const day1 = before.items.find((item) => item.startDate === '2026-12-01')
     expect(day1).toBeTruthy()
@@ -336,24 +335,140 @@ describe('Daily segment skeleton (e2e) #202', () => {
       })
       .expect(201)
 
+    await prisma.itinerarySegment.update({
+      where: { id: day1!.id },
+      data: {
+        endDate: new Date('2026-12-02T00:00:00.000Z'),
+        dayCount: 2,
+      },
+    })
+    await prisma.itinerarySegment.deleteMany({
+      where: { departureId: departure.id, id: { not: day1!.id } },
+    })
+
     await authRequest(app, coordinatorToken)
       .patch(`/api/departures/${departure.id}`)
       .send({ startDate: '2026-12-01', endDate: '2026-12-04' })
       .expect(200)
 
-    const afterDateChange = await listSegments(departure.id)
-    expect(afterDateChange.items.find((item) => item.id === day1!.id)).toMatchObject({
+    const afterExtend = await listSegments(departure.id)
+    expect(afterExtend.items.find((item) => item.id === day1!.id)).toMatchObject({
       resourceCount: 1,
       startDate: '2026-12-01',
+      endDate: '2026-12-02',
     })
-    expect(afterDateChange.total).toBe(2)
+    expect(afterExtend.total).toBe(3)
+    expect(
+      afterExtend.items.map((item) => [item.startDate, item.endDate]),
+    ).toEqual([
+      ['2026-12-01', '2026-12-02'],
+      ['2026-12-03', '2026-12-03'],
+      ['2026-12-04', '2026-12-04'],
+    ])
 
     const fill = await generateDaily(departure.id, { mode: 'fill_missing' }).expect(201)
-    expect(fill.body.data.createdCount).toBe(2)
+    expect(fill.body.data.createdCount).toBe(0)
+    expect((await listSegments(departure.id)).total).toBe(3)
+  })
 
-    const afterFill = await listSegments(departure.id)
-    expect(afterFill.total).toBe(4)
-    expect(afterFill.items.find((item) => item.id === day1!.id)?.resourceCount).toBe(1)
+  it('rejects shortening the tour period when itinerary segments fall outside the new dates', async () => {
+    const departure = await createDeparture({
+      name: `${testPrefix}-shorten`,
+      startDate: '2026-12-01',
+      endDate: '2026-12-02',
+    })
+
+    const before = await listSegments(departure.id)
+    const day2 = before.items.find((item) => item.startDate === '2026-12-02')
+    expect(day2).toBeTruthy()
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}`)
+      .send({ startDate: '2026-12-01', endDate: '2026-12-01' })
+      .expect(409)
+
+    expect(response.body.message).toContain('保存被拒绝')
+    expect(response.body.message).toContain('第2天')
+    expect(response.body.message).toContain('2026-12-02')
+    expect(response.body.data).toMatchObject({
+      code: 'ITINERARY_SEGMENT_OUT_OF_RANGE',
+      periodStartDate: '2026-12-01',
+      periodEndDate: '2026-12-01',
+      segments: [
+        {
+          id: day2!.id,
+          name: '第2天',
+          startDate: '2026-12-02',
+          endDate: '2026-12-02',
+        },
+      ],
+    })
+
+    const afterReject = await listSegments(departure.id)
+    expect(afterReject.total).toBe(2)
+    expect(afterReject.items.find((item) => item.id === day2!.id)).toMatchObject({
+      startDate: '2026-12-02',
+      endDate: '2026-12-02',
+    })
+
+    const unchanged = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(unchanged.body.data).toMatchObject({
+      startDate: '2026-12-01',
+      endDate: '2026-12-02',
+    })
+  })
+
+  it('rejects shortening when a multi-day itinerary segment overflows the new dates', async () => {
+    const departure = await createDeparture({
+      name: `${testPrefix}-shorten-span`,
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+    })
+
+    const listed = await listSegments(departure.id)
+    const day1 = listed.items.find((item) => item.startDate === '2026-12-01')
+    expect(day1).toBeTruthy()
+    await prisma.itinerarySegment.update({
+      where: { id: day1!.id },
+      data: {
+        name: '跨日段',
+        endDate: new Date('2026-12-03T00:00:00.000Z'),
+        dayCount: 3,
+      },
+    })
+    await prisma.itinerarySegment.deleteMany({
+      where: { departureId: departure.id, id: { not: day1!.id } },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}`)
+      .send({ startDate: '2026-12-01', endDate: '2026-12-02' })
+      .expect(409)
+
+    expect(response.body.message).toContain('跨日段')
+    expect(response.body.message).toContain('2026-12-01～2026-12-03')
+    expect(response.body.data).toMatchObject({
+      code: 'ITINERARY_SEGMENT_OUT_OF_RANGE',
+      segments: [
+        {
+          id: day1!.id,
+          name: '跨日段',
+          startDate: '2026-12-01',
+          endDate: '2026-12-03',
+        },
+      ],
+    })
+
+    const afterReject = await listSegments(departure.id)
+    expect(afterReject.total).toBe(1)
+    expect(afterReject.items[0]).toMatchObject({
+      id: day1!.id,
+      name: '跨日段',
+      startDate: '2026-12-01',
+      endDate: '2026-12-03',
+    })
   })
 
   it('forbids finance role from generating daily segments (departure:write)', async () => {
