@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  conversationSendContextFromAttachment,
   currentPageAttachmentFromLocation,
+  currentPageAttachmentLabel,
   nextPageAttachment,
 } from './page-locator-attachment'
 
@@ -30,7 +32,7 @@ describe('current page attachment #371 #411', () => {
   it('derives one task attachment when the departure wizard has a persisted task', () => {
     expect(
       currentPageAttachmentFromLocation('/departure/new', '?taskId=task-1'),
-    ).toEqual({ kind: 'departure_creation_task', taskId: 'task-1' })
+    ).toEqual({ kind: 'agent_task', taskType: 'departure_creation', taskId: 'task-1' })
   })
 
   it('does not auto-attach when switching to a historical conversation', () => {
@@ -48,7 +50,8 @@ describe('current page attachment #371 #411', () => {
 
   it('attaches only after the user explicitly captures the current page', () => {
     const currentAttachment = {
-      kind: 'departure_creation_task' as const,
+      kind: 'agent_task' as const,
+      taskType: 'departure_creation',
       taskId: 'task-1',
     }
     expect(
@@ -58,5 +61,13 @@ describe('current page attachment #371 #411', () => {
         captured: true,
       }),
     ).toEqual(currentAttachment)
+  })
+
+  it('reads attachment label and send context from the Task Descriptor', () => {
+    const taskAttachment = currentPageAttachmentFromLocation('/departure/new', '?taskId=task-1')
+    expect(taskAttachment && currentPageAttachmentLabel(taskAttachment)).toBe('当前建团工作')
+    expect(conversationSendContextFromAttachment(taskAttachment)).toEqual({
+      primaryTaskId: 'task-1',
+    })
   })
 })

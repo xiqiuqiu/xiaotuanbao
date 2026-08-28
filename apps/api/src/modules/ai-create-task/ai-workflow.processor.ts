@@ -3,11 +3,11 @@ import { Injectable, Inject, Logger, ServiceUnavailableException } from '@nestjs
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
-  AI_CREATE_AGENT_DEFINITION_REF,
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
-  DEPARTURE_CREATION_GOAL_INTENT_KEY,
+  DEPARTURE_CREATION_TASK_TYPE,
+  registeredTaskDescriptors,
   CONVERSATION_GENERAL_INSTRUCTIONS,
   CONVERSATION_RECALL_TOOL_NAMES,
   CONVERSATION_ROUTING_TOOL,
@@ -28,7 +28,6 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
-  AgentTaskType,
   AiAgentAttemptStatus,
   AiCreatePhase,
   AiConversationEventKind,
@@ -128,14 +127,7 @@ export class AiWorkflowProcessor {
   private readonly workerId = process.env.HOSTNAME?.trim() || `worker-${randomUUID()}`
   private parseInFlight = 0
   private agentInFlight = 0
-  private readonly executionRouter = new AgentExecutionRouter([
-    {
-      intentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
-      kind: 'task_creation_proposal',
-      taskType: AgentTaskType.departure_creation,
-      requiredPermissionKey: 'departure:write',
-    },
-  ])
+  private readonly executionRouter = new AgentExecutionRouter()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -671,14 +663,15 @@ export class AiWorkflowProcessor {
     if (route.agentDefinition.key === CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key) {
       return { ok: true, permissionKeys: [] }
     }
-    if (!job.taskId || route.agentDefinition.key !== AI_CREATE_AGENT_DEFINITION_REF.key) {
+    const descriptor = registeredTaskDescriptors.findByAgentDefinition(route.agentDefinition)
+    if (!job.taskId || !descriptor) {
       return { ok: false, errorCode: 'PERMISSION_DENIED' }
     }
     if (!isAiCreateAssistEnabledForUser(this.configService, user.id)) {
       return { ok: false, errorCode: 'PERMISSION_DENIED' }
     }
     const permissionKeys = await this.authService.getPermissionKeysForUser(user.id)
-    if (!permissionKeys.includes('departure:write')) {
+    if (!permissionKeys.includes(descriptor.requiredPermissionKey)) {
       return { ok: false, errorCode: 'PERMISSION_DENIED' }
     }
     return { ok: true, permissionKeys }
@@ -797,7 +790,7 @@ export class AiWorkflowProcessor {
     if (route.agentDefinition.key === CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key) {
       return this.prepareTasklessAttempt(job, pageAttachment)
     }
-    if (route.agentDefinition.key !== AI_CREATE_AGENT_DEFINITION_REF.key || !job.taskId) {
+    if (!registeredTaskDescriptors.findByAgentDefinition(route.agentDefinition) || !job.taskId) {
       throw new Error(`不支持的 Agent 执行定义: ${definitionRefLog(route.agentDefinition)}`)
     }
     const taskId = job.taskId
@@ -1015,8 +1008,8 @@ export class AiWorkflowProcessor {
           inputBatchId: job.inputBatchId,
           jobId: job.id,
           contextManifestId: manifest.id,
-          agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
-          agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
+          agentDefinitionKey: route.agentDefinition.key,
+          agentDefinitionVersion: route.agentDefinition.version,
           grantedCapabilities: [],
           generation: job.generation,
           status: AiAgentAttemptStatus.running,
@@ -1031,7 +1024,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
-        agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+        agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
           { organizationId: job.organizationId, kind: 'ai_create_task', id: taskId },
@@ -1630,9 +1623,14 @@ export class AiWorkflowProcessor {
     result: HeadlessRegisteredIntentResult,
     proposal: Extract<AgentExecutionRoute, { kind: 'task_creation_proposal' }>,
   ): Promise<void> {
+    const descriptor =
+      registeredTaskDescriptors.findByTaskType(proposal.taskType) ??
+      registeredTaskDescriptors.findByIntentKey(result.intent.key)
     if (
-      proposal.taskType !== AgentTaskType.departure_creation ||
-      result.intent.key !== DEPARTURE_CREATION_GOAL_INTENT_KEY ||
+      !descriptor ||
+      descriptor.taskType !== proposal.taskType ||
+      result.intent.key !== descriptor.registeredIntent.key ||
+      descriptor.taskType !== DEPARTURE_CREATION_TASK_TYPE ||
       !result.intent.goal
     ) {
       await this.persistFailure(job, 'INVALID_FORMAT', undefined, attemptId)
@@ -1673,7 +1671,7 @@ export class AiWorkflowProcessor {
         data: {
           organizationId: job.organizationId,
           ownerUserId: job.inputBatch.creatorUserId,
-          type: AgentTaskType.departure_creation,
+          type: proposal.taskType,
           goal,
           status: AgentTaskStatus.active,
           departureCreationTask: {
@@ -1705,6 +1703,7 @@ export class AiWorkflowProcessor {
               payload: {
                 inputBatchId: job.inputBatchId,
                 registeredIntentKey: result.intent.key,
+                createdTaskType: descriptor.taskType,
               },
             },
           },
@@ -1754,6 +1753,7 @@ export class AiWorkflowProcessor {
           attemptId,
           createdTaskId: task.id,
           createdTaskGoal: goal,
+          createdTaskType: descriptor.taskType,
           continuation: true,
         },
       })

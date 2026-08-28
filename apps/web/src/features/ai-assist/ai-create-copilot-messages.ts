@@ -1,4 +1,8 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
+import {
+  DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  registeredTaskDescriptors,
+} from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
   AiInputBatchStatus,
@@ -190,6 +194,7 @@ export type AgentTaskActivityContent = {
   taskId: string
   title: string
   status: string
+  taskType?: string
 }
 
 export type SearchRouteTemplatesActivityContent = {
@@ -508,6 +513,7 @@ export function toCopilotChatMessages(
   const taskSlots = new Map<string, number>()
   const batchTaskIds = new Map<string, string>()
   const taskTitles = new Map<string, string>()
+  const taskTypes = new Map<string, string>()
   const upsertStatus = (content: BatchStatusActivityContent) => {
     const key = content.batchId ?? 'current'
     const item: ChatMessage = {
@@ -556,6 +562,9 @@ export function toCopilotChatMessages(
     const taskId = explicitTaskId ?? (batchId ? batchTaskIds.get(batchId) : undefined)
     if (taskId && typeof event.payload.createdTaskGoal === 'string') {
       taskTitles.set(taskId, event.payload.createdTaskGoal)
+    }
+    if (taskId && typeof event.payload.createdTaskType === 'string') {
+      taskTypes.set(taskId, event.payload.createdTaskType)
     }
     if (event.kind === 'user_message') {
       messages.push({
@@ -621,10 +630,15 @@ export function toCopilotChatMessages(
       const payload = event.payload
       const status = String(payload.status ?? '')
       if (taskId) {
+        const taskType = taskTypes.get(taskId)
+        const descriptor = taskType
+          ? registeredTaskDescriptors.findByTaskType(taskType)
+          : DEPARTURE_CREATION_TASK_DESCRIPTOR
         upsertTask({
           taskId,
-          title: taskTitles.get(taskId) ?? '创建发团',
+          title: taskTitles.get(taskId) ?? descriptor?.defaultTitle ?? DEPARTURE_CREATION_TASK_DESCRIPTOR.defaultTitle,
           status,
+          ...(taskType ? { taskType } : {}),
         })
       }
       const progress = progressFromPayload(payload)

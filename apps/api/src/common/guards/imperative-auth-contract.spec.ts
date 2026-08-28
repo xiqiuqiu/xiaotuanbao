@@ -27,7 +27,7 @@ const IMPERATIVE_AUTH_ALLOWLIST: Record<string, string> = {
   'modules/ai-create-task/ai-conversation.service.ts':
     '会话发送/恢复等内部入口同时要求 departure:write 与用户级协助开关；controller 已挂 departure:write，service 内 assertAssistAccess 作内部调用与开关合流。',
   'modules/ai-create-task/agent-task.service.ts':
-    '通用 Task 路由的权限 key 取决于持久化 task type；当前 departure_creation 动态映射 departure:write，后续 Task Type 复用同一入口时不能用单一静态 @RequireMenu 表达。',
+    '通用 Task 路由的权限 key 由 Task Descriptor Registry 按 task type 登记；不能用单一静态 @RequireMenu 表达。',
 }
 
 const SRC_ROOT = resolve(__dirname, '../..')

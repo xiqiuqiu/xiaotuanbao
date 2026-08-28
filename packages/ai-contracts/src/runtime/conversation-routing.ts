@@ -1,6 +1,10 @@
 import { z } from 'zod'
+import {
+  DEPARTURE_CREATION_GOAL_INTENT_KEY,
+  DEPARTURE_CREATION_ROUTING_DECISION,
+} from './task-descriptor'
 
-export const DEPARTURE_CREATION_GOAL_INTENT_KEY = 'task.departure-creation.requested'
+export { DEPARTURE_CREATION_GOAL_INTENT_KEY, DEPARTURE_CREATION_ROUTING_DECISION }
 
 export const registeredAgentIntentSchema = z
   .object({
@@ -20,7 +24,7 @@ const clarificationOptionSchema = z
 export const conversationRoutingInputSchema = z.discriminatedUnion('decision', [
   z
     .object({
-      decision: z.literal('propose_departure_creation'),
+      decision: z.literal(DEPARTURE_CREATION_ROUTING_DECISION),
       goal: z.string().trim().min(1).max(500),
     })
     .strict(),
@@ -37,7 +41,7 @@ export const conversationRoutingOutputSchema = z.discriminatedUnion('decision', 
   z
     .object({
       status: z.literal('accepted'),
-      decision: z.literal('propose_departure_creation'),
+      decision: z.literal(DEPARTURE_CREATION_ROUTING_DECISION),
       registeredIntent: registeredAgentIntentSchema,
     })
     .strict(),

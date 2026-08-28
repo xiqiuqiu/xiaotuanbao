@@ -626,6 +626,41 @@ describe('AI create chat status projection', () => {
       ]),
     )
   })
+
+  it('falls back to the registered default title when the event has no goal #439', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-1',
+            createdTaskId: 'task-1',
+            createdTaskType: 'departure_creation',
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'agent-task',
+          content: expect.objectContaining({
+            taskId: 'task-1',
+            taskType: 'departure_creation',
+            title: '创建发团',
+            status: 'ready_for_agent',
+          }),
+        }),
+      ]),
+    )
+  })
 })
 
 describe('projectConversationFrame live assistant #415', () => {

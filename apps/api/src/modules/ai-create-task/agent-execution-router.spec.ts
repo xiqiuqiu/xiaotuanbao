@@ -99,6 +99,20 @@ describe('AgentExecutionRouter', () => {
     })
   })
 
+  it('routes a registered departure intent from the Task Descriptor without an extra branch', () => {
+    expect(
+      router.route({
+        associations: { taskRefs: [] },
+        registeredIntent: { key: DEPARTURE_CREATION_GOAL_INTENT_KEY },
+      }),
+    ).toEqual({
+      kind: 'task_creation_proposal',
+      registeredIntentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+      taskType: AgentTaskType.departure_creation,
+      requiredPermissionKey: 'departure:write',
+    })
+  })
+
   it('adds a registered intent row without changing the routing procedure', () => {
     const extensibleRouter = new AgentExecutionRouter([
       {

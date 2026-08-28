@@ -1,7 +1,7 @@
 import {
   CONVERSATION_ROUTING_TOOL,
-  DEPARTURE_CREATION_GOAL_INTENT_KEY,
   conversationRoutingInputSchema,
+  registeredTaskDescriptors,
 } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
@@ -22,16 +22,20 @@ export function createConversationRoutingTool() {
     inputSchema: modelRoutingInputSchema,
     execute: async (input) => {
       const parsed = conversationRoutingInputSchema.parse(input)
-      if (parsed.decision === 'propose_departure_creation') {
+      const descriptor = registeredTaskDescriptors.findByRoutingDecision(parsed.decision)
+      if (descriptor && 'goal' in parsed) {
         return {
           status: 'accepted' as const,
           decision: parsed.decision,
           registeredIntent: {
-            key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+            key: descriptor.registeredIntent.key,
             confidence: 'high' as const,
             goal: parsed.goal,
           },
         }
+      }
+      if (parsed.decision !== 'request_clarification') {
+        throw new Error(`未登记的会话路由决策: ${parsed.decision}`)
       }
       return {
         status: 'accepted' as const,

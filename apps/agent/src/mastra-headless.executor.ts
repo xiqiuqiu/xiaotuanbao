@@ -4,6 +4,7 @@ import {
   AiCollaborationError,
   CONVERSATION_ROUTING_TOOL,
   conversationRoutingOutputSchema,
+  registeredTaskDescriptors,
   submitReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   type HeadlessExecutionRequest,
@@ -120,7 +121,11 @@ function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult
   }
   const message = output.text?.trim() || '已处理当前说明。'
   const routing = acceptedConversationRoutingFromGenerate(output)
-  if (routing?.decision === 'propose_departure_creation') {
+  if (
+    routing &&
+    'registeredIntent' in routing &&
+    registeredTaskDescriptors.findByRoutingDecision(routing.decision)
+  ) {
     return {
       kind: 'registered_intent',
       intent: routing.registeredIntent,

@@ -253,6 +253,7 @@ export {
 export {
   CONVERSATION_ROUTING_TOOL,
   DEPARTURE_CREATION_GOAL_INTENT_KEY,
+  DEPARTURE_CREATION_ROUTING_DECISION,
   conversationRoutingInputSchema,
   conversationRoutingOutputSchema,
   registeredAgentIntentSchema,
@@ -260,6 +261,23 @@ export {
   type ConversationRoutingOutput,
   type RegisteredAgentIntent,
 } from './runtime/conversation-routing'
+export {
+  DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  DEPARTURE_CREATION_TASK_TYPE,
+  TaskDescriptorRegistry,
+  buildTaskCompletedHref,
+  buildTaskWorkspaceHref,
+  matchTaskWorkspaceAttachment,
+  registeredTaskDescriptors,
+  type AgentTaskPageAttachment,
+  type TaskCompletedHref,
+  type TaskCompletedRouteDescriptor,
+  type TaskDescriptor,
+  type TaskIntentRoute,
+  type TaskRegisteredIntent,
+  type TaskWorkspaceDescriptor,
+  type TaskWorkspaceHref,
+} from './runtime/task-descriptor'
 export {
   CONTEXT_PROFILE_MISSING,
   OUTPUT_RESERVE_VERSION,
