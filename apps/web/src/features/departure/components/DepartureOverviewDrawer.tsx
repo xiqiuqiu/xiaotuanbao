@@ -8,6 +8,10 @@ import type { DepartureDetail } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSuppliers } from '@/services/supplier.service'
 import { updateDeparture } from '@/services/departure.service'
+import {
+  formatOutOfRangeItinerarySegmentError,
+  formatTourPeriodSavedMessage,
+} from '../utils/itinerary-segment-out-of-range'
 import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
@@ -83,15 +87,14 @@ export function DepartureOverviewDrawer({
 
   const saveMutation = useMutation({
     mutationFn: (values: DepartureOverviewFormValues) =>
-      updateDeparture(departure.id, buildUpdateDeparturePayload(values)),
+      updateDeparture(departure.id, buildUpdateDeparturePayload(values), { silentError: true }),
     onSuccess: (_data, values) => {
       const datesChanged =
         values.startDate !== departure.startDate || values.endDate !== departure.endDate
-      message.success('发团信息已保存')
-      if (datesChanged) {
-        message.info(
-          '出团/回团日期已变更：已有行程段（含资源）不会自动删除。延期请手工「添加一天」；缩期后多余空段请手工删除。',
-        )
+      const saved = formatTourPeriodSavedMessage(datesChanged)
+      message.success(saved.success)
+      if (saved.info) {
+        message.info(saved.info)
       }
       void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
@@ -100,7 +103,10 @@ export function DepartureOverviewDrawer({
       onClose()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '保存失败')
+      message.error(
+        formatOutOfRangeItinerarySegmentError(error) ??
+          (error instanceof Error ? error.message : '保存失败'),
+      )
     },
   })
 

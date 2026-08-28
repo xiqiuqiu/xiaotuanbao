@@ -4,22 +4,25 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type {
-  DepartureArchiveHistoryItem,
-  DepartureDetail,
-  DepartureListResult,
-  DepartureRouteNamesResult,
-  DepartureSettlementHistoryItem,
-  FormalDepartureAttachmentView,
-  DepartureSummary,
-  RouteLedgerDateBlock,
-  RouteLedgerDepartureGroup,
-  RouteLedgerOutsourceLine,
-  RouteLedgerOutsourceSummary,
-  RouteLedgerResult,
-  RouteLedgerRouteGroup,
-  RouteLedgerSourceOrderRow,
-  RouteLedgerTotals,
+import {
+  buildOutOfRangeItinerarySegmentConflict,
+  formatOutOfRangeItinerarySegmentSummary,
+  listOutOfRangeItinerarySegments,
+  type DepartureArchiveHistoryItem,
+  type DepartureDetail,
+  type DepartureListResult,
+  type DepartureRouteNamesResult,
+  type DepartureSettlementHistoryItem,
+  type FormalDepartureAttachmentView,
+  type DepartureSummary,
+  type RouteLedgerDateBlock,
+  type RouteLedgerDepartureGroup,
+  type RouteLedgerOutsourceLine,
+  type RouteLedgerOutsourceSummary,
+  type RouteLedgerResult,
+  type RouteLedgerRouteGroup,
+  type RouteLedgerSourceOrderRow,
+  type RouteLedgerTotals,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -759,12 +762,61 @@ export class DepartureService {
       data.dayCount = computeDayCount(startDate, endDate)
     }
 
-    const updated = await this.prisma.departure.update({
-      where: { id: departure.id },
-      data,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.startDate !== undefined || dto.endDate !== undefined) {
+        await this.assertNoOutOfRangeItinerarySegments(tx, departure.id, startDate, endDate)
+      }
+
+      const next = await tx.departure.update({
+        where: { id: departure.id },
+        data,
+      })
+
+      if (dto.startDate !== undefined || dto.endDate !== undefined) {
+        await fillMissingDailySkeletonInTx(tx, departure.id, startDate, endDate)
+      }
+
+      return next
     })
 
     return this.toDepartureDetailAsync(updated)
+  }
+
+  private async assertNoOutOfRangeItinerarySegments(
+    tx: Prisma.TransactionClient,
+    departureId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<void> {
+    const periodStartDate = formatDateOnly(startDate)
+    const periodEndDate = formatDateOnly(endDate)
+    const existing = await tx.itinerarySegment.findMany({
+      where: { departureId },
+      select: { id: true, name: true, startDate: true, endDate: true },
+    })
+    const outOfRange = listOutOfRangeItinerarySegments(
+      periodStartDate,
+      periodEndDate,
+      existing.map((segment) => ({
+        id: segment.id,
+        name: segment.name,
+        startDate: segment.startDate ? formatDateOnly(segment.startDate) : null,
+        endDate: segment.endDate ? formatDateOnly(segment.endDate) : null,
+      })),
+    )
+    if (outOfRange.length === 0) {
+      return
+    }
+
+    const conflict = buildOutOfRangeItinerarySegmentConflict(
+      periodStartDate,
+      periodEndDate,
+      outOfRange,
+    )
+    throw new ConflictException({
+      message: formatOutOfRangeItinerarySegmentSummary(conflict),
+      data: conflict,
+    })
   }
 
   async registerFormalAttachment(

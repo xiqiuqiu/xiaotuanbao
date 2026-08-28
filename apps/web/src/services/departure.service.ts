@@ -82,8 +82,9 @@ export async function getDeparture(id: string): Promise<DepartureDetail> {
 export async function updateDeparture(
   id: string,
   payload: UpdateDepartureDto,
+  config?: { silentError?: boolean },
 ): Promise<DepartureDetail> {
-  return request.patch<DepartureDetail>(`/departures/${id}`, payload)
+  return request.patch<DepartureDetail>(`/departures/${id}`, payload, config)
 }
 
 export async function transitionDeparture(

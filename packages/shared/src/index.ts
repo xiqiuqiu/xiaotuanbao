@@ -370,6 +370,17 @@ export {
   normalizeSupplierCategories,
   InvalidSupplierCategoriesError,
 } from './supplier/normalize-supplier-categories'
+export {
+  ITINERARY_SEGMENT_OUT_OF_RANGE,
+  listTourDays,
+  listUncoveredTourDays,
+  listOutOfRangeItinerarySegments,
+  formatOutOfRangeItinerarySegmentSummary,
+  buildOutOfRangeItinerarySegmentConflict,
+  type DatedItinerarySegment,
+  type OutOfRangeItinerarySegment,
+  type OutOfRangeItinerarySegmentConflict,
+} from './departure/daily-segment-skeleton'
 export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
 export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
 export { FareAdjustmentDirection } from './enums/fare-adjustment-direction.enum'
