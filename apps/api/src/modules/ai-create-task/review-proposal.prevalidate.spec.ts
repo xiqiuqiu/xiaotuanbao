@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto'
 import { AgentTaskStatus, AiCreateActivityRunStatus } from '@prisma/client'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AI_EVIDENCE_PER_CANDIDATE_LIMIT } from '@xiaotuanbao/ai-contracts'
 import { AiCreateTaskService } from './ai-create-task.service'
+import { normalizeEvidenceText } from './evidence-validator'
 
 const organizationId = 'org-1'
 const userId = 'user-1'
@@ -124,6 +126,9 @@ function createService() {
     aiAction: { create: writes.actionCreate, findFirst: jest.fn(), count: jest.fn() },
     aiReviewPackage: { create: writes.reviewCreate, findFirst: jest.fn(), count: jest.fn() },
     aiInputBatch: { update: writes.batchUpdate },
+    conversationSourceParseRun: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   }
   const prisma = {
     ...store,
@@ -310,6 +315,91 @@ describe('AiCreateTaskService.proposeReviewPackageForAgent', () => {
     expect(result).toMatchObject({
       status: 'rejected',
       errors: [expect.objectContaining({ code: 'EVIDENCE_LIMIT_EXCEEDED' })],
+    })
+    expect(writes.reviewCreate).not.toHaveBeenCalled()
+  })
+
+  it('accepts RapidOCR stored pages as material_region evidence for a same-conversation source', async () => {
+    const { service, prisma, writes } = createService()
+    const materialId = 'cmtcj9s7j0009wdpb1842oibu'
+    const excerpt = '【草稿】赛里木湖1日'
+    const pageText =
+      '【草稿】赛里木湖1日\n标签：（2 + 2 大车）\n一、简版行程\n伊宁市-【赛里木湖】-【果子沟】-【霍尔果斯口岸】-伊宁市'
+    const normalizedPage = normalizeEvidenceText(pageText)
+    prisma.aiContextManifest.findUnique.mockResolvedValue({
+      id: contextManifestId,
+      conversationId,
+      inputBatchId,
+      eventSequences: [1],
+      materialVersions: [{ materialId, parseResultVersion: 1 }],
+      sourceVersions: [{ sourceId: materialId, parseVersion: 1 }],
+      excerptDigests: [
+        {
+          fragmentId: 'fragment-src-v1-p1',
+          materialId,
+          parseResultVersion: 1,
+          pageNumber: 1,
+          normalizedTextRange: { start: 0, end: normalizedPage.length },
+          sha256: createHash('sha256').update(normalizedPage, 'utf8').digest('hex'),
+        },
+      ],
+    })
+    prisma.conversationSourceParseRun.findMany.mockResolvedValue([
+      {
+        sourceId: materialId,
+        resultVersion: 1,
+        pages: [
+          {
+            pageNumber: 1,
+            source: 'ocr',
+            text: pageText,
+            width: 1240,
+            height: 1754,
+            dpi: 144,
+            elapsedMs: 120,
+            lines: [
+              {
+                text: '【草稿】赛里木湖1日',
+                score: 0.99931,
+                box: [
+                  [106, 77],
+                  [320, 77],
+                  [320, 104],
+                  [106, 104],
+                ],
+                coordinateSystem: 'pixel',
+              },
+            ],
+          },
+        ],
+      },
+    ])
+
+    const result = await service.proposeReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion: 1,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '赛里木湖1日',
+          clarity: 'clear',
+          evidence: [
+            {
+              kind: 'material_region',
+              materialId,
+              parseResultVersion: 1,
+              pageNumber: 1,
+              excerpt,
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      candidates: [{ fieldKey: 'name', proposedValue: '赛里木湖1日' }],
     })
     expect(writes.reviewCreate).not.toHaveBeenCalled()
   })

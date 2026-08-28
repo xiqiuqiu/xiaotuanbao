@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import {
   AI_CREATE_SYSTEM_INSTRUCTIONS,
   PINNED_PARSE_CONTEXT_PREFACE,
+  CONVERSATION_SOURCE_CATALOG_PREFACE,
   TOKEN_ESTIMATOR_VERSION,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   TOKEN_LIMITER_TRIM_MODE,
@@ -25,6 +26,7 @@ export interface BudgetProjection {
   conversationBackground: { summary: string | null; summaryVersion: number | null }
   recentTail: ConversationEventForAgent[]
   pinnedMaterials: MaterialParseIndexItem[]
+  availableSources?: MaterialParseIndexItem[]
   truncationReasons: string[]
 }
 
@@ -113,6 +115,7 @@ export function buildBudgetedContext(input: {
     conversationBackground: { ...input.projection.conversationBackground },
     recentTail: input.projection.recentTail.map((event) => ({ ...event })),
     pinnedMaterials: input.projection.pinnedMaterials.map((material) => ({ ...material })),
+    availableSources: (input.projection.availableSources ?? []).map((material) => ({ ...material })),
     truncationReasons: [...input.projection.truncationReasons],
   }
   const reasons = new Set(projection.truncationReasons)
@@ -131,6 +134,25 @@ export function buildBudgetedContext(input: {
     if (material?.excerpt) {
       material.excerpt = ''
       material.truncated = true
+      reasons.add('sources_budget')
+      userText = renderUserText({
+        businessFactsText,
+        unresolvedStateText,
+        currentUserText: input.currentUserText,
+        projection,
+      })
+    }
+  }
+
+  const availableSources = projection.availableSources ?? []
+  for (let index = availableSources.length - 1; index >= 0; index -= 1) {
+    if (estimateTokens(userText) <= dynamicBudgetTokens) {
+      break
+    }
+    const source = availableSources[index]
+    if (source?.excerpt) {
+      source.excerpt = ''
+      source.truncated = true
       reasons.add('sources_budget')
       userText = renderUserText({
         businessFactsText,
@@ -176,7 +198,10 @@ export function buildBudgetedContext(input: {
   projection.truncationReasons = [...reasons].sort()
   const summaryText = projection.conversationBackground.summary ?? '本阶段无滚动摘要。'
   const recentTailText = formatTail(projection.recentTail)
-  const sourcesText = formatMaterials(projection.pinnedMaterials)
+  const sourcesText = [
+    formatMaterials(projection.pinnedMaterials),
+    formatAvailableSources(projection.availableSources ?? []),
+  ].join('\n\n')
 
   const sections: ContextSectionUsage[] = [
     systemSection,
@@ -251,6 +276,9 @@ function renderUserText(input: {
     '',
     '【本批资料】',
     formatMaterials(input.projection.pinnedMaterials),
+    '',
+    '【本会话来源】',
+    formatAvailableSources(input.projection.availableSources ?? []),
     '',
     '【本轮指令】',
     input.currentUserText,
@@ -349,4 +377,18 @@ function formatMaterials(materials: MaterialParseIndexItem[]): string {
     return `资料 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${clip}）${excerpt}`
   })
   return `${PINNED_PARSE_CONTEXT_PREFACE}\n\n${blocks.join('\n\n')}`
+}
+
+function formatAvailableSources(sources: MaterialParseIndexItem[]): string {
+  const catalog = sources.filter((item) => item.requiredThisBatch !== true)
+  if (catalog.length === 0) {
+    return '（无）'
+  }
+  const blocks = catalog.map((item) => {
+    const filename = item.originalFilename ? `，文件名 ${item.originalFilename}` : ''
+    const clip = item.truncated ? '，摘录已裁剪' : ''
+    const excerpt = item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''
+    return `来源 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${filename}${clip}）${excerpt}`
+  })
+  return `${CONVERSATION_SOURCE_CATALOG_PREFACE}\n\n${blocks.join('\n\n')}`
 }

@@ -17,7 +17,11 @@ const MATERIAL_WAITING = new Set<DepartureMaterialView['status']>([
   'parsing',
 ])
 
-const IN_FLIGHT_ASSIST = new Set<AiCreateAssistTaskStatus>(['parsing', 'ai_processing'])
+const IN_FLIGHT_ASSIST = new Set<AiCreateAssistTaskStatus>([
+  'parsing',
+  'ai_processing',
+  'awaiting_review',
+])
 
 const IN_FLIGHT_BATCH = new Set<AiInputBatchStatus>([
   'waiting_for_materials',
@@ -40,7 +44,7 @@ export function materialsRefetchInterval(
 export function assistStateRefetchInterval(
   status: AiCreateAssistTaskStatus | undefined,
 ): number | false {
-  if (!status || !IN_FLIGHT_ASSIST.has(status)) {
+  if (!status || status === 'awaiting_review' || !IN_FLIGHT_ASSIST.has(status)) {
     return false
   }
   return ASSIST_ACTIVE_POLL_MS

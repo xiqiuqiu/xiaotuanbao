@@ -173,6 +173,33 @@ async function resolvePinnedMaterial(
     }
   }
 
+  const conversationSource = actor.conversationId
+    ? await authority.findConversationSource({
+        sourceId: materialId,
+        parseVersion: claimedVersion,
+      })
+    : null
+  if (conversationSource) {
+    if (conversationSource.organizationId !== actor.organizationId) {
+      return deny('CROSS_ORGANIZATION', { kind: 'departure_material', id: materialId })
+    }
+    if (conversationSource.conversationId !== actor.conversationId) {
+      return deny('OBJECT_SCOPE_DENIED', { kind: 'departure_material', id: materialId })
+    }
+    if (conversationSource.parseVersion == null) {
+      return deny('TARGET_VERSION_MISMATCH', { kind: 'departure_material', id: materialId })
+    }
+    return {
+      ok: true,
+      target: {
+        kind: 'departure_material',
+        id: materialId,
+        organizationId: conversationSource.organizationId,
+        version: conversationSource.parseVersion,
+      },
+    }
+  }
+
   const material = await authority.findMaterial(materialId)
   if (!material) {
     return deny('TARGET_MISSING', { kind: 'departure_material', id: materialId })

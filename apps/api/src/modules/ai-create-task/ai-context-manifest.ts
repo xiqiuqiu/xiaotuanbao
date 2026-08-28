@@ -13,8 +13,11 @@ import {
 import type { ContextBudgetRecord, ContextSectionUsage } from './ai-context-budget'
 
 export interface ExcerptDigest {
+  fragmentId: string
   materialId: string
   parseResultVersion: number
+  pageNumber: number
+  normalizedTextRange: { start: number; end: number }
   sha256: string
 }
 
@@ -22,6 +25,7 @@ export interface FrozenContextProjection {
   conversationBackground: { summary: string | null; summaryVersion: number | null }
   recentTail: ConversationEventForAgent[]
   pinnedMaterials: MaterialParseIndexItem[]
+  availableSources?: MaterialParseIndexItem[]
   truncationReasons: string[]
 }
 
@@ -104,17 +108,42 @@ export function digestExcerpt(excerpt: string): string {
 }
 
 export function excerptDigestsFor(materials: MaterialParseIndexItem[]): ExcerptDigest[] {
-  return materials
-    .map((item) => ({
+  const byKey = new Map<string, ExcerptDigest>()
+  for (const item of materials) {
+    const key = `${item.materialId}:${item.parseResultVersion}`
+    if (byKey.has(key) || !item.excerpt.trim()) {
+      continue
+    }
+    const normalized = item.excerpt.normalize('NFC').replace(/\r\n?/g, '\n').replace(/\s+/gu, ' ').trim()
+    byKey.set(key, {
+      fragmentId: `fragment-${item.materialId}-v${item.parseResultVersion}-p1-0-${normalized.length}`,
       materialId: item.materialId,
       parseResultVersion: item.parseResultVersion,
-      sha256: digestExcerpt(item.excerpt),
-    }))
-    .sort(
-      (left, right) =>
-        left.materialId.localeCompare(right.materialId) ||
-        left.parseResultVersion - right.parseResultVersion,
-    )
+      pageNumber: 1,
+      normalizedTextRange: { start: 0, end: normalized.length },
+      sha256: digestExcerpt(normalized),
+    })
+  }
+  return [...byKey.values()].sort(
+    (left, right) =>
+      left.materialId.localeCompare(right.materialId) ||
+      left.parseResultVersion - right.parseResultVersion,
+  )
+}
+
+export function mergeFrozenSourceVersions(
+  pinned: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>,
+  catalog: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>,
+): Array<{ sourceId: string; parseVersion: number; contentDigest: string }> {
+  const byKey = new Map<string, { sourceId: string; parseVersion: number; contentDigest: string }>()
+  for (const item of [...pinned, ...catalog]) {
+    const key = `${item.sourceId}:${item.parseVersion}`
+    if (byKey.has(key)) {
+      continue
+    }
+    byKey.set(key, item)
+  }
+  return [...byKey.values()]
 }
 
 export function buildContextManifest(input: ContextManifestInput): ContextManifestRecord {
@@ -254,6 +283,7 @@ export function buildFrozenProjection(input: {
   originUserMessageSequence?: number
   currentUserMessageSequence?: number
   materials: MaterialParseIndexItem[]
+  availableSources?: MaterialParseIndexItem[]
   materialTruncationReasons?: string[]
   compaction?: {
     summary: string
@@ -277,6 +307,7 @@ export function buildFrozenProjection(input: {
       : { summary: null, summaryVersion: null },
     recentTail: projectConversationEventsForAgent(selected),
     pinnedMaterials: input.materials.map((item) => ({ ...item })),
+    availableSources: (input.availableSources ?? []).map((item) => ({ ...item })),
     truncationReasons: uniqueReasons(input.materialTruncationReasons ?? []),
   }
 }

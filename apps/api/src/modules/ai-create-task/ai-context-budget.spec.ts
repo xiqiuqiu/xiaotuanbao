@@ -107,6 +107,96 @@ describe('buildBudgetedContext', () => {
     expect(result.projection.recentTail.length).toBeLessThan(12)
   })
 
+  it('本批无附件时仍列出本会话可回读来源目录，不把摘录当全文', () => {
+    const result = buildBudgetedContext({
+      modelId: 'deterministic',
+      toolNames: ['getTaskContext', 'getMaterialParseResult', 'readConversationSource'],
+      currentUserText: '用刚才那份文件创建发团',
+      businessFacts: { taskId: 'task-1' },
+      unresolvedState: { hasPendingReview: false },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [
+          { sequence: 1, kind: 'user_message', text: '看下这个文件中的线路信息' },
+          { sequence: 6, kind: 'agent_message', text: '这份文件是赛里木湖1日' },
+        ],
+        pinnedMaterials: [],
+        availableSources: [
+          {
+            materialId: 'src-1',
+            parseResultVersion: 1,
+            status: 'ready',
+            pageCount: 1,
+            excerpt: '【草稿】赛里木湖1日',
+            truncated: true,
+            originalFilename: '赛里木湖1日_草稿.pdf',
+            requiredThisBatch: false,
+          },
+        ],
+        truncationReasons: [],
+      },
+    })
+
+    expect(result.userText).toContain('【本批资料】')
+    expect(result.userText).toContain('（无）')
+    expect(result.userText).toContain('【本会话来源】')
+    expect(result.userText).toContain('src-1')
+    expect(result.userText).toContain('解析版本 1')
+    expect(result.userText).toContain('赛里木湖1日_草稿.pdf')
+    expect(result.userText).toContain('再调用 readConversationSource 或 getMaterialParseResult')
+  })
+
+  it('本批已固定的来源只出现在【本批资料】，不在【本会话来源】重复列出', () => {
+    const result = buildBudgetedContext({
+      modelId: 'deterministic',
+      toolNames: ['getTaskContext', 'getMaterialParseResult', 'readConversationSource'],
+      currentUserText: '看这份附件',
+      businessFacts: { taskId: 'task-1' },
+      unresolvedState: { hasPendingReview: false },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [
+          {
+            materialId: 'src-1',
+            parseResultVersion: 1,
+            status: 'ready',
+            pageCount: 1,
+            excerpt: '本批正文',
+            truncated: false,
+          },
+        ],
+        availableSources: [
+          {
+            materialId: 'src-1',
+            parseResultVersion: 1,
+            status: 'ready',
+            pageCount: 1,
+            excerpt: '本批正文',
+            truncated: false,
+            originalFilename: '本批.pdf',
+            requiredThisBatch: true,
+          },
+          {
+            materialId: 'src-2',
+            parseResultVersion: 1,
+            status: 'ready',
+            pageCount: 1,
+            excerpt: '上一轮正文',
+            truncated: false,
+            originalFilename: '上一轮.pdf',
+            requiredThisBatch: false,
+          },
+        ],
+        truncationReasons: [],
+      },
+    })
+
+    expect(result.userText).toContain('资料 src-1')
+    expect(result.userText).toContain('来源 src-2')
+    expect(result.userText).not.toContain('来源 src-1')
+  })
+
   it('追加任何实际模型输入都会改变 manifest input hash', () => {
     const base = {
       modelId: 'deterministic',
@@ -233,7 +323,7 @@ describe('buildBudgetedContext', () => {
     })
 
     expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
-      version: 'conversation-general/v3',
+      version: 'conversation-general/v4',
       sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({

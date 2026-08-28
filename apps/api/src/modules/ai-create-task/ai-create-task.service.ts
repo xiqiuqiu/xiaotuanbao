@@ -323,6 +323,7 @@ export class AiCreateTaskService {
       organizationId: string
       taskId: string
       runId: string
+      conversationId?: string
       inputBatchId?: string
     },
     rawInput: unknown,
@@ -348,6 +349,7 @@ export class AiCreateTaskService {
     const result = await this.materialService.getPinnedParseResult({
       organizationId: caller.organizationId,
       inputBatchId: caller.inputBatchId,
+      conversationId: caller.conversationId,
       sourceId: input.materialId,
       parseVersion: input.parseResultVersion,
       pageNumber: input.pageNumber,

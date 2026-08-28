@@ -88,6 +88,16 @@ describe('ai-create-assist-polling', () => {
     ).toBe(ASSIST_ACTIVE_POLL_MS)
   })
 
+  it('keeps polling the task after the agent reaches awaiting_review until the overlay is cached', () => {
+    expect(
+      taskReviewRefetchInterval({
+        paneOpen: true,
+        hasPendingReview: false,
+        assistStatus: 'awaiting_review',
+      }),
+    ).toBe(ASSIST_ACTIVE_POLL_MS)
+  })
+
   it('slows conversation catch-up while the chat is idle', () => {
     expect(conversationCatchUpIntervalMs(null)).toBe(CONVERSATION_IDLE_CATCH_UP_MS)
     expect(conversationCatchUpIntervalMs('completed')).toBe(CONVERSATION_IDLE_CATCH_UP_MS)

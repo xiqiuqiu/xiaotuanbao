@@ -162,6 +162,51 @@ describe('validateEvidenceProposal', () => {
     expect(result).toMatchObject({ success: false, errors: [{ code: 'EXCERPT_NOT_FOUND' }] })
   })
 
+  it('accepts a same-conversation catalogued source that is not pinned to this batch', () => {
+    const cataloguedAuthority = {
+      ...authority,
+      contextManifest: {
+        ...authority.contextManifest,
+        materialVersions: [{ materialId: 'other-pin', parseResultVersion: 1 }],
+        sourceVersions: [{ sourceId: 'material-1', parseVersion: 2 }],
+      },
+      materials: [
+        {
+          ...authority.materials[0]!,
+          conversationId: 'conversation-1',
+        },
+      ],
+    }
+    const result = validateEvidenceProposal({
+      proposal: proposal([
+        {
+          schemaVersion: 1,
+          kind: 'material_region',
+          locator: { sourceId: 'material-1', parseResultVersion: 2, pageNumber: 1 },
+          excerpt: '九月川西团 人数：12 人',
+        },
+      ]),
+      authority: cataloguedAuthority,
+      systemRules: {},
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      normalizedProposal: {
+        evidenceCatalog: [
+          {
+            kind: 'material_region',
+            locator: {
+              materialId: 'material-1',
+              parseResultVersion: 2,
+              pageNumber: 1,
+            },
+          },
+        ],
+      },
+    })
+  })
+
   it('accepts sourceId as an alias for a pinned conversation source', () => {
     const result = validateEvidenceProposal({
       proposal: proposal([

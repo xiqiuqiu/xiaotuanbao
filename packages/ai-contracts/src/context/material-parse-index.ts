@@ -22,7 +22,12 @@ export type MaterialParseIndexItem = {
   pageCount: number
   excerpt: string
   truncated: boolean
+  originalFilename?: string
+  requiredThisBatch?: boolean
 }
+
+export const CONVERSATION_SOURCE_CATALOG_PREFACE =
+  '以下为本会话已解析完成、可供定向回读的来源目录，不是本批必需附件，也不是全文。多份来源时先向 User 确认要用哪一份，再调用 readConversationSource 或 getMaterialParseResult 读取固定解析版本。禁止把它们说成待解析，也禁止凭上一轮摘要编造候选。'
 
 export function clipExcerpt(text: string, maxChars: number): { excerpt: string; truncated: boolean } {
   const normalized = text.replace(/\s+/g, ' ').trim()

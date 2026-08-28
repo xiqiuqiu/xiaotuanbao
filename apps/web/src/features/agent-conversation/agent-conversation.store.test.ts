@@ -101,6 +101,31 @@ describe('agent conversation store #370', () => {
     expect(restored).toEqual({ pathname: '/', search: '', hash: '' })
   })
 
+  it('restores the selected Conversation after a full page reload', () => {
+    useAgentConversationStore.getState().persistConversation({
+      id: 'c-reload',
+      title: '用这份文件创建发团',
+    })
+
+    useAgentConversationStore.setState({
+      view: 'page',
+      conversationId: null,
+      title: '新会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
+      globalOpen: false,
+      attachedPageAttachment: null,
+      pageContextDismissed: false,
+    })
+    useAgentConversationStore.getState().hydrateFromSession()
+
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'c-reload',
+      title: '用这份文件创建发团',
+      view: 'history',
+    })
+  })
+
   it('resets overlay, selected Conversation and persisted return location', () => {
     useAgentConversationStore.getState().persistConversation({
       id: 'c-prev',

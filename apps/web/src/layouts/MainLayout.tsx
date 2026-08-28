@@ -39,8 +39,13 @@ export function MainLayout({ children }: PropsWithChildren) {
   const globalOpen = useAgentConversationStore((state) => state.globalOpen)
   const exitGlobal = useAgentConversationStore((state) => state.exitGlobal)
   const openGlobalFromRoute = useAgentConversationStore((state) => state.openGlobalFromRoute)
+  const hydrateFromSession = useAgentConversationStore((state) => state.hydrateFromSession)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const isGlobalAgent = globalOpen || routeIsGlobalAgent
+
+  useEffect(() => {
+    hydrateFromSession()
+  }, [hydrateFromSession])
 
   useEffect(() => {
     if (!routeIsGlobalAgent) {

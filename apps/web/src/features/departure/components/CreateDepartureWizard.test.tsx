@@ -1374,6 +1374,41 @@ describe('CreateDepartureWizard', () => {
     expect(screen.queryByText('发团创建草稿已保存')).not.toBeInTheDocument()
   })
 
+  it('reopens the pending-review conversation when restoring a task after reload', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({ conversationId: 'conv-restore' })
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    })
+
+    renderWizard()
+
+    expect(await screen.findByRole('region', { name: 'AI 阶段审核包' })).toBeInTheDocument()
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'conv-restore',
+      view: 'history',
+    })
+  })
+
   it('shows the pending review overlay and sticky bar from the restored task, not the saved form value', async () => {
     mockSearch = { taskId: 'task-1' }
     const pending = mockPendingReview()
