@@ -423,11 +423,11 @@ function useCreateDepartureWizardController() {
       .then(async (task) => {
         if (cancelled) return
         if (task.departureId) {
-          message.info('该 AI 建团任务已创建正式发团，正在打开详情')
           void navigate({
             to: '/departure/$departureId',
             params: { departureId: task.departureId },
             search: { tab: 'overview' },
+            replace: true,
           })
           return
         }
@@ -643,6 +643,7 @@ function useCreateDepartureWizardController() {
         to: '/departure/$departureId',
         params: { departureId: departure.id },
         search: { tab: 'overview' },
+        replace: true,
       })
     },
     onError: (error) => {
