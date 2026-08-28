@@ -435,19 +435,19 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const conversationId = opened.conversation.id
 
     await sendMessage(taskId, conversationId, { text: '先问日期' }, `e2e-iso-a-${taskId}`).expect(201)
-    await sendMessage(
+    const earlierOrdinary = await sendMessage(
       taskId,
       conversationId,
       { text: '这是提问前就排队的消息，不能当答案' },
       `e2e-iso-b-${taskId}`,
     ).expect(201)
-    await processOwnedDueJobs(5)
+    await processOwnedDueJobs(1)
 
     const asked = await listEvents(taskId, conversationId)
     expect(asked.pendingInteraction?.status).toBe('pending')
     expect(asked.queuedBatches).toHaveLength(1)
 
-    await sendMessage(
+    const laterOrdinary = await sendMessage(
       taskId,
       conversationId,
       { text: '2026-10-01' },
@@ -508,26 +508,23 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       interactionId: asked.pendingInteraction?.id,
     })
 
-    agent.holdNextCall()
-    const replyRun = processOwnedDueJobs(1)
-    await waitFor(async () => {
-      const replyBatch = await prisma.aiInputBatch.findUnique({
-        where: { id: replied.body.data.batch.id as string },
-      })
-      expect(replyBatch?.status).toBe('agent_running')
-    })
+    await processOwnedDueJobs(1)
     expect(
-      await prisma.aiInputBatch.count({
-        where: {
-          taskLinks: { some: { taskId } },
-          replyToEventId: null,
-          status: 'ready_for_agent',
-        },
+      await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: earlierOrdinary.body.data.batch.id as string },
       }),
-    ).toBeGreaterThan(0)
+    ).toMatchObject({ status: 'completed' })
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: laterOrdinary.body.data.batch.id as string },
+      }),
+    ).toMatchObject({ status: 'ready_for_agent' })
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: replied.body.data.batch.id as string },
+      }),
+    ).toMatchObject({ status: 'ready_for_agent' })
 
-    agent.release()
-    await replyRun
     await processOwnedDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: {
@@ -538,7 +535,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     expect(remaining).toBe(0)
   })
 
-  it('does not claim pre-question queued batches while a HITL reply is still waiting for materials', async () => {
+  it('更早的普通输入不被带附件的追问回复阻塞，回复在资料就绪后按序执行', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
@@ -556,7 +553,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '提问前就排队的消息，不能抢在带附件的答案前面' },
       `e2e-mat-iso-b-${taskId}`,
     ).expect(201)
-    await processOwnedDueJobs(5)
+    await processOwnedDueJobs(1)
 
     const asked = await listEvents(taskId, conversationId)
     expect(asked.pendingInteraction?.status).toBe('pending')
@@ -589,7 +586,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const queuedDuringParse = await prisma.aiInputBatch.findUnique({
       where: { id: queuedBatchId as string },
     })
-    expect(queuedDuringParse?.status).toBe('ready_for_agent')
+    expect(queuedDuringParse?.status).toBe('completed')
     expect(
       await prisma.aiInputBatch.count({
         where: { id: replied.body.data.batch.id as string, status: 'waiting_for_materials' },
@@ -599,26 +596,6 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     ocr.release()
     await parseRun
 
-    agent.holdNextCall()
-    const replyRun = processOwnedDueJobs(1)
-    await waitFor(async () => {
-      const replyBatch = await prisma.aiInputBatch.findUnique({
-        where: { id: replied.body.data.batch.id as string },
-      })
-      expect(replyBatch?.status).toBe('agent_running')
-    })
-    expect(
-      await prisma.aiInputBatch.count({
-        where: {
-          taskLinks: { some: { taskId } },
-          replyToEventId: null,
-          status: 'ready_for_agent',
-        },
-      }),
-    ).toBeGreaterThan(0)
-
-    agent.release()
-    await replyRun
     await processOwnedDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: {
@@ -706,7 +683,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     ).toBe(true)
   })
 
-  it('does not claim a later ready batch while an earlier batch is awaiting review', async () => {
+  it('awaiting_review 会释放执行权，后续普通输入可独立执行', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -736,32 +713,27 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     ).expect(201)
     expect(second.body.data.batch).toMatchObject({
       status: 'ready_for_agent',
-      queued: true,
     })
+    expect(second.body.data.batch.queued).toBeUndefined()
 
     await processOwnedDueJobs(5)
-    const queuedDuringReview = await prisma.aiInputBatch.findUnique({
+    const completedDuringReview = await prisma.aiInputBatch.findUnique({
       where: { id: second.body.data.batch.id as string },
     })
-    expect(queuedDuringReview?.status).toBe('ready_for_agent')
+    expect(completedDuringReview?.status).toBe('completed')
     expect(
       await prisma.aiWorkflowJob.count({
         where: {
           inputBatchId: second.body.data.batch.id as string,
-          status: { in: ['claimed', 'succeeded'] },
+          status: 'succeeded',
         },
       }),
-    ).toBe(0)
-
-    await prisma.aiInputBatch.update({
-      where: { id: first.body.data.batch.id as string },
-      data: { status: 'completed' },
-    })
-    await processOwnedDueJobs(5)
-    const afterReview = await prisma.aiInputBatch.findUnique({
-      where: { id: second.body.data.batch.id as string },
-    })
-    expect(afterReview?.status).toBe('completed')
+    ).toBe(1)
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: first.body.data.batch.id as string },
+      }),
+    ).toMatchObject({ status: 'awaiting_review' })
   })
 
   it('does not claim a later ready batch while an earlier non-reply batch is waiting for materials', async () => {
@@ -838,7 +810,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '提问前排队，取消后仍按原序执行' },
       `e2e-cancel-b-${taskId}`,
     ).expect(201)
-    await processOwnedDueJobs(5)
+    await processOwnedDueJobs(1)
     const asked = await listEvents(taskId, conversationId)
 
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })

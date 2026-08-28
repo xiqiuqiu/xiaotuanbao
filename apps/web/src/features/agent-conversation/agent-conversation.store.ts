@@ -39,6 +39,7 @@ interface AgentConversationState {
     hash?: string
   }) => { conversationId: string | null; href: string }
   exitGlobal: () => AgentReturnLocation
+  closeGlobalForBusinessNavigation: () => void
   openGlobalFromRoute: (conversationId: string | null) => void
   setHistoryRailCollapsed: (collapsed: boolean) => void
   reset: () => void
@@ -136,6 +137,10 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
     persistReturnLocation(null)
     set({ returnLocation: null, globalOpen: false })
     return restored
+  },
+  closeGlobalForBusinessNavigation: () => {
+    persistReturnLocation(null)
+    set({ returnLocation: null, globalOpen: false })
   },
   openGlobalFromRoute: (conversationId) => {
     const current = get()

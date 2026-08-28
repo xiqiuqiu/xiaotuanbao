@@ -80,6 +80,25 @@ export interface ConversationEventRecord {
   payload: unknown
 }
 
+export function excludeRetractedQueueMessages(
+  events: ConversationEventRecord[],
+): ConversationEventRecord[] {
+  const retractedSequences = new Set<number>()
+  for (const event of events) {
+    if (event.kind !== 'batch_status' || !event.payload || typeof event.payload !== 'object') {
+      continue
+    }
+    const payload = event.payload as Record<string, unknown>
+    if (
+      payload.reason === 'queue_retracted' &&
+      Number.isInteger(payload.retractedUserMessageSequence)
+    ) {
+      retractedSequences.add(payload.retractedUserMessageSequence as number)
+    }
+  }
+  return events.filter((event) => !retractedSequences.has(event.sequence))
+}
+
 export function digestExcerpt(excerpt: string): string {
   return createHash('sha256').update(excerpt, 'utf8').digest('hex')
 }

@@ -10,6 +10,7 @@ export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
 export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
 export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'ai-create-review-package'
 export const SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE = 'ai-create-search-route-templates'
+export const AGENT_TASK_ACTIVITY_TYPE = 'agent-task'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
@@ -19,6 +20,141 @@ const RUNNING_BATCH_STATUSES: ReadonlySet<AiInputBatchStatus> = new Set([
   'preparing_context',
   'agent_running',
 ])
+
+const QUEUED_BATCH_STATUSES: ReadonlySet<AiInputBatchStatus> = new Set([
+  'waiting_for_materials',
+  'ready_for_agent',
+])
+
+export type QueuedConversationMessage = {
+  batchId: string
+  text: string
+  userEventSequence: number
+}
+
+export function projectQueuedConversationMessages(
+  events: AiConversationEventView[],
+  liveAssistant?: LiveAssistantSnapshot | null,
+): {
+  messages: QueuedConversationMessage[]
+  visibleEvents: AiConversationEventView[]
+} {
+  const queuedByBatch = new Map<
+    string,
+    QueuedConversationMessage & { latestStatus: string; latestReason: string }
+  >()
+  const startedBatchIds = new Set<string>()
+
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index]
+    const payload = event.payload
+    if (event.kind === 'agent_message' && typeof payload.batchId === 'string') {
+      startedBatchIds.add(payload.batchId)
+    }
+    if (event.kind !== 'batch_status' || typeof payload.batchId !== 'string') {
+      continue
+    }
+    const batchId = payload.batchId
+    const status = String(payload.status ?? '')
+    const queued = queuedByBatch.get(batchId)
+    if (queued) {
+      queued.latestStatus = status
+      queued.latestReason = String(payload.reason ?? '')
+      if (!QUEUED_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
+        startedBatchIds.add(batchId)
+      }
+      continue
+    }
+    const userEvent = events[index - 1]
+    if (payload.queued !== true || userEvent?.kind !== 'user_message') {
+      continue
+    }
+    queuedByBatch.set(batchId, {
+      batchId,
+      text: String(userEvent.payload.text ?? ''),
+      userEventSequence: userEvent.sequence,
+      latestStatus: status,
+      latestReason: String(payload.reason ?? ''),
+    })
+  }
+
+  const liveBatchId =
+    liveAssistant && (liveAssistant.text || liveAssistant.reasoningText)
+      ? liveAssistant.batchId
+      : null
+
+  const messages = [...queuedByBatch.values()]
+    .filter((item) => {
+      if (!QUEUED_BATCH_STATUSES.has(item.latestStatus as AiInputBatchStatus)) {
+        return false
+      }
+      if (startedBatchIds.has(item.batchId)) {
+        return false
+      }
+      return liveBatchId !== item.batchId
+    })
+    .sort((left, right) => left.userEventSequence - right.userEventSequence)
+    .map(({ latestStatus: _latestStatus, latestReason: _latestReason, ...item }) => item)
+  const activeQueuedBatchIds = new Set(messages.map((item) => item.batchId))
+  const hiddenQueuedItems = [...queuedByBatch.values()].filter(
+    (item) =>
+      activeQueuedBatchIds.has(item.batchId) ||
+      (item.latestStatus === 'cancelled' && item.latestReason === 'queue_retracted'),
+  )
+  const queuedBatchIds = new Set(hiddenQueuedItems.map((item) => item.batchId))
+  const queuedUserSequences = new Set(hiddenQueuedItems.map((item) => item.userEventSequence))
+  const releasedBatchIds = new Set(startedBatchIds)
+  if (liveBatchId) {
+    releasedBatchIds.add(liveBatchId)
+  }
+
+  const visibleEvents = events.filter((event) => {
+      if (queuedUserSequences.has(event.sequence)) {
+        return false
+      }
+      const batchId =
+        typeof event.payload.batchId === 'string' ? event.payload.batchId : null
+      if (batchId && queuedBatchIds.has(batchId)) {
+        return false
+      }
+      if (
+        event.kind === 'batch_status' &&
+        event.payload.queued === true &&
+        batchId &&
+        releasedBatchIds.has(batchId)
+      ) {
+        return false
+      }
+      return true
+    })
+  const releasedQueuedItems = [...queuedByBatch.values()]
+    .filter(
+      (item) =>
+        !queuedBatchIds.has(item.batchId) &&
+        (startedBatchIds.has(item.batchId) || liveBatchId === item.batchId),
+    )
+    .sort((left, right) => left.userEventSequence - right.userEventSequence)
+  for (const item of releasedQueuedItems) {
+    const currentIndex = visibleEvents.findIndex(
+      (event) => event.sequence === item.userEventSequence,
+    )
+    if (currentIndex < 0) {
+      continue
+    }
+    const [userEvent] = visibleEvents.splice(currentIndex, 1)
+    const startIndex = visibleEvents.findIndex(
+      (event) =>
+        event.payload.batchId === item.batchId &&
+        (event.kind === 'agent_message' || event.kind === 'batch_status'),
+    )
+    visibleEvents.splice(startIndex < 0 ? visibleEvents.length : startIndex, 0, userEvent)
+  }
+
+  return {
+    messages,
+    visibleEvents,
+  }
+}
 
 export type FailedMaterialNotice = {
   materialId: string
@@ -47,6 +183,13 @@ export type InteractionActivityContent = {
 export type ReviewPackageActivityContent = {
   reviewPackageId: string
   fieldKeys: string[]
+  taskId?: string
+}
+
+export type AgentTaskActivityContent = {
+  taskId: string
+  title: string
+  status: string
 }
 
 export type SearchRouteTemplatesActivityContent = {
@@ -192,7 +335,10 @@ export function latestBatchStatus(
   return activeBatch?.status ?? null
 }
 
-function reviewPackageFromPayload(payload: Record<string, unknown>): ReviewPackageActivityContent | null {
+function reviewPackageFromPayload(
+  payload: Record<string, unknown>,
+  fallbackTaskId?: string,
+): ReviewPackageActivityContent | null {
   const reviewPackageId = payload.reviewPackageId
   if (typeof reviewPackageId !== 'string' || reviewPackageId.length === 0) {
     return null
@@ -200,7 +346,11 @@ function reviewPackageFromPayload(payload: Record<string, unknown>): ReviewPacka
   const fieldKeys = Array.isArray(payload.fieldKeys)
     ? payload.fieldKeys.filter((key): key is string => typeof key === 'string')
     : []
-  return { reviewPackageId, fieldKeys }
+  const taskId =
+    typeof payload.taskId === 'string' && payload.taskId.length > 0
+      ? payload.taskId
+      : fallbackTaskId
+  return { reviewPackageId, fieldKeys, ...(taskId ? { taskId } : {}) }
 }
 
 function searchRouteTemplatesFromPayload(
@@ -355,6 +505,9 @@ export function toCopilotChatMessages(
 ): ChatMessage[] {
   const messages: ChatMessage[] = []
   const statusSlots = new Map<string, number>()
+  const taskSlots = new Map<string, number>()
+  const batchTaskIds = new Map<string, string>()
+  const taskTitles = new Map<string, string>()
   const upsertStatus = (content: BatchStatusActivityContent) => {
     const key = content.batchId ?? 'current'
     const item: ChatMessage = {
@@ -371,10 +524,39 @@ export function toCopilotChatMessages(
     statusSlots.set(key, messages.length)
     messages.push(item)
   }
+  const upsertTask = (content: AgentTaskActivityContent) => {
+    const item: ChatMessage = {
+      id: `agent-task-${content.taskId}`,
+      role: 'activity',
+      activityType: AGENT_TASK_ACTIVITY_TYPE,
+      content,
+    }
+    const existing = taskSlots.get(content.taskId)
+    if (existing != null) {
+      messages[existing] = item
+      return
+    }
+    taskSlots.set(content.taskId, messages.length)
+    messages.push(item)
+  }
 
   for (const event of events) {
     const batchId =
       typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined
+    const explicitTaskId =
+      typeof event.payload.taskId === 'string' && event.payload.taskId.length > 0
+        ? event.payload.taskId
+        : typeof event.payload.createdTaskId === 'string' &&
+            event.payload.createdTaskId.length > 0
+          ? event.payload.createdTaskId
+          : undefined
+    if (batchId && explicitTaskId) {
+      batchTaskIds.set(batchId, explicitTaskId)
+    }
+    const taskId = explicitTaskId ?? (batchId ? batchTaskIds.get(batchId) : undefined)
+    if (taskId && typeof event.payload.createdTaskGoal === 'string') {
+      taskTitles.set(taskId, event.payload.createdTaskGoal)
+    }
     if (event.kind === 'user_message') {
       messages.push({
         id: `event-${event.sequence}`,
@@ -402,7 +584,7 @@ export function toCopilotChatMessages(
           } satisfies InteractionActivityContent,
         })
       }
-      const reviewNotice = reviewPackageFromPayload(event.payload)
+      const reviewNotice = reviewPackageFromPayload(event.payload, taskId)
       if (reviewNotice) {
         messages.push({
           id: `review-${reviewNotice.reviewPackageId}`,
@@ -438,6 +620,13 @@ export function toCopilotChatMessages(
     if (event.kind === 'batch_status') {
       const payload = event.payload
       const status = String(payload.status ?? '')
+      if (taskId) {
+        upsertTask({
+          taskId,
+          title: taskTitles.get(taskId) ?? '创建发团',
+          status,
+        })
+      }
       const progress = progressFromPayload(payload)
       const errorCode =
         typeof payload.errorCode === 'string' ? payload.errorCode : undefined

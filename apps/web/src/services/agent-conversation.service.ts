@@ -66,7 +66,13 @@ export async function saveAgentConversationDraft(
 
 export async function sendAgentConversationText(
   conversationId: string | null,
-  payload: { text: string } & (
+  payload: {
+    text: string
+    replyToEventId?: string
+    interactionId?: string
+    interactionVersion?: number
+    selectedOptionId?: string
+  } & (
     | { pageLocator: PageLocator; primaryTaskId?: never }
     | { primaryTaskId: string; pageLocator?: never }
     | { pageLocator?: never; primaryTaskId?: never }
@@ -80,9 +86,31 @@ export async function sendAgentConversationText(
     path,
     {
       text: payload.text,
+      ...(payload.replyToEventId ? { replyToEventId: payload.replyToEventId } : {}),
+      ...(payload.interactionId ? { interactionId: payload.interactionId } : {}),
+      ...(payload.interactionVersion != null
+        ? { interactionVersion: payload.interactionVersion }
+        : {}),
+      ...(payload.selectedOptionId ? { selectedOptionId: payload.selectedOptionId } : {}),
       ...(payload.pageLocator ? { pageLocator: payload.pageLocator } : {}),
       ...(payload.primaryTaskId ? { primaryTaskId: payload.primaryTaskId } : {}),
     },
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function cancelAgentConversationInteraction(
+  conversationId: string,
+  interactionId: string,
+  version: number,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/interactions/${interactionId}/cancel`,
+    { version },
     {
       silentError: true,
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -97,6 +125,21 @@ export async function stopAgentConversationBatch(
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
     `/agent/conversations/${conversationId}/batches/${batchId}/stop`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function retractQueuedAgentConversationBatch(
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/retract`,
     {},
     {
       silentError: true,

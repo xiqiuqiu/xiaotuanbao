@@ -37,6 +37,7 @@ import {
   TaskActivityKind,
   type AgentTask,
   type AiConversation,
+  type AiConversationDraft,
   type AiConversationEvent,
   type AiConversationInteraction,
   type AiCreateTask,
@@ -63,6 +64,7 @@ import {
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
+  RETRACT_QUEUED_BATCH_OPERATION,
   RETRY_FAILED_BATCH_OPERATION,
   RETRY_FAILED_MATERIALS_OPERATION,
   SEND_TASKLESS_TEXT_OPERATION,
@@ -1655,6 +1657,108 @@ export class AiConversationService {
     return result
   }
 
+  async retractQueuedBatch(
+    organizationId: string,
+    userId: string,
+    taskId: string | undefined,
+    conversationId: string,
+    batchId: string,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: RETRACT_QUEUED_BATCH_OPERATION,
+      idempotencyKey,
+      request: { batchId },
+      mutate: async (tx, batch) => {
+        if (
+          batch.status !== AiInputBatchStatus.waiting_for_materials &&
+          batch.status !== AiInputBatchStatus.ready_for_agent
+        ) {
+          throw new ConflictException('该消息已开始处理，不能撤回编辑')
+        }
+        const [queuedEvent, userEvent, currentDraft] = await Promise.all([
+          tx.aiConversationEvent.findFirst({
+            where: {
+              conversationId: batch.conversationId,
+              sequence: batch.conversationVersion + 1,
+            },
+          }),
+          tx.aiConversationEvent.findUniqueOrThrow({
+            where: { id: batch.userMessageEventId },
+          }),
+          tx.aiConversationDraft.findUnique({
+            where: { conversationId_userId: { conversationId: batch.conversationId, userId } },
+          }),
+        ])
+        const queuedPayload = queuedEvent?.payload as Record<string, unknown> | null
+        if (
+          queuedEvent?.kind !== AiConversationEventKind.batch_status ||
+          queuedPayload?.batchId !== batch.id ||
+          queuedPayload?.queued !== true
+        ) {
+          throw new ConflictException('仅排队中的消息可撤回编辑')
+        }
+        if (currentDraft?.text.trim()) {
+          throw new ConflictException('输入框已有内容，请先处理后再编辑排队消息')
+        }
+        const userPayload = userEvent.payload as Record<string, unknown>
+        const text = String(userPayload.text ?? '')
+        if (!text.trim()) {
+          throw new ConflictException('排队消息内容为空，无法恢复编辑')
+        }
+        await tx.aiWorkflowJob.updateMany({
+          where: {
+            inputBatchId: batch.id,
+            status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
+          },
+          data: {
+            status: AiWorkflowJobStatus.failed,
+            lastErrorCode: 'BATCH_CANCELLED',
+            leaseExpiresAt: null,
+            generation: { increment: 1 },
+          },
+        })
+        const updated = await tx.aiInputBatch.update({
+          where: { id: batch.id },
+          data: { status: AiInputBatchStatus.cancelled },
+          include: BATCH_MATERIAL_INCLUDE,
+        })
+        const draft = currentDraft
+          ? await tx.aiConversationDraft.update({
+              where: { id: currentDraft.id },
+              data: { text, revision: { increment: 1 } },
+            })
+          : await tx.aiConversationDraft.create({
+              data: {
+                organizationId,
+                conversationId: batch.conversationId,
+                userId,
+                text,
+                draftEpoch: 1,
+                revision: 1,
+              },
+            })
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId: batch.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: {
+            batchId: batch.id,
+            status: AiInputBatchStatus.cancelled,
+            reason: 'queue_retracted',
+            retractedUserMessageSequence: batch.conversationVersion,
+          },
+        })
+        return { batch: updated, events: [statusEvent], draft }
+      },
+    })
+  }
+
   async retryFailedBatch(
     organizationId: string,
     userId: string,
@@ -2496,8 +2600,6 @@ export class AiConversationService {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
-            AiInputBatchStatus.awaiting_user_input,
-            AiInputBatchStatus.awaiting_review,
           ],
         },
       },
@@ -2751,7 +2853,11 @@ export class AiConversationService {
     mutate: (
       tx: Prisma.TransactionClient,
       batch: BatchWithMaterials,
-    ) => Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }>
+    ) => Promise<{
+      batch: BatchWithMaterials
+      events: AiConversationEvent[]
+      draft?: AiConversationDraft
+    }>
   }): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(params.idempotencyKey)
     const hash = requestHash({
@@ -2849,6 +2955,9 @@ export class AiConversationService {
         batch: toBatchView(mutated.batch),
         events,
         lastSequence: last?.sequence ?? 0,
+        ...(mutated.draft
+          ? { draft: toConversationDraftView(conversation.id, mutated.draft) }
+          : {}),
       }
       await tx.aiCreateIdempotencyRecord.update({
         where: { id: record.id },

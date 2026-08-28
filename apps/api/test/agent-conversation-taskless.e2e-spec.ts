@@ -447,6 +447,26 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       ownerUserId,
       status: 'active',
     })
+    const events = await prisma.aiConversationEvent.findMany({
+      where: { conversationId },
+      orderBy: { sequence: 'asc' },
+    })
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: AiConversationEventKind.batch_status,
+          payload: expect.objectContaining({
+            createdTaskId: taskId,
+            createdTaskGoal: '创建七月喀纳斯发团',
+            continuation: true,
+          }),
+        }),
+        expect.objectContaining({
+          kind: AiConversationEventKind.agent_message,
+          payload: expect.objectContaining({ taskId }),
+        }),
+      ]),
+    )
   })
 
   it('ignores an unregistered intent and completes as a general reply', async () => {
@@ -632,7 +652,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
   })
 
-  it('ends the attempt and keeps the pending interaction when waiting for user input', async () => {
+  it('等待回答会释放执行权，普通输入继续执行且不会处置待回答交互', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
       interaction: { type: 'free_text', prompt: '你希望新建发团，还是查询已有发团？' },
@@ -678,7 +698,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(stillWaiting.pendingInteraction?.id).toBe(asked.pendingInteraction?.id)
     expect(stillWaiting.pendingInteraction?.status).toBe('pending')
     expect(stillWaiting.activeBatch?.status).toBe('awaiting_user_input')
-    expect(stillWaiting.queuedBatches).toHaveLength(1)
+    expect(stillWaiting.queuedBatches).toHaveLength(0)
 
     const batches = await prisma.aiInputBatch.findMany({
       where: { conversationId },
@@ -686,7 +706,127 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
     expect(batches.map((batch) => batch.status)).toEqual([
       AiInputBatchStatus.awaiting_user_input,
-      AiInputBatchStatus.ready_for_agent,
+      AiInputBatchStatus.completed,
+    ])
+  })
+
+  it('同一会话允许多条未处置追问并存', async () => {
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: '请补充出发城市' },
+    })
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 第一条追问`,
+      `${testPrefix}-multi-interaction-first`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    await processor.processDueJobs(1)
+
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: '请补充预算' },
+    })
+    await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      `${testPrefix} 独立处理另一件事`,
+      `${testPrefix}-multi-interaction-second`,
+    ).expect(201)
+    await processor.processDueJobs(1)
+
+    expect(
+      await prisma.aiConversationInteraction.count({
+        where: { conversationId, status: 'pending' },
+      }),
+    ).toBe(2)
+    const events = await listEvents(coordinatorToken, conversationId)
+    expect(
+      events.events.filter(
+        (event) =>
+          event.kind === 'agent_message' &&
+          event.payload.interaction &&
+          typeof event.payload.interaction === 'object',
+      ),
+    ).toHaveLength(2)
+  })
+
+  it('撤回排队消息并编辑重发后，新批次在前一回答结束时继续执行', async () => {
+    agent.setOutcomes([
+      {
+        kind: 'awaiting_user_input',
+        interaction: { type: 'free_text', prompt: '请补充信息' },
+      },
+      { kind: 'completed', message: COMPLETED_MESSAGE },
+    ])
+    const first = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 撤回排队消息`,
+      `${testPrefix}-retract-first`,
+    ).expect(201)
+    const conversationId = track(first.body.data.conversationId as string)
+    agent.holdNextCall()
+    const firstWave = processor.processDueJobs(5)
+    await waitFor(async () => {
+      const running = await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: first.body.data.batch.id },
+      })
+      expect(running.status).toBe(AiInputBatchStatus.agent_running)
+    })
+
+    const queuedText = `${testPrefix} 先排队再编辑`
+    const queued = await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      queuedText,
+      `${testPrefix}-retract-queued`,
+    ).expect(201)
+    expect(queued.body.data.events.at(-1)?.payload.queued).toBe(true)
+
+    const retracted = await authRequest(app, coordinatorToken)
+      .post(
+        `/api/agent/conversations/${conversationId}/batches/${queued.body.data.batch.id}/retract`,
+      )
+      .set('Idempotency-Key', `${testPrefix}-retract-command`)
+      .expect(200)
+
+    expect(retracted.body.data.batch.status).toBe(AiInputBatchStatus.cancelled)
+    expect(retracted.body.data.draft.text).toBe(queuedText)
+    expect(retracted.body.data.events.at(-1)?.payload).toMatchObject({
+      status: AiInputBatchStatus.cancelled,
+      reason: 'queue_retracted',
+    })
+    expect(
+      await prisma.aiWorkflowJob.count({
+        where: {
+          inputBatchId: queued.body.data.batch.id,
+          status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
+        },
+      }),
+    ).toBe(0)
+
+    const resent = await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      `${queuedText}（已编辑）`,
+      `${testPrefix}-retract-resent`,
+    ).expect(201)
+
+    expect(resent.body.data.batch.id).not.toBe(queued.body.data.batch.id)
+    expect(resent.body.data.events.at(-1)?.payload.queued).toBe(true)
+    agent.release()
+    await firstWave
+    await processor.processDueJobs(5)
+
+    const batches = await prisma.aiInputBatch.findMany({
+      where: { conversationId },
+      orderBy: { conversationVersion: 'asc' },
+      select: { id: true, status: true },
+    })
+    expect(batches).toEqual([
+      { id: first.body.data.batch.id, status: AiInputBatchStatus.awaiting_user_input },
+      { id: queued.body.data.batch.id, status: AiInputBatchStatus.cancelled },
+      { id: resent.body.data.batch.id, status: AiInputBatchStatus.completed },
     ])
   })
 
@@ -756,6 +896,53 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       AiInputBatchStatus.completed,
       AiInputBatchStatus.completed,
     ])
+  })
+
+  it('追问回复按服务端事件顺序执行，不越过更早的普通输入', async () => {
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: '请补充城市' },
+    })
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 顺序追问`,
+      `${testPrefix}-reply-order-first`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    await processor.processDueJobs(5)
+    const asked = await listEvents(coordinatorToken, conversationId)
+
+    const ordinary = await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      `${testPrefix} 更早的普通输入`,
+      `${testPrefix}-reply-order-ordinary`,
+    ).expect(201)
+    const reply = await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      '上海',
+      `${testPrefix}-reply-order-answer`,
+      {
+        replyToEventId: asked.pendingInteraction?.eventId,
+        interactionId: asked.pendingInteraction?.id,
+        interactionVersion: asked.pendingInteraction?.version,
+      },
+    ).expect(201)
+
+    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    await processor.processDueJobs(1)
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: ordinary.body.data.batch.id } }),
+    ).toMatchObject({ status: AiInputBatchStatus.completed })
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: reply.body.data.batch.id } }),
+    ).toMatchObject({ status: AiInputBatchStatus.ready_for_agent })
+
+    await processor.processDueJobs(1)
+    expect(
+      await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: reply.body.data.batch.id } }),
+    ).toMatchObject({ status: AiInputBatchStatus.completed })
   })
 
   it('stops the current run without closing the conversation and drops a late outcome', async () => {

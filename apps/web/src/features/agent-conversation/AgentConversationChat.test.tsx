@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,9 @@ import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import {
+  cancelAgentConversationInteraction,
   listAgentConversationEvents,
+  retractQueuedAgentConversationBatch,
   saveAgentConversationDraft,
   sendAgentConversationText,
   stopAgentConversationBatch,
@@ -15,6 +17,7 @@ import { ApiError } from '@/lib/request'
 
 const routerState = vi.hoisted(() => ({
   location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
+  navigate: vi.fn(),
 }))
 
 function MockReasoningMessage({ content }: { content: string }) {
@@ -41,6 +44,7 @@ vi.mock('@/services/agent-conversation.service', () => ({
     events: [],
     lastSequence: 0,
   }),
+  cancelAgentConversationInteraction: vi.fn(),
   saveAgentConversationDraft: vi.fn().mockResolvedValue({
     conversationId: 'c-1',
     text: '',
@@ -48,11 +52,12 @@ vi.mock('@/services/agent-conversation.service', () => ({
     revision: 1,
   }),
   sendAgentConversationText: vi.fn(),
+  retractQueuedAgentConversationBatch: vi.fn(),
   stopAgentConversationBatch: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => routerState.navigate,
   useRouterState: (options?: {
     select?: (state: { location: { pathname: string; searchStr: string; hash: string } }) => unknown
   }) => {
@@ -67,81 +72,25 @@ let capturedActivityRenderers: Array<{
 }> = []
 let capturedChatConfig: { agentId?: string } = {}
 
-vi.mock('@copilotkit/react-core/v2', () => ({
-  CopilotKit: ({
-    children,
-    renderActivityMessages,
-  }: {
-    children: React.ReactNode
-    renderActivityMessages?: Array<{
-      activityType?: string
-      render?: (props: { content: unknown }) => React.ReactNode
-    }>
-  }) => {
-    capturedActivityRenderers = renderActivityMessages ?? []
-    return <div>{children}</div>
-  },
-  CopilotChatConfigurationProvider: ({
-    children,
-    agentId,
-  }: {
-    children: React.ReactNode
-    agentId?: string
-  }) => {
-    capturedChatConfig = { agentId }
-    return children
-  },
-  CopilotChatReasoningMessage: Object.assign(
-    () => null,
-    {
-      Header: () => null,
-      Content: () => null,
-      Toggle: () => null,
-    },
-  ),
-  CopilotChatView: ({
-    inputValue,
-    onInputChange,
+vi.mock('@copilotkit/react-core/v2', () => {
+  const MockCopilotChatInput = ({
+    value,
+    onChange,
     onSubmitMessage,
     onStop,
     isRunning,
-    messages,
   }: {
-    inputValue?: string
-    onInputChange?: (value: string) => void
+    value?: string
+    onChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
     onStop?: () => void
     isRunning?: boolean
-    messages?: Array<{
-      id?: string
-      role?: string
-      content?: unknown
-      activityType?: string
-    }>
   }) => (
     <div>
-      {(messages ?? []).map((message) => {
-        if (message.role === 'reasoning' && typeof message.content === 'string') {
-          return (
-            <MockReasoningMessage key={message.id} content={message.content} />
-          )
-        }
-        if (message.role === 'activity' && message.content && typeof message.content === 'object') {
-          const renderer = capturedActivityRenderers.find(
-            (item) => item.activityType === message.activityType,
-          )
-          if (renderer?.render) {
-            return <div key={message.id}>{renderer.render({ content: message.content })}</div>
-          }
-        }
-        return typeof message.content === 'string' ? (
-          <div key={message.id ?? `${message.role}-${message.content}`}>{message.content}</div>
-        ) : null
-      })}
       <textarea
         aria-label="询问小团宝业务"
-        value={inputValue ?? ''}
-        onChange={(event) => onInputChange?.(event.target.value)}
+        value={value ?? ''}
+        onChange={(event) => onChange?.(event.target.value)}
       />
       <button
         type="button"
@@ -151,15 +100,102 @@ vi.mock('@copilotkit/react-core/v2', () => ({
             onStop()
             return
           }
-          onSubmitMessage?.(inputValue ?? '')
-          onInputChange?.('')
+          onSubmitMessage?.(value ?? '')
+          onChange?.('')
         }}
       >
         {isRunning && onStop ? '停止当前处理' : '发送'}
       </button>
     </div>
-  ),
-}))
+  )
+
+  return {
+    CopilotKit: ({
+      children,
+      renderActivityMessages,
+    }: {
+      children: React.ReactNode
+      renderActivityMessages?: Array<{
+        activityType?: string
+        render?: (props: { content: unknown }) => React.ReactNode
+      }>
+    }) => {
+      capturedActivityRenderers = renderActivityMessages ?? []
+      return <div>{children}</div>
+    },
+    CopilotChatConfigurationProvider: ({
+      children,
+      agentId,
+    }: {
+      children: React.ReactNode
+      agentId?: string
+    }) => {
+      capturedChatConfig = { agentId }
+      return children
+    },
+    CopilotChatReasoningMessage: Object.assign(
+      () => null,
+      {
+        Header: () => null,
+        Content: () => null,
+        Toggle: () => null,
+      },
+    ),
+    CopilotChatInput: MockCopilotChatInput,
+    CopilotChatView: ({
+      input: Input = MockCopilotChatInput,
+      inputValue,
+      onInputChange,
+      onSubmitMessage,
+      onStop,
+      isRunning,
+      messages,
+    }: {
+      input?: typeof MockCopilotChatInput
+      inputValue?: string
+      onInputChange?: (value: string) => void
+      onSubmitMessage?: (value: string) => void
+      onStop?: () => void
+      isRunning?: boolean
+      messages?: Array<{
+        id?: string
+        role?: string
+        content?: unknown
+        activityType?: string
+      }>
+    }) => (
+      <div>
+        {(messages ?? []).map((message) => {
+          if (message.role === 'reasoning' && typeof message.content === 'string') {
+            return <MockReasoningMessage key={message.id} content={message.content} />
+          }
+          if (
+            message.role === 'activity' &&
+            message.content &&
+            typeof message.content === 'object'
+          ) {
+            const renderer = capturedActivityRenderers.find(
+              (item) => item.activityType === message.activityType,
+            )
+            if (renderer?.render) {
+              return <div key={message.id}>{renderer.render({ content: message.content })}</div>
+            }
+          }
+          return typeof message.content === 'string' ? (
+            <div key={message.id ?? `${message.role}-${message.content}`}>{message.content}</div>
+          ) : null
+        })}
+        <Input
+          value={inputValue}
+          onChange={onInputChange}
+          onSubmitMessage={onSubmitMessage}
+          onStop={onStop}
+          isRunning={isRunning}
+        />
+      </div>
+    ),
+  }
+})
 
 class MockEventSource {
   url: string
@@ -310,6 +346,371 @@ describe('AgentConversationChat page locator #371', () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 700))
     expect(composer).toHaveValue('需要保留的超长说明')
+  })
+})
+
+describe('AgentConversationChat task and review activities', () => {
+  beforeEach(() => {
+    lastEventSource = null
+    routerState.navigate.mockReset()
+    vi.mocked(listAgentConversationEvents).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 4,
+    })
+    vi.mocked(retractQueuedAgentConversationBatch).mockReset()
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationStore.getState().reset()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '创建川西发团',
+    })
+    useAgentConversationStore.getState().openGlobalFromRoute('c-1')
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-1',
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我创建发团：9 月 15 日出发，行程 8 天' },
+          createdAt: '2026-08-27T00:00:00.000Z',
+        },
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-1',
+            createdTaskId: 'task-1',
+            createdTaskGoal: '创建 9 月 15 日出发的 8 天行程',
+            continuation: true,
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在中间表单确认。',
+            batchId: 'batch-1',
+            taskId: 'task-1',
+            reviewPackageId: 'pkg-1',
+            fieldKeys: ['routeName', 'startDate', 'endDate'],
+          },
+          createdAt: '2026-08-27T00:00:02.000Z',
+        },
+        {
+          id: 'e-4',
+          sequence: 4,
+          kind: 'batch_status',
+          payload: {
+            status: 'awaiting_review',
+            batchId: 'batch-1',
+            taskId: 'task-1',
+            reviewPackageId: 'pkg-1',
+          },
+          createdAt: '2026-08-27T00:00:03.000Z',
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('renders the task card and opens the matching departure review form', async () => {
+    const user = userEvent.setup()
+    render(<AgentConversationChat />)
+
+    expect(await screen.findByRole('region', { name: 'Agent 任务' })).toHaveTextContent(
+      '创建 9 月 15 日出发的 8 天行程',
+    )
+    expect(screen.getByRole('region', { name: '待审核内容' })).toHaveTextContent(
+      '路线、出团日期、结束日期',
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看审核内容' }))
+    expect(routerState.navigate).toHaveBeenCalledWith({
+      to: '/departure/new',
+      search: { taskId: 'task-1' },
+    })
+    expect(useAgentConversationStore.getState().globalOpen).toBe(false)
+  })
+
+  it('同一会话并列展示多条未处置追问，普通输入框保持独立', async () => {
+    const user = userEvent.setup()
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-1',
+      batch: { id: 'reply-batch', status: 'ready_for_agent' },
+      events: [],
+      lastSequence: 2,
+    } as never)
+    vi.mocked(cancelAgentConversationInteraction).mockResolvedValue({
+      conversationId: 'c-1',
+      batch: { id: 'cancelled-batch', status: 'cancelled' },
+      events: [],
+      lastSequence: 2,
+    } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'interaction-event-1',
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '还需要确认两个问题。',
+            interaction: {
+              interactionId: 'interaction-1',
+              eventId: 'interaction-event-1',
+              type: 'free_text',
+              prompt: '请补充出发城市',
+              options: [],
+              version: 1,
+              status: 'pending',
+            },
+          },
+          createdAt: '2026-08-27T00:00:00.000Z',
+        },
+        {
+          id: 'interaction-event-2',
+          sequence: 2,
+          kind: 'agent_message',
+          payload: {
+            text: '请选择预算档位。',
+            interaction: {
+              interactionId: 'interaction-2',
+              eventId: 'interaction-event-2',
+              type: 'single_choice',
+              prompt: '预算档位',
+              options: [
+                { id: 'standard', label: '标准' },
+                { id: 'premium', label: '品质' },
+              ],
+              version: 1,
+              status: 'pending',
+            },
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+      ],
+    })
+
+    render(<AgentConversationChat />)
+
+    expect(await screen.findByRole('region', { name: '追问：请补充出发城市' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '追问：预算档位' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '回答追问：请补充出发城市' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '标准' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '询问小团宝业务' })).toBeInTheDocument()
+
+    await user.type(
+      screen.getByRole('textbox', { name: '回答追问：请补充出发城市' }),
+      '上海',
+    )
+    await user.click(
+      within(screen.getByRole('region', { name: '追问：请补充出发城市' })).getByRole(
+        'button',
+        { name: '发送回答' },
+      ),
+    )
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      'c-1',
+      {
+        text: '上海',
+        replyToEventId: 'interaction-event-1',
+        interactionId: 'interaction-1',
+        interactionVersion: 1,
+        selectedOptionId: undefined,
+      },
+      expect.any(String),
+    )
+
+    await user.click(
+      within(screen.getByRole('region', { name: '追问：预算档位' })).getByRole('button', {
+        name: '取消本次等待',
+      }),
+    )
+    expect(cancelAgentConversationInteraction).toHaveBeenCalledWith(
+      'c-1',
+      'interaction-2',
+      1,
+      expect.any(String),
+    )
+  })
+
+  it('keeps a queued message above the composer until its batch starts', async () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        ...useAgentConversationRuntimeStore.getState().events,
+        {
+          id: 'e-5',
+          sequence: 5,
+          kind: 'user_message',
+          payload: { text: '还有吗' },
+          createdAt: '2026-08-27T00:00:04.000Z',
+        },
+        {
+          id: 'e-6',
+          sequence: 6,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-2',
+            queued: true,
+          },
+          createdAt: '2026-08-27T00:00:05.000Z',
+        },
+      ],
+    })
+
+    render(<AgentConversationChat />)
+
+    const queue = await screen.findByRole('region', { name: '排队消息，共 1 条' })
+    expect(queue).toHaveTextContent('排队中 · 1')
+    expect(queue).toHaveTextContent('当前处理结束后自动发送')
+    expect(queue).toHaveTextContent('还有吗')
+    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'conversation.event',
+            event: {
+              id: 'e-7',
+              sequence: 7,
+              kind: 'batch_status',
+              payload: { status: 'preparing_context', batchId: 'batch-2' },
+              createdAt: '2026-08-27T00:00:06.000Z',
+            },
+          }),
+        }),
+      )
+    })
+
+    expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
+    expect(await screen.findByText('还有吗')).toBeInTheDocument()
+  })
+
+  it('撤回排队消息并回填输入框供重新编辑', async () => {
+    const user = userEvent.setup()
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        ...useAgentConversationRuntimeStore.getState().events,
+        {
+          id: 'e-5',
+          sequence: 5,
+          kind: 'user_message',
+          payload: { text: '还有吗' },
+          createdAt: '2026-08-27T00:00:04.000Z',
+        },
+        {
+          id: 'e-6',
+          sequence: 6,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+          createdAt: '2026-08-27T00:00:05.000Z',
+        },
+      ],
+    })
+    vi.mocked(retractQueuedAgentConversationBatch).mockResolvedValue({
+      conversationId: 'c-1',
+      batch: { id: 'batch-2', status: 'cancelled' },
+      events: [
+        {
+          id: 'e-7',
+          sequence: 7,
+          kind: 'batch_status',
+          payload: {
+            status: 'cancelled',
+            batchId: 'batch-2',
+            reason: 'queue_retracted',
+            retractedUserMessageSequence: 5,
+          },
+          createdAt: '2026-08-27T00:00:06.000Z',
+        },
+      ],
+      lastSequence: 7,
+      draft: {
+        conversationId: 'c-1',
+        text: '还有吗',
+        draftEpoch: 1,
+        revision: 2,
+        updatedAt: '2026-08-27T00:00:06.000Z',
+      },
+    } as never)
+
+    render(<AgentConversationChat />)
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+
+    expect(retractQueuedAgentConversationBatch).toHaveBeenCalledWith(
+      'c-1',
+      'batch-2',
+      expect.any(String),
+    )
+    expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue('还有吗')
+  })
+
+  it('moves a queued send into the transcript when live output arrives before batch_status promotion', async () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        ...useAgentConversationRuntimeStore.getState().events,
+        {
+          id: 'e-5',
+          sequence: 5,
+          kind: 'user_message',
+          payload: { text: '还有吗' },
+          createdAt: '2026-08-27T00:00:04.000Z',
+        },
+        {
+          id: 'e-6',
+          sequence: 6,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-2',
+            queued: true,
+          },
+          createdAt: '2026-08-27T00:00:05.000Z',
+        },
+      ],
+    })
+
+    render(<AgentConversationChat />)
+
+    expect(await screen.findByRole('region', { name: '排队消息，共 1 条' })).toHaveTextContent(
+      '还有吗',
+    )
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-2',
+            batchId: 'batch-2',
+            generation: 1,
+            revision: 1,
+            reasoningText: '',
+            text: '请问您指的是什么呢？',
+          }),
+        }),
+      )
+    })
+
+    expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
+    expect(await screen.findByText('还有吗')).toBeInTheDocument()
+    expect(screen.getByText('请问您指的是什么呢？')).toBeInTheDocument()
   })
 })
 

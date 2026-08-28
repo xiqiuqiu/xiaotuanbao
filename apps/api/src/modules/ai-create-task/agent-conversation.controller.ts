@@ -375,6 +375,24 @@ export class AgentConversationController {
     )
   }
 
+  @Post(':conversationId/batches/:batchId/retract')
+  @HttpCode(200)
+  retractQueuedBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.retractQueuedBatch(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+
   @Post(':conversationId/batches/:batchId/retry')
   @HttpCode(200)
   retryFailedBatch(

@@ -4,6 +4,7 @@ import {
   currentStoppableBatchId,
   isCopilotChatRunning,
   projectConversationFrame,
+  projectQueuedConversationMessages,
   toCopilotChatMessages,
 } from './ai-create-copilot-messages'
 
@@ -134,66 +135,279 @@ describe('AI create chat status projection', () => {
     expect(statuses.map((item) => item.label)).toEqual(['上下文超出容量上限，请拆分或精简后再试'])
   })
 
-  it('keeps queued visible when the running batch starts waiting for an answer', () => {
-    const messages = toCopilotChatMessages(
-      [
-        {
-          sequence: 1,
-          kind: 'user_message',
-          payload: { text: '第一批' },
-          createdAt: '2026-08-15T00:00:00.000Z',
-        },
-        {
-          sequence: 2,
-          kind: 'batch_status',
-          payload: { status: 'agent_running', batchId: 'batch-1' },
-          createdAt: '2026-08-15T00:00:00.000Z',
-        },
-        {
-          sequence: 3,
-          kind: 'user_message',
-          payload: { text: '第二批排队' },
-          createdAt: '2026-08-15T00:00:01.000Z',
-        },
-        {
-          sequence: 4,
-          kind: 'batch_status',
-          payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
-          createdAt: '2026-08-15T00:00:01.000Z',
-        },
-        {
-          id: 'event-q',
-          sequence: 5,
-          kind: 'agent_message',
-          payload: {
-            text: '出团日期是哪一天？',
-            interaction: {
-              interactionId: 'int-1',
-              type: 'free_text',
-              prompt: '出团日期是哪一天？',
-              status: 'pending',
-              version: 1,
-            },
+  it('keeps queued input above the composer until that batch starts', () => {
+    const events = [
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { text: '第一批' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 2,
+        kind: 'batch_status',
+        payload: { status: 'agent_running', batchId: 'batch-1' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: '第二批排队' },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+      {
+        sequence: 4,
+        kind: 'batch_status',
+        payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+      {
+        id: 'event-q',
+        sequence: 5,
+        kind: 'agent_message',
+        payload: {
+          text: '出团日期是哪一天？',
+          interaction: {
+            interactionId: 'int-1',
+            type: 'free_text',
+            prompt: '出团日期是哪一天？',
+            status: 'pending',
+            version: 1,
           },
-          createdAt: '2026-08-15T00:00:02.000Z',
         },
-        {
-          sequence: 6,
-          kind: 'batch_status',
-          payload: { status: 'awaiting_user_input', batchId: 'batch-1' },
-          createdAt: '2026-08-15T00:00:02.000Z',
-        },
-      ],
-      null,
-      null,
-    )
+        createdAt: '2026-08-15T00:00:02.000Z',
+      },
+      {
+        sequence: 6,
+        kind: 'batch_status',
+        payload: { status: 'awaiting_user_input', batchId: 'batch-1' },
+        createdAt: '2026-08-15T00:00:02.000Z',
+      },
+    ]
+    const queued = projectQueuedConversationMessages(events)
+    const messages = toCopilotChatMessages(queued.visibleEvents, null, null)
 
     const labels = messages
       .filter((message) => message.activityType === 'ai-create-batch-status')
       .map((message) => (message.content as { label?: string }).label)
-    expect(labels).toContain('已排队')
+    expect(queued.messages).toEqual([
+      { batchId: 'batch-2', text: '第二批排队', userEventSequence: 3 },
+    ])
+    expect(messages.some((message) => message.content === '第二批排队')).toBe(false)
+    expect(labels).not.toContain('已排队')
     expect(labels).toContain('等待回答')
     expect(labels).not.toContain('AI 处理中')
+
+    const started = projectQueuedConversationMessages([
+      ...events,
+      {
+        sequence: 7,
+        kind: 'batch_status',
+        payload: { status: 'preparing_context', batchId: 'batch-2' },
+        createdAt: '2026-08-15T00:00:03.000Z',
+      },
+    ])
+    expect(started.messages).toEqual([])
+    expect(
+      toCopilotChatMessages(started.visibleEvents, null, null).some(
+        (message) => message.content === '第二批排队',
+      ),
+    ).toBe(true)
+    expect(
+      projectConversationFrame({
+        events: started.visibleEvents,
+        pendingText: null,
+        liveAssistant: null,
+        sessionReasoning: null,
+      })
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .map((message) => message.content),
+    ).toEqual(['第一批', '出团日期是哪一天？', '第二批排队'])
+
+    const retracted = projectQueuedConversationMessages([
+      ...events,
+      {
+        sequence: 7,
+        kind: 'batch_status',
+        payload: {
+          status: 'cancelled',
+          batchId: 'batch-2',
+          reason: 'queue_retracted',
+          retractedUserMessageSequence: 3,
+        },
+        createdAt: '2026-08-15T00:00:03.000Z',
+      },
+    ])
+    expect(retracted.messages).toEqual([])
+    expect(
+      toCopilotChatMessages(retracted.visibleEvents, null, null).some(
+        (message) => message.content === '第二批排队',
+      ),
+    ).toBe(false)
+  })
+
+  it('releases a queued turn into the transcript once that batch already has an agent_message', () => {
+    const events = [
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { text: '第一批' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 2,
+        kind: 'batch_status',
+        payload: { status: 'completed', batchId: 'batch-1' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: '第二批排队' },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+      {
+        sequence: 4,
+        kind: 'batch_status',
+        payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+      {
+        sequence: 5,
+        kind: 'agent_message',
+        payload: { text: '第二批回复', batchId: 'batch-2', attemptId: 'attempt-2' },
+        createdAt: '2026-08-15T00:00:02.000Z',
+      },
+    ]
+    const queued = projectQueuedConversationMessages(events)
+    const messages = projectConversationFrame({
+      events: queued.visibleEvents,
+      pendingText: null,
+      liveAssistant: null,
+      sessionReasoning: null,
+    })
+
+    expect(queued.messages).toEqual([])
+    expect(messages.some((message) => message.content === '第二批排队')).toBe(true)
+    expect(messages.some((message) => message.content === '第二批回复')).toBe(true)
+    expect(
+      messages
+        .filter((message) => message.activityType === 'ai-create-batch-status')
+        .map((message) => (message.content as { label?: string }).label),
+    ).not.toContain('已排队')
+  })
+
+  it('按批次执行顺序交错展示排队提问与两次回答', () => {
+    const events = [
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { text: '提问一' },
+        createdAt: '2026-08-28T01:09:43.074Z',
+      },
+      {
+        sequence: 2,
+        kind: 'batch_status',
+        payload: { status: 'agent_running', batchId: 'batch-1', queued: false },
+        createdAt: '2026-08-28T01:09:43.209Z',
+      },
+      {
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: '提问二' },
+        createdAt: '2026-08-28T01:09:45.402Z',
+      },
+      {
+        sequence: 4,
+        kind: 'batch_status',
+        payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+        createdAt: '2026-08-28T01:09:45.410Z',
+      },
+      {
+        sequence: 5,
+        kind: 'agent_message',
+        payload: { text: '回答一', batchId: 'batch-1' },
+        createdAt: '2026-08-28T01:09:45.946Z',
+      },
+      {
+        sequence: 6,
+        kind: 'batch_status',
+        payload: { status: 'completed', batchId: 'batch-1' },
+        createdAt: '2026-08-28T01:09:45.949Z',
+      },
+      {
+        sequence: 7,
+        kind: 'batch_status',
+        payload: { status: 'preparing_context', batchId: 'batch-2' },
+        createdAt: '2026-08-28T01:09:45.995Z',
+      },
+      {
+        sequence: 8,
+        kind: 'agent_message',
+        payload: { text: '回答二', batchId: 'batch-2' },
+        createdAt: '2026-08-28T01:09:49.498Z',
+      },
+    ]
+
+    const queued = projectQueuedConversationMessages(events)
+    const turns = projectConversationFrame({
+      events: queued.visibleEvents,
+      pendingText: null,
+      liveAssistant: null,
+      sessionReasoning: null,
+    })
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message) => message.content)
+
+    expect(turns).toEqual(['提问一', '回答一', '提问二', '回答二'])
+  })
+
+  it('releases a queued turn into the transcript when live output arrives for that batch', () => {
+    const events = [
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { text: '第一批' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 2,
+        kind: 'batch_status',
+        payload: { status: 'completed', batchId: 'batch-1' },
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+      {
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: '第二批排队' },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+      {
+        sequence: 4,
+        kind: 'batch_status',
+        payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+        createdAt: '2026-08-15T00:00:01.000Z',
+      },
+    ]
+    const liveAssistant = {
+      attemptId: 'attempt-2',
+      batchId: 'batch-2',
+      generation: 1,
+      revision: 1,
+      reasoningText: '',
+      text: '第二批正在回复',
+    }
+    const queued = projectQueuedConversationMessages(events, liveAssistant)
+    const messages = projectConversationFrame({
+      events: queued.visibleEvents,
+      pendingText: null,
+      liveAssistant,
+      sessionReasoning: null,
+    })
+
+    expect(queued.messages).toEqual([])
+    expect(messages.some((message) => message.content === '第二批排队')).toBe(true)
+    expect(messages.some((message) => message.content === '第二批正在回复')).toBe(true)
   })
 
   it('does not keep 处理中 or 停止 after the same batch enters awaiting_review', () => {
@@ -336,6 +550,78 @@ describe('AI create chat status projection', () => {
         expect.objectContaining({
           activityType: 'ai-create-review-package',
           content: { reviewPackageId: 'pkg-1', fieldKeys: ['name', 'routeName'] },
+        }),
+      ]),
+    )
+  })
+
+  it('projects a visible task activity and links its review back to the created task', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我创建发团：9 月 15 日出发，行程 8 天' },
+          createdAt: '2026-08-27T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'ready_for_agent',
+            batchId: 'batch-1',
+            createdTaskId: 'task-1',
+            createdTaskGoal: '创建 9 月 15 日出发的 8 天行程',
+            continuation: true,
+          },
+          createdAt: '2026-08-27T00:00:01.000Z',
+        },
+        {
+          sequence: 3,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在中间表单确认。',
+            batchId: 'batch-1',
+            taskId: 'task-1',
+            reviewPackageId: 'pkg-1',
+            fieldKeys: ['routeName', 'startDate', 'endDate'],
+          },
+          createdAt: '2026-08-27T00:00:02.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'batch_status',
+          payload: {
+            status: 'awaiting_review',
+            batchId: 'batch-1',
+            taskId: 'task-1',
+            reviewPackageId: 'pkg-1',
+          },
+          createdAt: '2026-08-27T00:00:03.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'agent-task',
+          content: expect.objectContaining({
+            taskId: 'task-1',
+            title: '创建 9 月 15 日出发的 8 天行程',
+            status: 'awaiting_review',
+          }),
+        }),
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'ai-create-review-package',
+          content: expect.objectContaining({
+            reviewPackageId: 'pkg-1',
+            taskId: 'task-1',
+          }),
         }),
       ]),
     )
@@ -1038,4 +1324,3 @@ describe('isCopilotChatRunning in-flight statuses #415', () => {
     ).toBe(false)
   })
 })
-
