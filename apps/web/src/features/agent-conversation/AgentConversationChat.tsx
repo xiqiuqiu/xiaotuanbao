@@ -54,7 +54,15 @@ import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationDraft } from './use-agent-conversation-draft'
-import { currentPageAttachmentLabel } from './page-locator-attachment'
+import {
+  conversationSendContextFromAttachment,
+  currentPageAttachmentLabel,
+} from './page-locator-attachment'
+import {
+  agentTaskWorkspaceNavigation,
+  isCurrentAgentTaskWorkspace,
+  resolveRegisteredTaskDescriptor,
+} from './task-descriptor-navigation'
 import { useCurrentPageAttachment } from './use-current-page-locator'
 import { formatReviewFieldList } from '@/features/ai-assist/review-field-labels'
 import {
@@ -186,7 +194,7 @@ function taskActivityPresentation(status: string): {
 }
 
 function createAgentTaskActivityRenderer(
-  openTask: (taskId: string) => void,
+  openTask: (taskId: string, taskType?: string) => void,
 ): ReactActivityMessageRenderer<AgentTaskActivityContent> {
   return {
     activityType: AGENT_TASK_ACTIVITY_TYPE,
@@ -210,8 +218,11 @@ function createAgentTaskActivityRenderer(
     },
     render: ({ content }) => {
       const presentation = taskActivityPresentation(content.status)
+      const descriptor = resolveRegisteredTaskDescriptor(content.taskType)
+      const regionLabel = descriptor?.activity.regionLabel ?? 'Agent 任务'
+      const actionLabel = descriptor?.activity.actionLabel ?? '查看任务'
       return (
-        <section aria-label="Agent 任务">
+        <section aria-label={regionLabel}>
           <Card
             className={chatStyles.activityCard}
             size="small"
@@ -224,8 +235,8 @@ function createAgentTaskActivityRenderer(
           >
             <Typography.Text type="secondary">{presentation.description}</Typography.Text>
             <div className={chatStyles.activityActions}>
-              <Button size="small" onClick={() => openTask(content.taskId)}>
-                查看任务
+              <Button size="small" onClick={() => openTask(content.taskId, content.taskType)}>
+                {actionLabel}
               </Button>
             </div>
           </Card>
@@ -236,7 +247,7 @@ function createAgentTaskActivityRenderer(
 }
 
 function createReviewPackageActivityRenderer(
-  openTask: (taskId: string) => void,
+  openTask: (taskId: string, taskType?: string) => void,
 ): ReactActivityMessageRenderer<ReviewPackageActivityContent> {
   return {
     activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
@@ -277,7 +288,11 @@ function createReviewPackageActivityRenderer(
           </Typography.Paragraph>
           <div className={chatStyles.activityActions}>
             {content.taskId ? (
-              <Button type="primary" size="small" onClick={() => openTask(content.taskId!)}>
+              <Button
+                type="primary"
+                size="small"
+                onClick={() => openTask(content.taskId!, content.taskType)}
+              >
                 查看审核内容
               </Button>
             ) : (
@@ -658,11 +673,7 @@ function useAgentConversationChatController() {
           {
             text: outboundText,
             ...(files.length > 0 ? { files } : {}),
-            ...(attachment?.kind === 'page_locator'
-              ? { pageLocator: attachment.locator }
-              : attachment?.kind === 'departure_creation_task'
-                ? { primaryTaskId: attachment.taskId }
-                : {}),
+            ...conversationSendContextFromAttachment(attachment),
           },
           sendIdempotencyKey,
         )
@@ -855,18 +866,24 @@ function useAgentConversationChatController() {
     () => ({ reasoningMessage: { header: AgentReasoningHeader } }),
     [],
   )
-  const openDepartureTask = useCallback(
-    (taskId: string) => {
+  const openAgentTask = useCallback(
+    (taskId: string, taskType?: string) => {
+      if (!resolveRegisteredTaskDescriptor(taskType)) {
+        return
+      }
       closeGlobalForBusinessNavigation()
-      const alreadyOnTask =
-        location.pathname === '/departure/new' &&
-        new URLSearchParams(location.searchStr.replace(/^\?/, '')).get('taskId') === taskId
+      const alreadyOnTask = isCurrentAgentTaskWorkspace(
+        location.pathname,
+        location.searchStr,
+        taskId,
+        taskType,
+      )
       void queryClient.invalidateQueries({ queryKey: ['ai-create-task', taskId] })
       void queryClient.invalidateQueries({ queryKey: ['ai-create-assist-state', taskId] })
       if (alreadyOnTask) {
         return
       }
-      void navigate({ to: '/departure/new', search: { taskId } })
+      void navigate(agentTaskWorkspaceNavigation(taskId, taskType))
     },
     [closeGlobalForBusinessNavigation, location.pathname, location.searchStr, navigate, queryClient],
   )
@@ -878,10 +895,10 @@ function useAgentConversationChatController() {
         onReply: replyToInteraction,
         onCancel: cancelInteraction,
       }),
-      createAgentTaskActivityRenderer(openDepartureTask),
-      createReviewPackageActivityRenderer(openDepartureTask),
+      createAgentTaskActivityRenderer(openAgentTask),
+      createReviewPackageActivityRenderer(openAgentTask),
     ],
-    [cancelInteraction, openDepartureTask, pendingInteractionId, replyToInteraction],
+    [cancelInteraction, openAgentTask, pendingInteractionId, replyToInteraction],
   )
 
   return {

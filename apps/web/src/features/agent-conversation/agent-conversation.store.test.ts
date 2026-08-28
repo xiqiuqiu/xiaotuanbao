@@ -228,12 +228,14 @@ describe('agent conversation page locator #371', () => {
     })
 
     useAgentConversationStore.getState().syncDefaultPageAttachment({
-      kind: 'departure_creation_task',
+      kind: 'agent_task',
+      taskType: 'departure_creation',
       taskId: 'task-1',
     })
 
     expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
-      kind: 'departure_creation_task',
+      kind: 'agent_task',
+      taskType: 'departure_creation',
       taskId: 'task-1',
     })
   })

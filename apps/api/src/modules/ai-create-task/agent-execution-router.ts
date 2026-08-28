@@ -1,6 +1,7 @@
 import {
-  AI_CREATE_AGENT_DEFINITION_REF,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  registeredTaskDescriptors,
+  type TaskDescriptorRegistry,
   type VersionedDefinitionRef,
 } from '@xiaotuanbao/ai-contracts'
 import { AgentTaskType, InputBatchTaskRole } from '@prisma/client'
@@ -65,8 +66,15 @@ export type RegisteredIntentRoute =
       requiredPermissionKey: string
     }
 
-const TASK_DEFINITIONS: Readonly<Record<AgentTaskType, VersionedDefinitionRef>> = {
-  [AgentTaskType.departure_creation]: AI_CREATE_AGENT_DEFINITION_REF,
+export function intentRoutesFromTaskDescriptors(
+  registry: TaskDescriptorRegistry = registeredTaskDescriptors,
+): RegisteredIntentRoute[] {
+  return registry.intentRoutes().map((route) => ({
+    intentKey: route.intentKey,
+    kind: route.kind,
+    taskType: asAgentTaskType(route.taskType),
+    requiredPermissionKey: route.requiredPermissionKey,
+  }))
 }
 
 /**
@@ -74,7 +82,16 @@ const TASK_DEFINITIONS: Readonly<Record<AgentTaskType, VersionedDefinitionRef>> 
  * 页面附件刻意属于输入快照，但不参与下面的决策顺序。
  */
 export class AgentExecutionRouter {
-  constructor(private readonly intentRoutes: readonly RegisteredIntentRoute[] = []) {}
+  private readonly intentRoutes: readonly RegisteredIntentRoute[]
+  private readonly descriptors: TaskDescriptorRegistry
+
+  constructor(
+    extraIntentRoutes: readonly RegisteredIntentRoute[] = [],
+    descriptors: TaskDescriptorRegistry = registeredTaskDescriptors,
+  ) {
+    this.descriptors = descriptors
+    this.intentRoutes = [...intentRoutesFromTaskDescriptors(descriptors), ...extraIntentRoutes]
+  }
 
   route(input: Readonly<AgentExecutionRoutingInput>): AgentExecutionRoute {
     if (input.associations.interaction) {
@@ -91,7 +108,7 @@ export class AgentExecutionRouter {
       return {
         kind: 'execution_definition',
         source: 'task',
-        agentDefinition: TASK_DEFINITIONS[taskRef.taskType],
+        agentDefinition: this.descriptors.getByTaskType(taskRef.taskType).agentDefinition,
         taskId: taskRef.taskId,
       }
     }
@@ -128,6 +145,13 @@ export class AgentExecutionRouter {
       agentDefinition: CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
     }
   }
+}
+
+function asAgentTaskType(taskType: string): AgentTaskType {
+  if ((Object.values(AgentTaskType) as string[]).includes(taskType)) {
+    return taskType as AgentTaskType
+  }
+  throw new Error(`未登记的 Agent 任务类型: ${taskType}`)
 }
 
 function definitionRoute(

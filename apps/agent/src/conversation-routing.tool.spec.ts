@@ -26,6 +26,25 @@ describe('createConversationRoutingTool', () => {
     })
   })
 
+  it('rejects an unregistered task-creation decision instead of mapping it', async () => {
+    const tool = createConversationRoutingTool()
+
+    await expect(
+      tool.execute?.(
+        {
+          decision: 'propose_partner_accounts',
+          goal: '查询往来账款',
+        } as never,
+        {} as never,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        error: true,
+        message: expect.stringContaining('propose_departure_creation'),
+      }),
+    )
+  })
+
   it('maps an ambiguous decision to a structured clarification', async () => {
     const tool = createConversationRoutingTool()
 
