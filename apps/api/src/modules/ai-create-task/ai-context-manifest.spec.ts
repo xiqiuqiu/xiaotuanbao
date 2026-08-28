@@ -4,6 +4,7 @@ import {
   buildContextManifest,
   buildFrozenProjection,
   digestExcerpt,
+  excludeRetractedQueueMessages,
   eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
@@ -21,6 +22,23 @@ import {
 } from './ai-conversation.constants'
 
 describe('projectConversationEventsForAgent', () => {
+  it('从后续模型上下文排除已撤回的排队消息', () => {
+    const events = [
+      { sequence: 1, kind: 'user_message', payload: { text: '保留内容' } },
+      { sequence: 3, kind: 'user_message', payload: { text: '撤回内容' } },
+      {
+        sequence: 5,
+        kind: 'batch_status',
+        payload: { reason: 'queue_retracted', retractedUserMessageSequence: 3 },
+      },
+      { sequence: 6, kind: 'user_message', payload: { text: '后来内容' } },
+    ]
+
+    expect(excludeRetractedQueueMessages(events).map((event) => event.sequence)).toEqual([
+      1, 5, 6,
+    ])
+  })
+
   it('projects pinned User plaintext and drops unknown event kinds', () => {
     expect(
       projectConversationEventsForAgent([

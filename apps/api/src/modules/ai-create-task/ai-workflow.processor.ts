@@ -57,6 +57,7 @@ import { createPrismaAiActionTargetAuthority } from '../ai-action/ai-action.pris
 import { AuthService } from '../auth/auth.service'
 import {
   buildContextManifest,
+  excludeRetractedQueueMessages,
   eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
@@ -315,50 +316,20 @@ export class AiWorkflowProcessor {
                 )
                 AND running.id <> j.input_batch_id
             )
-            AND (
-              NOT EXISTS (
-                SELECT 1
-                FROM ai_conversation_interactions pending
-                WHERE pending.conversation_id = j.conversation_id
-                  AND pending.status = 'pending'::ai_conversation_interaction_status
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM ai_conversation_interactions pending
-                WHERE pending.conversation_id = j.conversation_id
-                  AND pending.status = 'pending'::ai_conversation_interaction_status
-                  AND b.reply_to_event_id = pending.event_id
-              )
-            )
-            AND (
-              NOT EXISTS (
-                SELECT 1
-                FROM ai_input_batches reply
-                WHERE reply.conversation_id = j.conversation_id
-                  AND reply.status IN (
-                    'waiting_for_materials'::ai_input_batch_status,
-                    'ready_for_agent'::ai_input_batch_status,
-                    'preparing_context'::ai_input_batch_status
-                  )
-                  AND reply.reply_to_event_id IS NOT NULL
-              )
-              OR b.reply_to_event_id IS NOT NULL
-            )
-            AND (
-              b.reply_to_event_id IS NOT NULL
-              OR NOT EXISTS (
-                SELECT 1
-                FROM ai_input_batches blocking
-                JOIN ai_conversation_events blocking_origin
-                  ON blocking_origin.id = blocking.user_message_event_id
-                WHERE blocking.conversation_id = j.conversation_id
-                  AND blocking.id <> j.input_batch_id
-                  AND blocking_origin.sequence < origin.sequence
-                  AND blocking.status IN (
-                    'waiting_for_materials'::ai_input_batch_status,
-                    'awaiting_review'::ai_input_batch_status
-                  )
-              )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM ai_input_batches blocking
+              JOIN ai_conversation_events blocking_origin
+                ON blocking_origin.id = blocking.user_message_event_id
+              WHERE blocking.conversation_id = j.conversation_id
+                AND blocking.id <> j.input_batch_id
+                AND blocking_origin.sequence < origin.sequence
+                AND blocking.status IN (
+                  'waiting_for_materials'::ai_input_batch_status,
+                  'ready_for_agent'::ai_input_batch_status,
+                  'preparing_context'::ai_input_batch_status,
+                  'agent_running'::ai_input_batch_status
+                )
             )
           ORDER BY origin.sequence ASC, b.conversation_version ASC
           FOR UPDATE OF j SKIP LOCKED
@@ -386,10 +357,7 @@ export class AiWorkflowProcessor {
         if (running) {
           return null
         }
-        if (
-          !job.inputBatch.replyToEventId &&
-          (await this.hasEarlierNonReplyClaimBlocker(tx, job.inputBatch))
-        ) {
+        if (await this.hasEarlierClaimBlocker(tx, job.inputBatch)) {
           return null
         }
 
@@ -911,7 +879,7 @@ export class AiWorkflowProcessor {
         conversationVersion: job.inputBatch.conversationVersion,
         originUserMessageSequence: userEvent.sequence,
         currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
-        events: historyEvents,
+        events: excludeRetractedQueueMessages(historyEvents),
         materials: parseIndex.materials,
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
@@ -1210,7 +1178,7 @@ export class AiWorkflowProcessor {
         conversationVersion: job.inputBatch.conversationVersion,
         originUserMessageSequence: userEvent.sequence,
         currentUserMessageSequence: userEvent.sequence,
-        events: historyEvents,
+        events: excludeRetractedQueueMessages(historyEvents),
         materials: parseIndex.materials,
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
@@ -1516,6 +1484,7 @@ export class AiWorkflowProcessor {
           text: message,
           batchId: job.inputBatchId,
           attemptId,
+          ...(job.taskId ? { taskId: job.taskId } : {}),
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
           ...(reviewPackageId
             ? {
@@ -1555,6 +1524,7 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           status: batchStatus,
           attemptId,
+          ...(job.taskId ? { taskId: job.taskId } : {}),
           ...(reviewPackageId ? { reviewPackageId } : {}),
         },
       })
@@ -1759,6 +1729,7 @@ export class AiWorkflowProcessor {
           status: AiInputBatchStatus.ready_for_agent,
           attemptId,
           createdTaskId: task.id,
+          createdTaskGoal: goal,
           continuation: true,
         },
       })
@@ -2112,7 +2083,7 @@ export class AiWorkflowProcessor {
     this.logger.log(`workflow ${event} ${parts}`)
   }
 
-  private async hasEarlierNonReplyClaimBlocker(
+  private async hasEarlierClaimBlocker(
     tx: Prisma.TransactionClient,
     batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'userMessageEventId'>,
   ): Promise<boolean> {
@@ -2129,7 +2100,12 @@ export class AiWorkflowProcessor {
         id: { not: batch.id },
         userMessageEvent: { sequence: { lt: origin.sequence } },
         status: {
-          in: [AiInputBatchStatus.waiting_for_materials, AiInputBatchStatus.awaiting_review],
+          in: [
+            AiInputBatchStatus.waiting_for_materials,
+            AiInputBatchStatus.ready_for_agent,
+            AiInputBatchStatus.preparing_context,
+            AiInputBatchStatus.agent_running,
+          ],
         },
       },
       select: { id: true },

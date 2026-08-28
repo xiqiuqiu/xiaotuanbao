@@ -35,6 +35,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": null,
+    "route": "POST /api/agent/conversations/:conversationId/batches/:batchId/retract",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": null,
     "route": "POST /api/agent/conversations/:conversationId/batches/:batchId/retry",
   },
   {
@@ -999,6 +1004,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/archive [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/abandon [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/remove-materials [—]",
+    "POST /api/agent/conversations/:conversationId/batches/:batchId/retract [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry-failed-materials [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/stop [—]",
@@ -1190,6 +1196,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/archive [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/abandon [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/remove-materials [—]",
+    "POST /api/agent/conversations/:conversationId/batches/:batchId/retract [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry-failed-materials [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/stop [—]",
@@ -1349,6 +1356,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/archive [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/abandon [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/remove-materials [—]",
+    "POST /api/agent/conversations/:conversationId/batches/:batchId/retract [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/retry-failed-materials [—]",
     "POST /api/agent/conversations/:conversationId/batches/:batchId/stop [—]",

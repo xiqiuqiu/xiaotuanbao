@@ -356,24 +356,24 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(agent.lastUserText()).not.toBe('请按这个团名建团')
   })
 
-  it('runs the confirm continuation before a message queued during awaiting_review', async () => {
+  it('awaiting_review 不标记后续普通输入为排队，并先完成同批次确认续执行', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
     const callsAfterSubmit = agent.callCount()
 
-    const queuedText = `${testPrefix}-审核期间补一句`
-    const queued = await sendMessage(
+    const ordinaryText = `${testPrefix}-审核期间补一句`
+    const ordinary = await sendMessage(
       taskId,
       conversationId,
-      queuedText,
+      ordinaryText,
       `e2e-review-queued-${taskId}`,
     ).expect(201)
-    expect(queued.body.data.batch).toMatchObject({
+    expect(ordinary.body.data.batch).toMatchObject({
       status: 'ready_for_agent',
-      queued: true,
     })
+    expect(ordinary.body.data.batch.queued).toBeUndefined()
 
     const pending = (
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
@@ -391,12 +391,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await processor.processDueJobs(1)
     expect(agent.callCount()).toBe(callsAfterSubmit + 1)
     expect(agent.lastUserText()).toContain('已在中间表单确认')
-    expect(agent.lastUserText()).not.toContain(queuedText)
+    expect(agent.lastUserText()).not.toContain(ordinaryText)
 
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     await processor.processDueJobs(5)
     expect(agent.callCount()).toBe(callsAfterSubmit + 2)
-    expect(agent.lastUserText()).toContain(queuedText)
+    expect(agent.lastUserText()).toContain(ordinaryText)
   })
 
   it('rejects without mutating the draft or enqueueing a continuation', async () => {

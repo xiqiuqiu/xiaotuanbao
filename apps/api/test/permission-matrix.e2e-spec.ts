@@ -47,6 +47,7 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   'POST /api/agent/conversations/:conversationId/batches/:batchId/remove-materials',
   'POST /api/agent/conversations/:conversationId/batches/:batchId/abandon',
   'POST /api/agent/conversations/:conversationId/batches/:batchId/stop',
+  'POST /api/agent/conversations/:conversationId/batches/:batchId/retract',
   'POST /api/agent/conversations/:conversationId/batches/:batchId/retry',
   // AI 业务工具：双重身份（编排服务 + 短期 User 委托）替代浏览器 CSRF/@RequireMenu。
   'POST /api/ai-tools/v1/get-task-context',

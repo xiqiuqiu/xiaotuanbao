@@ -16,6 +16,7 @@ vi.mock('@/lib/request', () => ({
 
 import {
   listAgentConversations,
+  retractQueuedAgentConversationBatch,
   saveAgentConversationDraft,
   sendAgentConversationText,
   stopAgentConversationBatch,
@@ -97,6 +98,16 @@ describe('agent conversation service', () => {
       '/agent/conversations/c-1/batches/batch-1/stop',
       {},
       { silentError: true, headers: { 'Idempotency-Key': 'key-stop' } },
+    )
+  })
+
+  it('retracts a queued batch for editing with an idempotency key', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 3 })
+    await retractQueuedAgentConversationBatch('c-1', 'batch-2', 'key-retract')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-2/retract',
+      {},
+      { silentError: true, headers: { 'Idempotency-Key': 'key-retract' } },
     )
   })
 })

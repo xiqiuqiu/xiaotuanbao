@@ -33,6 +33,77 @@
   box-shadow: 0 -12px 16px var(--ant-color-bg-container);
 }
 
+.composerStack {
+  width: 100%;
+  pointer-events: none;
+}
+
+.queuePanel {
+  width: calc(100% - 32px);
+  max-width: 46rem;
+  max-height: 160px;
+  margin: 0 auto 8px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  pointer-events: auto;
+}
+
+.queueHeading,
+.queueTitle {
+  display: flex;
+  align-items: center;
+}
+
+.queueHeading {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.queueTitle {
+  gap: 8px;
+  min-width: 0;
+}
+
+.queueTitle :global(.anticon) {
+  color: var(--ant-color-text-secondary);
+}
+
+.queueHint {
+  flex: none;
+  font-size: 12px;
+}
+
+.queueList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queueItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5715;
+}
+
+.queueItemText {
+  min-width: 0;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat :global([data-testid='copilot-attachment-queue']) {
   width: auto;
   margin-inline: 16px;
@@ -71,6 +142,46 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.activityCard,
+.reviewActivityCard {
+  margin-block: 4px;
+}
+
+.reviewActivityCard {
+  border-color: var(--ant-color-warning-border);
+  background: var(--ant-color-warning-bg);
+}
+
+.activityHeading,
+.activityTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activityHeading {
+  justify-content: space-between;
+}
+
+.activityHeading :global(.ant-tag) {
+  flex: none;
+  margin-inline-end: 0;
+}
+
+.activityTitle {
+  min-width: 0;
+}
+
+.activityDescription {
+  margin-bottom: 12px !important;
+}
+
+.activityActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .failedMaterial {
