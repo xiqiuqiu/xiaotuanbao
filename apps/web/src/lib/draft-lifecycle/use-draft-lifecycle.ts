@@ -47,7 +47,7 @@ export function useDraftLifecycle(options: {
         setSaveStatus(isDirtyRef.current() ? 'idle' : 'saved')
         setSaveError(null)
       } catch (error) {
-        const err = error instanceof Error ? error : new Error('草稿保存失败')
+        const err = error instanceof Error ? error : new Error('发团创建草稿保存失败')
         setSaveStatus('error')
         setSaveError(err)
         throw err
@@ -68,7 +68,7 @@ export function useDraftLifecycle(options: {
     }
     timerRef.current = setTimeout(() => {
       void flush().catch((error) => {
-        onAutosaveErrorRef.current?.(error instanceof Error ? error : new Error('草稿保存失败'))
+        onAutosaveErrorRef.current?.(error instanceof Error ? error : new Error('发团创建草稿保存失败'))
       })
     }, debounceMs)
   }, [debounceMs, flush])
@@ -88,7 +88,12 @@ export function useDraftLifecycle(options: {
       }
       try {
         await flush()
-        return false
+        if (!isDirtyRef.current()) {
+          return false
+        }
+        return !window.confirm(
+          '发团创建草稿尚未保存，离开将丢失未保存输入。仍要离开？',
+        )
       } catch {
         return true
       }

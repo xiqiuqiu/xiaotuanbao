@@ -150,7 +150,8 @@ describe('useDraftLifecycle', () => {
     expect(blocked).toBe(false)
   })
 
-  it('allows leaving when persist skips an incomplete draft', async () => {
+  it('asks before leaving when persist skips an incomplete draft', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const persist = vi.fn().mockResolvedValue(undefined)
     renderHook(() =>
       useDraftLifecycle({
@@ -164,6 +165,25 @@ describe('useDraftLifecycle', () => {
       next: { pathname: '/departure' },
     })
     expect(persist).toHaveBeenCalledTimes(1)
+    expect(confirmSpy).toHaveBeenCalled()
     expect(blocked).toBe(false)
+    confirmSpy.mockRestore()
+  })
+
+  it('stays when the user declines to leave an incomplete draft', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderHook(() =>
+      useDraftLifecycle({
+        persist: vi.fn().mockResolvedValue(undefined),
+        isDirty: () => true,
+      }),
+    )
+
+    const blocked = await navigationGuard.shouldBlockFn?.({
+      current: { pathname: '/departure/new' },
+      next: { pathname: '/departure' },
+    })
+    expect(blocked).toBe(true)
+    confirmSpy.mockRestore()
   })
 })

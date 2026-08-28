@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Col, Empty, Input, Modal, Row, Spin, Typography, message, theme } from 'antd'
 import { ClockCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
-import { CriticalQueryErrorAlert } from '@/lib/draft-lifecycle'
+import { CriticalQueryErrorAlert, criticalQueryPresentation } from '@/lib/draft-lifecycle'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 import styles from './CreateDepartureStepRoute.module.css'
 
@@ -30,10 +30,22 @@ export function CreateDepartureStepRoute({
   const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
 
-  const { data: templates, isLoading, isError, isFetching, refetch } = useQuery({
+  const {
+    data: templates,
+    error: templatesError,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['route-templates', keyword],
     queryFn: () => listRouteTemplates(keyword || undefined),
     enabled,
+  })
+  const templatesView = criticalQueryPresentation({
+    isError,
+    isLoading,
+    hasData: templates != null,
   })
 
   const deleteMutation = useMutation({
@@ -85,9 +97,10 @@ export function CreateDepartureStepRoute({
         onSearch={setKeyword}
       />
 
-      {isError ? (
+      {templatesView === 'error' ? (
         <CriticalQueryErrorAlert
           title="常用路线加载失败"
+          description={templatesError instanceof Error ? templatesError.message : undefined}
           onRetry={() => {
             void refetch()
           }}
@@ -99,11 +112,11 @@ export function CreateDepartureStepRoute({
             共 {templates?.length ?? 0} 条路线
           </Typography.Text>
 
-          {isLoading ? (
+          {templatesView === 'loading' ? (
             <div className={styles.loading}>
               <Spin />
             </div>
-          ) : (templates?.length ?? 0) === 0 ? (
+          ) : templatesView === 'empty' || (templates?.length ?? 0) === 0 ? (
             <Empty
               description="暂无常用路线。可先填写路线名称"
               image={Empty.PRESENTED_IMAGE_SIMPLE}

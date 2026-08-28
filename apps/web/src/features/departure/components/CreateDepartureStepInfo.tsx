@@ -63,6 +63,7 @@ interface DepartureInfoFormProps {
   employeeOptions: Array<{ value: string; label: string }>
   helperTextStyle: CSSProperties
   hasEmployeeError: boolean
+  employeeErrorMessage?: string
   onRetryEmployees: () => void
   isEmployeeOptionsFetching?: boolean
   hasSupplierError: boolean
@@ -190,6 +191,7 @@ function DepartureInfoForm({
   employeeOptions,
   helperTextStyle,
   hasEmployeeError,
+  employeeErrorMessage,
   onRetryEmployees,
   isEmployeeOptionsFetching,
   hasSupplierError,
@@ -245,6 +247,7 @@ function DepartureInfoForm({
         {hasEmployeeError ? (
           <CriticalQueryErrorAlert
             title="负责人列表加载失败"
+            description={employeeErrorMessage}
             onRetry={onRetryEmployees}
             retrying={isEmployeeOptionsFetching}
           />
@@ -312,7 +315,8 @@ function DepartureInfoForm({
               <Select
                 showSearch={{ optionFilterProp: 'label' }}
                 options={employeeOptions}
-                placeholder="选择负责人"
+                placeholder={hasEmployeeError ? '负责人列表加载失败' : '选择负责人'}
+                disabled={hasEmployeeError}
               />
             </Form.Item>
           </Col>
@@ -517,6 +521,7 @@ export function CreateDepartureStepInfo({
 
   const {
     data: employeeOptionsResult,
+    error: employeeOptionsError,
     isError: isEmployeeOptionsError,
     isFetching: isEmployeeOptionsFetching,
     refetch: refetchEmployeeOptions,
@@ -622,6 +627,9 @@ export function CreateDepartureStepInfo({
             employeeOptions={employeeOptions}
             helperTextStyle={helperTextStyle}
             hasEmployeeError={isEmployeeOptionsError}
+            employeeErrorMessage={
+              employeeOptionsError instanceof Error ? employeeOptionsError.message : undefined
+            }
             onRetryEmployees={() => {
               void refetchEmployeeOptions()
             }}

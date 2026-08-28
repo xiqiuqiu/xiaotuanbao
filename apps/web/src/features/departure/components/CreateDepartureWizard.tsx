@@ -671,6 +671,7 @@ function useCreateDepartureWizardController() {
 
   const {
     data: assistAvailability,
+    error: assistAvailabilityError,
     isError: isAssistAvailabilityError,
     isFetching: isAssistAvailabilityFetching,
     refetch: refetchAssistAvailability,
@@ -892,6 +893,7 @@ function useCreateDepartureWizardController() {
     isCopyMode,
     copyFromId,
     assistAvailability,
+    assistAvailabilityError,
     isAssistAvailabilityError,
     isAssistAvailabilityFetching,
     refetchAssistAvailability,
@@ -932,6 +934,7 @@ function CreateDepartureWizardView({
   isCopyMode,
   copyFromId,
   assistAvailability,
+  assistAvailabilityError,
   isAssistAvailabilityError,
   isAssistAvailabilityFetching,
   refetchAssistAvailability,
@@ -983,21 +986,26 @@ function CreateDepartureWizardView({
             {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
           </Typography.Title>
         </div>
-        {isAssistAvailabilityError ? (
-          <CriticalQueryErrorAlert
-            title="AI 辅助状态加载失败"
-            onRetry={() => {
-              void refetchAssistAvailability()
-            }}
-            retrying={isAssistAvailabilityFetching}
-            style={{ marginBottom: 0, maxWidth: 360 }}
-          />
-        ) : assistAvailability?.enabled ? (
+        {assistAvailability?.enabled ? (
           <Button aria-label="AI 辅助" icon={<CommentOutlined />} onClick={openAssist}>
             {assistTaskStatusLabel ? `AI 辅助 · ${assistTaskStatusLabel}` : 'AI 辅助'}
           </Button>
         ) : null}
       </div>
+      {isAssistAvailabilityError ? (
+        <CriticalQueryErrorAlert
+          title="AI 辅助状态加载失败"
+          description={
+            assistAvailabilityError instanceof Error
+              ? assistAvailabilityError.message
+              : undefined
+          }
+          onRetry={() => {
+            void refetchAssistAvailability()
+          }}
+          retrying={isAssistAvailabilityFetching}
+        />
+      ) : null}
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>
         <div className={`${styles.wizardBody} ${styles.wizardBodyNoRail}`}>
@@ -1068,14 +1076,16 @@ function CreateDepartureWizardView({
             ) : null}
           </div>
           <div>
-            <Button
-              type={pendingReview ? 'default' : 'primary'}
-              loading={createMutation.isPending}
-              disabled={showCopyBootstrap || showRestoreFailure || initializingForm}
-              onClick={() => void handleCreate()}
-            >
-              创建发团
-            </Button>
+            {showRestoreFailure ? null : (
+              <Button
+                type={pendingReview ? 'default' : 'primary'}
+                loading={createMutation.isPending}
+                disabled={showCopyBootstrap || initializingForm}
+                onClick={() => void handleCreate()}
+              >
+                创建发团
+              </Button>
+            )}
           </div>
         </footer>
       </Card>
