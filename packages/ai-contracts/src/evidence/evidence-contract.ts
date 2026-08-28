@@ -97,6 +97,121 @@ export const materialParsePageSchemaV1 = z.discriminatedUnion('source', [
     .strict(),
 ])
 
+function positiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function geometryFromBox(
+  box: unknown,
+  unit: 'points' | 'pixels',
+): z.infer<typeof evidenceGeometrySchemaV1> | null {
+  if (!Array.isArray(box) || box.length === 0) {
+    return null
+  }
+  if (box.length === 4 && box.every((item) => typeof item === 'number')) {
+    const [x, y, width, height] = box as [number, number, number, number]
+    if (width <= 0 || height <= 0) {
+      return null
+    }
+    return { x, y, width, height, unit }
+  }
+  if (
+    box.length === 4 &&
+    box.every((point) => Array.isArray(point) && point.length >= 2)
+  ) {
+    const xs = (box as Array<[number, number]>).map((point) => point[0])
+    const ys = (box as Array<[number, number]>).map((point) => point[1])
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    const width = Math.max(...xs) - x
+    const height = Math.max(...ys) - y
+    if (width <= 0 || height <= 0) {
+      return null
+    }
+    return { x, y, width, height, unit }
+  }
+  return null
+}
+
+export function adaptStoredParsePage(page: unknown): MaterialParsePageV1 | null {
+  if (!page || typeof page !== 'object' || Array.isArray(page)) {
+    return null
+  }
+  const record = page as Record<string, unknown>
+  const pageNumber = Number(record.pageNumber)
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+    return null
+  }
+  const source = record.source === 'native_pdf' ? 'native_pdf' : record.source === 'ocr' ? 'ocr' : null
+  if (!source) {
+    return null
+  }
+  const text = typeof record.text === 'string' ? record.text : ''
+  const rawLines = Array.isArray(record.lines) ? record.lines : []
+  if (source === 'native_pdf') {
+    const lines = rawLines.flatMap((line, index) => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) {
+        return []
+      }
+      const item = line as Record<string, unknown>
+      const lineText = typeof item.text === 'string' ? item.text : ''
+      const lineNumber = Number(item.lineNumber)
+      const geometry =
+        item.geometry && typeof item.geometry === 'object'
+          ? evidenceGeometrySchemaV1.safeParse(item.geometry).data
+          : geometryFromBox(item.box, item.coordinateSystem === 'pixel' ? 'pixels' : 'points')
+      return [
+        {
+          lineNumber: Number.isInteger(lineNumber) && lineNumber > 0 ? lineNumber : index + 1,
+          text: lineText,
+          ...(geometry ? { geometry } : {}),
+        },
+      ]
+    })
+    return {
+      schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
+      pageNumber,
+      source,
+      text,
+      lines,
+    }
+  }
+  const lines = rawLines.flatMap((line, index) => {
+    if (!line || typeof line !== 'object' || Array.isArray(line)) {
+      return []
+    }
+    const item = line as Record<string, unknown>
+    const lineText = typeof item.text === 'string' ? item.text : ''
+    const lineNumber = Number(item.lineNumber)
+    const geometry =
+      item.geometry && typeof item.geometry === 'object'
+        ? evidenceGeometrySchemaV1.safeParse(item.geometry).data
+        : geometryFromBox(item.box, 'pixels')
+    const score =
+      item.ocrQuality && typeof item.ocrQuality === 'object'
+        ? positiveNumber((item.ocrQuality as { score?: unknown }).score)
+        : positiveNumber(item.score)
+    if (!geometry || score == null || score > 1) {
+      return []
+    }
+    return [
+      {
+        lineNumber: Number.isInteger(lineNumber) && lineNumber > 0 ? lineNumber : index + 1,
+        text: lineText,
+        geometry,
+        ocrQuality: { signal: 'rapidocr_line_score' as const, score },
+      },
+    ]
+  })
+  return {
+    schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
+    pageNumber,
+    source,
+    text,
+    lines,
+  }
+}
+
 export const evidenceCandidateProposalSchemaV1 = z
   .object({
     candidateId: z.string().min(1).max(100),

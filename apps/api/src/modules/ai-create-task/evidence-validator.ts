@@ -35,6 +35,7 @@ export interface EvidenceAuthority {
     inputBatchId: string
     eventSequences: number[]
     materialVersions: Array<{ materialId: string; parseResultVersion: number }>
+    sourceVersions?: Array<{ sourceId: string; parseVersion: number }>
     excerptDigests: Array<{
       fragmentId: string
       materialId: string
@@ -53,6 +54,7 @@ export interface EvidenceAuthority {
   }>
   materials: Array<{
     inputBatchId: string
+    conversationId?: string
     materialId: string
     parseResultVersion: number
     pages: MaterialParsePageV1[]
@@ -262,14 +264,19 @@ function resolveMaterialRegion(
       item.materialId === sourceId &&
       item.parseResultVersion === evidence.locator.parseResultVersion,
   )
+  const catalogued = authority.contextManifest.sourceVersions?.some(
+    (item) =>
+      item.sourceId === sourceId && item.parseVersion === evidence.locator.parseResultVersion,
+  )
   const material = authority.materials.find(
     (item) =>
-      item.inputBatchId === authority.contextManifest.inputBatchId &&
       item.materialId === sourceId &&
-      item.parseResultVersion === evidence.locator.parseResultVersion,
+      item.parseResultVersion === evidence.locator.parseResultVersion &&
+      (item.inputBatchId === authority.contextManifest.inputBatchId ||
+        item.conversationId === authority.contextManifest.conversationId),
   )
-  if (!pinned || !material) {
-    return validationError('MATERIAL_NOT_PINNED', '资料或解析版本不属于当前 InputBatch')
+  if ((!pinned && !catalogued) || !material) {
+    return validationError('MATERIAL_NOT_PINNED', '资料或解析版本不属于当前会话固定来源')
   }
   const page = material.pages.find((item) => item.pageNumber === evidence.locator.pageNumber)
   if (!page) {

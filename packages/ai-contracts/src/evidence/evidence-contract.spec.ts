@@ -1,6 +1,7 @@
 import {
   AI_EVIDENCE_NORMALIZATION_VERSION,
   AI_EVIDENCE_SCHEMA_VERSION,
+  adaptStoredParsePage,
   evidenceProposalSchemaV1,
   materialParsePageSchemaV1,
   normalizedEvidenceProposalSchemaV1,
@@ -83,6 +84,40 @@ describe('evidence contract v1', () => {
       ocrQuality: { signal: 'rapidocr_line_score', score: 0.61 },
     })
     expect(ocrPage.lines[0]).not.toHaveProperty('confidence')
+  })
+
+  it('adapts RapidOCR stored pages into evidence page locators', () => {
+    const page = adaptStoredParsePage({
+      pageNumber: 1,
+      source: 'ocr',
+      text: '【草稿】赛里木湖1日',
+      lines: [
+        {
+          text: '【草稿】赛里木湖1日',
+          score: 0.99931,
+          box: [
+            [106, 77],
+            [320, 77],
+            [320, 104],
+            [106, 104],
+          ],
+          coordinateSystem: 'pixel',
+        },
+      ],
+    })
+    expect(page).toMatchObject({
+      schemaVersion: 1,
+      pageNumber: 1,
+      source: 'ocr',
+      lines: [
+        {
+          lineNumber: 1,
+          text: '【草稿】赛里木湖1日',
+          geometry: { x: 106, y: 77, width: 214, height: 27, unit: 'pixels' },
+          ocrQuality: { signal: 'rapidocr_line_score', score: 0.99931 },
+        },
+      ],
+    })
   })
 
   it('requires normalized evidence catalog ids to remain associated per candidate', () => {

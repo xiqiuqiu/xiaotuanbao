@@ -4,7 +4,9 @@ import {
   captureReturnLocation,
   fallbackReturnLocation,
   persistReturnLocation,
+  persistSelectedConversation,
   readPersistedReturnLocation,
+  readPersistedSelectedConversation,
   type AgentReturnLocation,
 } from './agent-conversation-location'
 import {
@@ -42,6 +44,7 @@ interface AgentConversationState {
   closeGlobalForBusinessNavigation: () => void
   openGlobalFromRoute: (conversationId: string | null) => void
   setHistoryRailCollapsed: (collapsed: boolean) => void
+  hydrateFromSession: () => void
   reset: () => void
 }
 
@@ -58,15 +61,24 @@ const INITIAL_CONVERSATION_STATE = {
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
   ...INITIAL_CONVERSATION_STATE,
-  persistConversation: (conversation) =>
+  persistConversation: (conversation) => {
+    persistSelectedConversation({
+      conversationId: conversation.id,
+      title: conversation.title || NEW_CONVERSATION_TITLE,
+    })
     set({
       conversationId: conversation.id,
       title: conversation.title || NEW_CONVERSATION_TITLE,
-    }),
+    })
+  },
   openHistoricalConversation: (conversation) => {
     const current = get()
     const reopeningCurrentHistory =
       current.view === 'history' && current.conversationId === conversation.id
+    persistSelectedConversation({
+      conversationId: conversation.id,
+      title: conversation.title || NEW_CONVERSATION_TITLE,
+    })
     set({
       view: 'history',
       conversationId: conversation.id,
@@ -75,7 +87,8 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       pageContextDismissed: false,
     })
   },
-  startNewConversation: (currentAttachment = null) =>
+  startNewConversation: (currentAttachment = null) => {
+    persistSelectedConversation(null)
     set({
       view: 'new',
       conversationId: null,
@@ -86,7 +99,8 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         captured: false,
       }),
       pageContextDismissed: false,
-    }),
+    })
+  },
   attachCurrentPage: (currentAttachment) =>
     set({
       attachedPageAttachment: nextPageAttachment({
@@ -174,8 +188,20 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
     }
   },
   setHistoryRailCollapsed: (collapsed) => set({ historyRailCollapsed: collapsed }),
+  hydrateFromSession: () => {
+    const stored = readPersistedSelectedConversation()
+    if (!stored) {
+      return
+    }
+    set({
+      view: 'history',
+      conversationId: stored.conversationId,
+      title: stored.title || NEW_CONVERSATION_TITLE,
+    })
+  },
   reset: () => {
     persistReturnLocation(null)
+    persistSelectedConversation(null)
     set({ ...INITIAL_CONVERSATION_STATE })
   },
 }))

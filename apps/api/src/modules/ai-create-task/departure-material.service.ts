@@ -394,6 +394,7 @@ export class DepartureMaterialService {
   async getPinnedParseResult(params: {
     organizationId: string
     inputBatchId: string
+    conversationId?: string
     sourceId: string
     parseVersion: number
     pageNumber?: number
@@ -406,7 +407,19 @@ export class DepartureMaterialService {
         parseVersion: params.parseVersion,
       },
     })
-    if (!dependency) {
+    const conversationSource = dependency
+      ? null
+      : params.conversationId
+        ? await this.prisma.conversationSource.findFirst({
+            where: {
+              id: params.sourceId,
+              organizationId: params.organizationId,
+              conversationId: params.conversationId,
+            },
+            select: { id: true },
+          })
+        : null
+    if (!dependency && !conversationSource) {
       throw new NotFoundException('该批次未固定此解析版本')
     }
     const run = await this.prisma.conversationSourceParseRun.findFirst({
@@ -469,6 +482,72 @@ export class DepartureMaterialService {
         }
       }),
     )
+  }
+
+  async loadConversationSourceCatalog(params: {
+    organizationId: string
+    conversationId: string
+    inputBatchId: string
+  }) {
+    const sources = await this.prisma.conversationSource.findMany({
+      where: {
+        organizationId: params.organizationId,
+        conversationId: params.conversationId,
+        status: { in: CONSUMABLE },
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        parseRuns: {
+          where: { status: ConversationSourceParseRunStatus.succeeded },
+          orderBy: { resultVersion: 'desc' },
+          take: 1,
+        },
+      },
+    })
+    const ready = sources.flatMap((source) => {
+      const run = source.parseRuns[0]
+      if (!run) {
+        return []
+      }
+      return [
+        {
+          materialId: source.id,
+          parseResultVersion: run.resultVersion,
+          originalFilename: source.originalFilename,
+          contentDigest: source.sha256,
+          pages: mapParsePages(run.pages),
+        },
+      ]
+    })
+    if (ready.length === 0) {
+      return {
+        materials: [],
+        truncationReasons: [] as string[],
+        sourceVersions: [] as Array<{ sourceId: string; parseVersion: number; contentDigest: string }>,
+      }
+    }
+    const built = buildMaterialParseIndex(ready)
+    const pinnedIds = new Set(
+      (
+        await this.prisma.inputBatchSource.findMany({
+          where: { inputBatchId: params.inputBatchId, parseVersion: { not: null } },
+          select: { sourceId: true },
+        })
+      ).map((item) => item.sourceId),
+    )
+    return {
+      materials: built.materials.map((item, index) => ({
+        ...item,
+        originalFilename: ready[index]?.originalFilename,
+        requiredThisBatch: pinnedIds.has(item.materialId),
+      })),
+      truncationReasons: built.truncationReasons,
+      sourceVersions: ready.map((item) => ({
+        sourceId: item.materialId,
+        parseVersion: item.parseResultVersion,
+        contentDigest: item.contentDigest,
+      })),
+    }
   }
 
   async executeParseJob(job: {

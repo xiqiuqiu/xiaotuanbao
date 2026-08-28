@@ -61,6 +61,7 @@ import {
   eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
+  mergeFrozenSourceVersions,
   resolveAttemptUserText,
 } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
@@ -831,18 +832,26 @@ export class AiWorkflowProcessor {
       },
       select: { sourceId: true, parseVersion: true, contentDigest: true },
     })
+    const parseIndex = await this.materialService.loadPinnedParseIndex(
+      job.organizationId,
+      job.inputBatchId,
+    )
+    const sourceCatalog = await this.materialService.loadConversationSourceCatalog({
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      inputBatchId: job.inputBatchId,
+    })
     const materialVersions = pinnedSources.map((item) => ({
       materialId: item.sourceId,
       parseResultVersion: item.parseVersion as number,
     }))
-    const sourceVersions = pinnedSources.map((item) => ({
-      sourceId: item.sourceId,
-      parseVersion: item.parseVersion as number,
-      contentDigest: item.contentDigest ?? '',
-    }))
-    const parseIndex = await this.materialService.loadPinnedParseIndex(
-      job.organizationId,
-      job.inputBatchId,
+    const sourceVersions = mergeFrozenSourceVersions(
+      pinnedSources.map((item) => ({
+        sourceId: item.sourceId,
+        parseVersion: item.parseVersion as number,
+        contentDigest: item.contentDigest ?? '',
+      })),
+      sourceCatalog.sourceVersions,
     )
     const historyEvents = await this.prisma.aiConversationEvent.findMany({
       where: {
@@ -881,6 +890,7 @@ export class AiWorkflowProcessor {
         currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
         events: excludeRetractedQueueMessages(historyEvents),
         materials: parseIndex.materials,
+        availableSources: sourceCatalog.materials,
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
         businessFacts: {
@@ -925,9 +935,10 @@ export class AiWorkflowProcessor {
           modelInput.truncationReasons,
         ),
       })
-      const excerptDigests = excerptDigestsFor(
-        budgetedContext.projection.pinnedMaterials,
-      )
+      const excerptDigests = excerptDigestsFor([
+        ...budgetedContext.projection.pinnedMaterials,
+        ...(budgetedContext.projection.availableSources ?? []),
+      ])
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
@@ -1024,6 +1035,7 @@ export class AiWorkflowProcessor {
         entitlementStatus: 'unavailable',
         objectScopes: [
           { organizationId: job.organizationId, kind: 'ai_create_task', id: taskId },
+          { organizationId: job.organizationId, kind: 'agent_conversation', id: job.conversationId },
         ],
       })
       const grants = capabilityGrantResolver.resolve({
@@ -1149,6 +1161,11 @@ export class AiWorkflowProcessor {
       job.organizationId,
       job.inputBatchId,
     )
+    const sourceCatalog = await this.materialService.loadConversationSourceCatalog({
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      inputBatchId: job.inputBatchId,
+    })
     const pinnedSources = await this.prisma.inputBatchSource.findMany({
       where: {
         inputBatchId: job.inputBatchId,
@@ -1161,11 +1178,14 @@ export class AiWorkflowProcessor {
       materialId: item.sourceId,
       parseResultVersion: item.parseVersion as number,
     }))
-    const sourceVersions = pinnedSources.map((item) => ({
-      sourceId: item.sourceId,
-      parseVersion: item.parseVersion as number,
-      contentDigest: item.contentDigest ?? '',
-    }))
+    const sourceVersions = mergeFrozenSourceVersions(
+      pinnedSources.map((item) => ({
+        sourceId: item.sourceId,
+        parseVersion: item.parseVersion as number,
+        contentDigest: item.contentDigest ?? '',
+      })),
+      sourceCatalog.sourceVersions,
+    )
     const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
@@ -1180,6 +1200,7 @@ export class AiWorkflowProcessor {
         currentUserMessageSequence: userEvent.sequence,
         events: excludeRetractedQueueMessages(historyEvents),
         materials: parseIndex.materials,
+        availableSources: sourceCatalog.materials,
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
         businessFacts,
@@ -1225,7 +1246,10 @@ export class AiWorkflowProcessor {
         modelId,
         materialVersions,
         sourceVersions,
-        excerptDigests: excerptDigestsFor(budgetedContext.projection.pinnedMaterials),
+        excerptDigests: excerptDigestsFor([
+          ...budgetedContext.projection.pinnedMaterials,
+          ...(budgetedContext.projection.availableSources ?? []),
+        ]),
         truncationReasons: budgetedContext.truncationReasons,
         inputHash: budgetedContext.inputHash,
         budget: budgetedContext.budget,

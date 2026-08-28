@@ -88,6 +88,9 @@ function useCreateDepartureWizardController() {
   const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const conversationView = useAgentConversationStore((state) => state.view)
+  const openHistoricalConversation = useAgentConversationStore(
+    (state) => state.openHistoricalConversation,
+  )
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const conversationEvents = useAgentConversationRuntimeStore((state) => state.events)
   const search = useSearch({ strict: false }) as { copyFrom?: string; taskId?: string }
@@ -440,6 +443,12 @@ function useCreateDepartureWizardController() {
         draftVersionRef.current = task.draft.version
         dirtyRef.current = false
         setSaveStatus('saved')
+        const restoreConversationId =
+          task.pendingReview?.conversationId ??
+          task.pendingReviews?.find((pkg) => pkg.conversationId)?.conversationId
+        if (restoreConversationId && !useAgentConversationStore.getState().conversationId) {
+          openHistoricalConversation({ id: restoreConversationId, title: '历史会话' })
+        }
         try {
           await loadDepartureNo()
         } catch {
@@ -460,7 +469,7 @@ function useCreateDepartureWizardController() {
     return () => {
       cancelled = true
     }
-  }, [infoForm, loadDepartureNo, message, navigate, searchTaskId, user])
+  }, [infoForm, loadDepartureNo, message, navigate, openHistoricalConversation, searchTaskId, user])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

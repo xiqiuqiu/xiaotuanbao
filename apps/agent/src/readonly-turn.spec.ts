@@ -4,6 +4,7 @@ describe('READONLY_ASSIST_INSTRUCTIONS', () => {
   it('requires getTaskContext, allows submitReviewPackage, and forbids draft writes', () => {
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('必须先调用 getTaskContext')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('【本轮指令】')
+    expect(READONLY_ASSIST_INSTRUCTIONS).toContain('【本会话来源】')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('proposeReviewPackage')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('负责人和发团类型必须由 User 在表单选择')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('pending.hasPendingReview')

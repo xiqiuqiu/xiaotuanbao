@@ -1013,6 +1013,46 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     })
   })
 
+  it('forwards getMaterialParseResult for an available same-conversation source that is not pinned to this batch', async () => {
+    const { gateway } = createGateway(
+      new InMemoryAiActionTargetAuthority({
+        tasks: [
+          {
+            id: 'task-1',
+            organizationId: 'org-1',
+            ownerUserId: 'user-1',
+            draftId: 'draft-1',
+            draftVersion: 1,
+          },
+        ],
+        materials: [{ id: 'src-prior', organizationId: 'org-1' }],
+        sources: [
+          {
+            id: 'src-prior',
+            organizationId: 'org-1',
+            conversationId: 'conv-1',
+            parseVersion: 1,
+          },
+        ],
+      }),
+    )
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'getMaterialParseResult',
+      actor,
+      input: { taskId: 'task-1', materialId: 'src-prior', parseResultVersion: 1 },
+      forward: async (context) => forwarded.push(context),
+    })
+
+    expect(forwarded).toHaveLength(1)
+    expect(result.action).toMatchObject({
+      decision: 'allow',
+      reasonCode: 'OBSERVATION_PERIOD',
+      targetRef: { kind: 'departure_material', id: 'src-prior' },
+    })
+  })
+
   it('does not forward getMaterialParseResult when the material is not pinned to the current input batch', async () => {
     const { gateway } = createGateway(
       new InMemoryAiActionTargetAuthority({

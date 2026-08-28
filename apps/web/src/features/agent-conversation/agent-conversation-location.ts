@@ -1,6 +1,7 @@
 export const AGENT_CONVERSATION_PATH_PREFIX = '/agent/conversations'
 export const NEW_CONVERSATION_ROUTE_ID = 'new'
 export const AGENT_RETURN_LOCATION_STORAGE_KEY = 'xiaotuanbao-agent-return-location'
+export const AGENT_SELECTED_CONVERSATION_STORAGE_KEY = 'xiaotuanbao-agent-selected-conversation'
 
 export type AgentReturnLocation = {
   pathname: string
@@ -97,6 +98,53 @@ export function parseStoredReturnLocation(raw: string | null): AgentReturnLocati
   } catch {
     return null
   }
+}
+
+export type StoredSelectedConversation = {
+  conversationId: string
+  title: string
+}
+
+export function parseStoredSelectedConversation(
+  raw: string | null,
+): StoredSelectedConversation | null {
+  if (!raw) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredSelectedConversation>
+    if (typeof parsed.conversationId !== 'string' || parsed.conversationId.length === 0) {
+      return null
+    }
+    return {
+      conversationId: parsed.conversationId,
+      title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title : '新会话',
+    }
+  } catch {
+    return null
+  }
+}
+
+export function persistSelectedConversation(
+  conversation: StoredSelectedConversation | null,
+): void {
+  if (typeof sessionStorage === 'undefined') {
+    return
+  }
+  if (!conversation) {
+    sessionStorage.removeItem(AGENT_SELECTED_CONVERSATION_STORAGE_KEY)
+    return
+  }
+  sessionStorage.setItem(AGENT_SELECTED_CONVERSATION_STORAGE_KEY, JSON.stringify(conversation))
+}
+
+export function readPersistedSelectedConversation(): StoredSelectedConversation | null {
+  if (typeof sessionStorage === 'undefined') {
+    return null
+  }
+  return parseStoredSelectedConversation(
+    sessionStorage.getItem(AGENT_SELECTED_CONVERSATION_STORAGE_KEY),
+  )
 }
 
 export function persistReturnLocation(location: AgentReturnLocation | null): void {

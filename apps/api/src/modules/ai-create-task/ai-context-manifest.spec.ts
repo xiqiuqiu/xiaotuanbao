@@ -7,6 +7,7 @@ import {
   excludeRetractedQueueMessages,
   eventSequencesForModelInput,
   excerptDigestsFor,
+  mergeFrozenSourceVersions,
   isConfirmedReviewContinuation,
   parseEventSequences,
   projectConversationEventsForAgent,
@@ -236,6 +237,69 @@ describe('frozen context projection', () => {
     expect(left.excerptDigests[0]?.sha256).toBe(digestExcerpt('喀纳斯'))
   })
 
+  it('合并本批固定来源与本会话目录，本批 digest 优先', () => {
+    expect(
+      mergeFrozenSourceVersions(
+        [{ sourceId: 'src-pin', parseVersion: 2, contentDigest: 'p'.repeat(64) }],
+        [
+          { sourceId: 'src-pin', parseVersion: 2, contentDigest: 'c'.repeat(64) },
+          { sourceId: 'src-prior', parseVersion: 1, contentDigest: 'a'.repeat(64) },
+        ],
+      ),
+    ).toEqual([
+      { sourceId: 'src-pin', parseVersion: 2, contentDigest: 'p'.repeat(64) },
+      { sourceId: 'src-prior', parseVersion: 1, contentDigest: 'a'.repeat(64) },
+    ])
+  })
+
+  it('摘录摘要按来源去重，本批资料优先', () => {
+    expect(
+      excerptDigestsFor([
+        {
+          materialId: 'src-1',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '本批摘录',
+          truncated: false,
+        },
+        {
+          materialId: 'src-1',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '目录摘录',
+          truncated: false,
+        },
+        {
+          materialId: 'src-2',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '上一轮',
+          truncated: false,
+        },
+      ]),
+    ).toEqual([
+      {
+        fragmentId: 'fragment-src-1-v1-p1-0-4',
+        materialId: 'src-1',
+        parseResultVersion: 1,
+        pageNumber: 1,
+        normalizedTextRange: { start: 0, end: 4 },
+        sha256: digestExcerpt('本批摘录'),
+      },
+      {
+        fragmentId: 'fragment-src-2-v1-p1-0-3',
+        materialId: 'src-2',
+        parseResultVersion: 1,
+        pageNumber: 1,
+        normalizedTextRange: { start: 0, end: 3 },
+        sha256: digestExcerpt('上一轮'),
+      },
+    ])
+  })
+
   it('does not pull events after the frozen conversation version into the projection', () => {
     const projection = buildFrozenProjection({
       events: [
@@ -291,7 +355,7 @@ describe('frozen context projection', () => {
       sections: budgeted.sections,
     })
 
-    expect(manifest.systemPromptVersion).toBe('conversation-general/v3')
+    expect(manifest.systemPromptVersion).toBe('conversation-general/v4')
     expect(manifest.toolSchemaVersion).toBe('conversation-general-routing-recall/v2')
     expect(manifest.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(manifest.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)

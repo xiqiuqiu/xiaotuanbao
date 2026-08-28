@@ -8,7 +8,8 @@ import {
 } from '@copilotkit/react-core/v2'
 import { EditOutlined, FileTextOutlined, OrderedListOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Input, Radio, Space, Tag, Typography } from 'antd'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   parseConversationStreamFrame,
@@ -433,6 +434,10 @@ function mergeEvents(
 
 function useAgentConversationChatController() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const location = useRouterState({
+    select: (state) => state.location,
+  })
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const conversationView = useAgentConversationStore((state) => state.view)
   const attachedPageAttachment = useAgentConversationStore(
@@ -853,9 +858,17 @@ function useAgentConversationChatController() {
   const openDepartureTask = useCallback(
     (taskId: string) => {
       closeGlobalForBusinessNavigation()
+      const alreadyOnTask =
+        location.pathname === '/departure/new' &&
+        new URLSearchParams(location.searchStr.replace(/^\?/, '')).get('taskId') === taskId
+      void queryClient.invalidateQueries({ queryKey: ['ai-create-task', taskId] })
+      void queryClient.invalidateQueries({ queryKey: ['ai-create-assist-state', taskId] })
+      if (alreadyOnTask) {
+        return
+      }
       void navigate({ to: '/departure/new', search: { taskId } })
     },
-    [closeGlobalForBusinessNavigation, navigate],
+    [closeGlobalForBusinessNavigation, location.pathname, location.searchStr, navigate, queryClient],
   )
   const activityRenderers = useMemo(
     () => [

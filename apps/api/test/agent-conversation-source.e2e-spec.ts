@@ -230,6 +230,56 @@ describe('Conversation sources and formal attachments (e2e) #368', () => {
     expect(listedB.body.data).toEqual([])
   })
 
+  it('keeps prior conversation sources visible to a later text-only follow-up in the same conversation', async () => {
+    const first = await authRequest(app, coordinatorToken)
+      .post('/api/agent/conversations/messages')
+      .set('Idempotency-Key', `${testPrefix}-follow-up-source`)
+      .field('text', `${testPrefix} 看下这个文件`)
+      .attach('files', PNG_1X1, { filename: '赛里木湖1日.pdf', contentType: 'image/png' })
+      .expect(201)
+    const conversationId = track(first.body.data.conversationId as string)
+    await processor.processDueJobs(2)
+
+    const listed = await authRequest(app, coordinatorToken)
+      .get(`/api/agent/conversations/${conversationId}/sources`)
+      .expect(200)
+    const sourceId = listed.body.data[0].id as string
+    expect(listed.body.data[0]).toMatchObject({ status: 'available', latestParseVersion: 1 })
+
+    const followUp = await authRequest(app, coordinatorToken)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
+      .set('Idempotency-Key', `${testPrefix}-follow-up-create`)
+      .send({ text: `${testPrefix} 用刚才那份文件创建一个发团` })
+      .expect(201)
+    const followUpBatchId = followUp.body.data.batch.id as string
+    expect(followUp.body.data.batch.status).not.toBe('waiting_for_materials')
+
+    await processor.processDueJobs(5)
+
+    const followUpAttempt = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { conversationId, inputBatchId: followUpBatchId },
+      orderBy: { startedAt: 'desc' },
+      include: { contextManifest: true },
+    })
+    expect(agent.lastUserText()).toContain('【本会话来源】')
+    expect(agent.lastUserText()).toContain(sourceId)
+    expect(followUpAttempt.grantedCapabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'conversation.source.read' }),
+        expect.objectContaining({ key: 'conversation.history.read' }),
+      ]),
+    )
+    expect(followUpAttempt.contextManifest.sourceVersions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId,
+          parseVersion: 1,
+          contentDigest: listed.body.data[0].sha256,
+        }),
+      ]),
+    )
+  })
+
   it('registers a formal departure attachment only through an explicit domain command', async () => {
     const sent = await authRequest(app, coordinatorToken)
       .post('/api/agent/conversations/messages')

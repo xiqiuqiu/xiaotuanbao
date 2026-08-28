@@ -39,6 +39,7 @@ export function planContextCompaction(input: {
   originUserMessageSequence?: number
   events: ConversationEventRecord[]
   materials: FrozenContextProjection['pinnedMaterials']
+  availableSources?: FrozenContextProjection['availableSources']
   materialTruncationReasons?: string[]
   currentUserText: string
   businessFacts: unknown
@@ -56,6 +57,7 @@ export function planContextCompaction(input: {
     originUserMessageSequence: input.originUserMessageSequence,
     currentUserMessageSequence: input.currentUserMessageSequence,
     materials: input.materials,
+    availableSources: input.availableSources,
     materialTruncationReasons: input.materialTruncationReasons,
   })
   const originalFits = contextFits({
@@ -263,6 +265,7 @@ export async function resolvePreparedProjection(
     projection: applyCompactionPlan(plan, input.events, input.conversationVersion, input.materials, {
       originUserMessageSequence: input.originUserMessageSequence,
       currentUserMessageSequence: input.currentUserMessageSequence,
+      availableSources: input.availableSources,
       materialTruncationReasons: input.materialTruncationReasons,
       summaryVersion,
     }),
@@ -279,6 +282,7 @@ export function applyCompactionPlan(
   options: {
     originUserMessageSequence?: number
     currentUserMessageSequence?: number
+    availableSources?: FrozenContextProjection['availableSources']
     materialTruncationReasons?: string[]
     summaryVersion: number | null
   },
@@ -292,6 +296,7 @@ export function applyCompactionPlan(
     originUserMessageSequence: options.originUserMessageSequence,
     currentUserMessageSequence: options.currentUserMessageSequence,
     materials,
+    availableSources: options.availableSources,
     materialTruncationReasons: options.materialTruncationReasons,
     compaction: {
       summary: plan.record.summary,

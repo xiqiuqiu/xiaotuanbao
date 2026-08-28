@@ -1,6 +1,7 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -21,6 +22,14 @@ const routerState = vi.hoisted(() => ({
 }))
 
 let queuedFiles: File[] = []
+
+function renderChat(ui: ReactNode = <AgentConversationChat />) {
+  return render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      {ui}
+    </QueryClientProvider>,
+  )
+}
 
 function MockReasoningMessage({ content }: { content: string }) {
   const [open, setOpen] = useState(true)
@@ -281,7 +290,7 @@ describe('AgentConversationChat page locator #371', () => {
 
   it('shows a removable current-page chip on a new conversation', async () => {
     const user = userEvent.setup()
-    render(<AgentConversationChat />)
+    renderChat()
     expect(await screen.findByText('当前合作伙伴往来账款')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '移除当前页面' }))
@@ -300,7 +309,7 @@ describe('AgentConversationChat page locator #371', () => {
       draftEpoch: input.draftEpoch,
       revision: 1,
     }))
-    render(<AgentConversationChat />)
+    renderChat()
     expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
   })
@@ -312,7 +321,7 @@ describe('AgentConversationChat page locator #371', () => {
       events: [],
       lastSequence: 1,
     } as never)
-    render(<AgentConversationChat />)
+    renderChat()
     await screen.findByText('当前合作伙伴往来账款')
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '查一下账款')
     await user.click(screen.getByRole('button', { name: '发送' }))
@@ -350,7 +359,7 @@ describe('AgentConversationChat page locator #371', () => {
       hash: '',
     }
 
-    render(<AgentConversationChat />)
+    renderChat()
 
     expect(await screen.findByText('当前建团工作')).toBeInTheDocument()
     expect(screen.getAllByTestId('current-page-chip')).toHaveLength(1)
@@ -383,7 +392,7 @@ describe('AgentConversationChat page locator #371', () => {
     vi.mocked(sendAgentConversationText).mockRejectedValue(
       new ApiError('消息内容不能超过 100000 个字符', 400),
     )
-    render(<AgentConversationChat />)
+    renderChat()
 
     const composer = await screen.findByRole('textbox', { name: '询问小团宝业务' })
     await user.type(composer, '需要保留的超长说明')
@@ -397,7 +406,7 @@ describe('AgentConversationChat page locator #371', () => {
   })
 
   it('enables the composer attachment button so User can queue files', async () => {
-    render(<AgentConversationChat />)
+    renderChat()
     expect(await screen.findByTestId('copilot-add-menu-button')).toBeEnabled()
   })
 
@@ -410,7 +419,7 @@ describe('AgentConversationChat page locator #371', () => {
       events: [],
       lastSequence: 1,
     } as never)
-    render(<AgentConversationChat />)
+    renderChat()
     await screen.findByText('当前合作伙伴往来账款')
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '请根据附件回答')
     await user.click(screen.getByRole('button', { name: '发送' }))
@@ -434,7 +443,7 @@ describe('AgentConversationChat page locator #371', () => {
       events: [],
       lastSequence: 1,
     } as never)
-    render(<AgentConversationChat />)
+    renderChat()
     await screen.findByTestId('copilot-add-menu-button')
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenCalledWith(
@@ -524,7 +533,7 @@ describe('AgentConversationChat task and review activities', () => {
 
   it('renders the task card and opens the matching departure review form', async () => {
     const user = userEvent.setup()
-    render(<AgentConversationChat />)
+    renderChat()
 
     expect(await screen.findByRole('region', { name: 'Agent 任务' })).toHaveTextContent(
       '创建 9 月 15 日出发的 8 天行程',
@@ -539,6 +548,19 @@ describe('AgentConversationChat task and review activities', () => {
       search: { taskId: 'task-1' },
     })
     expect(useAgentConversationStore.getState().globalOpen).toBe(false)
+  })
+
+  it('refreshes the current wizard task instead of no-op navigating when already on it', async () => {
+    const user = userEvent.setup()
+    routerState.location = {
+      pathname: '/departure/new',
+      searchStr: '?taskId=task-1',
+      hash: '',
+    }
+    renderChat()
+
+    await user.click(await screen.findByRole('button', { name: '查看审核内容' }))
+    expect(routerState.navigate).not.toHaveBeenCalled()
   })
 
   it('同一会话并列展示多条未处置追问，普通输入框保持独立', async () => {
@@ -601,7 +623,7 @@ describe('AgentConversationChat task and review activities', () => {
       ],
     })
 
-    render(<AgentConversationChat />)
+    renderChat()
 
     expect(await screen.findByRole('region', { name: '追问：请补充出发城市' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '追问：预算档位' })).toBeInTheDocument()
@@ -670,7 +692,7 @@ describe('AgentConversationChat task and review activities', () => {
       ],
     })
 
-    render(<AgentConversationChat />)
+    renderChat()
 
     const queue = await screen.findByRole('region', { name: '排队消息，共 1 条' })
     expect(queue).toHaveTextContent('排队中 · 1')
@@ -748,7 +770,7 @@ describe('AgentConversationChat task and review activities', () => {
       },
     } as never)
 
-    render(<AgentConversationChat />)
+    renderChat()
     await user.click(await screen.findByRole('button', { name: '编辑' }))
 
     expect(retractQueuedAgentConversationBatch).toHaveBeenCalledWith(
@@ -786,7 +808,7 @@ describe('AgentConversationChat task and review activities', () => {
       ],
     })
 
-    render(<AgentConversationChat />)
+    renderChat()
 
     expect(await screen.findByRole('region', { name: '排队消息，共 1 条' })).toHaveTextContent(
       '还有吗',
@@ -859,7 +881,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
   })
 
   it('projects growing assistant text from SSE snapshots and replaces it with agent_message', async () => {
-    render(<AgentConversationChat />)
+    renderChat()
     expect(lastEventSource).not.toBeNull()
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
 
@@ -906,7 +928,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
 
   it('shows collapsible 思考过程 from the first reasoning token and keeps it after agent_message', async () => {
     const user = userEvent.setup()
-    render(<AgentConversationChat />)
+    renderChat()
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -1040,7 +1062,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       ],
       lastSequence: 3,
     } as never)
-    render(<AgentConversationChat />)
+    renderChat()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1069,7 +1091,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
   })
 
   it('restores the current cumulative snapshot after EventSource reconnect without calling stop', async () => {
-    const { unmount } = render(<AgentConversationChat />)
+    const { unmount } = renderChat()
     expect(lastEventSource).not.toBeNull()
 
     await act(async () => {
@@ -1104,7 +1126,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
   })
 
   it('does not call stop when EventSource errors or the chat unmounts', async () => {
-    const { unmount } = render(<AgentConversationChat />)
+    const { unmount } = renderChat()
     expect(lastEventSource).not.toBeNull()
 
     await act(async () => {
@@ -1117,7 +1139,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
   })
 
   it('uses the CopilotKit runtime agent id so getAgent does not warn Agent not found', async () => {
-    render(<AgentConversationChat />)
+    renderChat()
     await screen.findByRole('textbox', { name: '询问小团宝业务' })
     expect(capturedChatConfig.agentId).toBe('ai-create-readonly-assist')
   })

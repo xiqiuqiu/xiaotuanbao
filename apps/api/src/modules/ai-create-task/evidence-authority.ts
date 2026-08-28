@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { materialParsePageSchemaV1 } from '@xiaotuanbao/ai-contracts'
+import { adaptStoredParsePage } from '@xiaotuanbao/ai-contracts'
 import { parseEventSequences } from './ai-context-manifest'
 import type { EvidenceAuthority } from './evidence-validator'
 
@@ -59,35 +59,52 @@ export async function loadEvidenceAuthority(
   const materialVersions = Array.isArray(manifest.materialVersions)
     ? (manifest.materialVersions as Array<{ materialId: string; parseResultVersion: number }>)
     : []
+  const sourceVersions = Array.isArray(manifest.sourceVersions)
+    ? (manifest.sourceVersions as Array<{ sourceId: string; parseVersion: number }>)
+    : []
+  const catalogVersions = [
+    ...materialVersions,
+    ...sourceVersions.map((item) => ({
+      materialId: item.sourceId,
+      parseResultVersion: item.parseVersion,
+    })),
+  ].filter((item, index, all) =>
+    all.findIndex(
+      (candidate) =>
+        candidate.materialId === item.materialId &&
+        candidate.parseResultVersion === item.parseResultVersion,
+    ) === index,
+  )
   const excerptDigests = Array.isArray(manifest.excerptDigests)
     ? (manifest.excerptDigests as EvidenceAuthority['contextManifest']['excerptDigests'])
     : []
   const runs =
-    materialVersions.length === 0
+    catalogVersions.length === 0
       ? []
       : await client.conversationSourceParseRun.findMany({
           where: {
-            OR: materialVersions.map((item) => ({
+            OR: catalogVersions.map((item) => ({
               sourceId: item.materialId,
               resultVersion: item.parseResultVersion,
             })),
           },
           select: { sourceId: true, resultVersion: true, pages: true },
         })
-  const materials: EvidenceAuthority['materials'] = materialVersions.flatMap((item) => {
+  const materials: EvidenceAuthority['materials'] = catalogVersions.flatMap((item) => {
     const run = runs.find(
       (candidate) =>
         candidate.sourceId === item.materialId && candidate.resultVersion === item.parseResultVersion,
     )
     const pages = Array.isArray(run?.pages)
       ? run.pages.flatMap((page) => {
-          const parsed = materialParsePageSchemaV1.safeParse(page)
-          return parsed.success ? [parsed.data] : []
+          const parsed = adaptStoredParsePage(page)
+          return parsed ? [parsed] : []
         })
       : []
     return [
       {
         inputBatchId: manifest.inputBatchId,
+        conversationId: manifest.conversationId,
         materialId: item.materialId,
         parseResultVersion: item.parseResultVersion,
         pages,
@@ -117,6 +134,7 @@ export async function loadEvidenceAuthority(
       inputBatchId: manifest.inputBatchId,
       eventSequences,
       materialVersions,
+      sourceVersions,
       excerptDigests,
     },
     events: events.flatMap((event) => {
