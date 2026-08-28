@@ -653,7 +653,7 @@ export function toCopilotChatMessages(
           : DEPARTURE_CREATION_TASK_DESCRIPTOR
         upsertTask({
           taskId,
-          title: taskTitles.get(taskId) ?? descriptor?.defaultTitle ?? DEPARTURE_CREATION_TASK_DESCRIPTOR.defaultTitle,
+          title: taskTitles.get(taskId) ?? descriptor?.defaultTitle ?? '任务',
           status,
           ...(taskType ? { taskType } : {}),
         })

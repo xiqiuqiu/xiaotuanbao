@@ -23,4 +23,12 @@ describe('task descriptor navigation #439', () => {
     expect(isCurrentAgentTaskWorkspace('/departure/new', '?taskId=other', 'task-1')).toBe(false)
     expect(isCurrentAgentTaskWorkspace('/partner/partner-1', '?taskId=task-1', 'task-1')).toBe(false)
   })
+
+  it('does not send unregistered task types to the departure wizard', () => {
+    expect(() => agentTaskWorkspaceNavigation('task-1', 'unknown.task')).toThrow('未登记')
+    expect(() => agentTaskCompletedNavigation('dep-1', 'unknown.task')).toThrow('未登记')
+    expect(
+      isCurrentAgentTaskWorkspace('/departure/new', '?taskId=task-1', 'task-1', 'unknown.task'),
+    ).toBe(false)
+  })
 })

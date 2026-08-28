@@ -219,8 +219,10 @@ function createAgentTaskActivityRenderer(
     render: ({ content }) => {
       const presentation = taskActivityPresentation(content.status)
       const descriptor = resolveRegisteredTaskDescriptor(content.taskType)
+      const regionLabel = descriptor?.activity.regionLabel ?? 'Agent 任务'
+      const actionLabel = descriptor?.activity.actionLabel ?? '查看任务'
       return (
-        <section aria-label={descriptor.activity.regionLabel}>
+        <section aria-label={regionLabel}>
           <Card
             className={chatStyles.activityCard}
             size="small"
@@ -234,7 +236,7 @@ function createAgentTaskActivityRenderer(
             <Typography.Text type="secondary">{presentation.description}</Typography.Text>
             <div className={chatStyles.activityActions}>
               <Button size="small" onClick={() => openTask(content.taskId, content.taskType)}>
-                {descriptor.activity.actionLabel}
+                {actionLabel}
               </Button>
             </div>
           </Card>
@@ -866,6 +868,9 @@ function useAgentConversationChatController() {
   )
   const openAgentTask = useCallback(
     (taskId: string, taskType?: string) => {
+      if (!resolveRegisteredTaskDescriptor(taskType)) {
+        return
+      }
       closeGlobalForBusinessNavigation()
       const alreadyOnTask = isCurrentAgentTaskWorkspace(
         location.pathname,

@@ -3,16 +3,25 @@ import {
   buildTaskCompletedHref,
   buildTaskWorkspaceHref,
   registeredTaskDescriptors,
+  type TaskDescriptor,
 } from '@xiaotuanbao/ai-contracts'
 
 type DepartureWorkspaceTo = '/departure/new'
 type DepartureCompletedTo = '/departure/$departureId'
 
-function descriptorFor(taskType?: string) {
-  return (
-    (taskType ? registeredTaskDescriptors.findByTaskType(taskType) : undefined) ??
-    DEPARTURE_CREATION_TASK_DESCRIPTOR
-  )
+function descriptorFor(taskType?: string): TaskDescriptor | undefined {
+  if (!taskType) {
+    return DEPARTURE_CREATION_TASK_DESCRIPTOR
+  }
+  return registeredTaskDescriptors.findByTaskType(taskType)
+}
+
+function requireDescriptor(taskType?: string): TaskDescriptor {
+  const descriptor = descriptorFor(taskType)
+  if (!descriptor) {
+    throw new Error(`Task Descriptor 未登记: ${taskType}`)
+  }
+  return descriptor
 }
 
 export function resolveRegisteredTaskDescriptor(taskType?: string) {
@@ -20,7 +29,7 @@ export function resolveRegisteredTaskDescriptor(taskType?: string) {
 }
 
 export function agentTaskWorkspaceNavigation(taskId: string, taskType?: string) {
-  const href = buildTaskWorkspaceHref(descriptorFor(taskType), taskId)
+  const href = buildTaskWorkspaceHref(requireDescriptor(taskType), taskId)
   return {
     to: href.pathname as DepartureWorkspaceTo,
     search: href.search as { taskId: string },
@@ -28,7 +37,7 @@ export function agentTaskWorkspaceNavigation(taskId: string, taskType?: string) 
 }
 
 export function agentTaskCompletedNavigation(objectId: string, taskType?: string) {
-  const href = buildTaskCompletedHref(descriptorFor(taskType), objectId)
+  const href = buildTaskCompletedHref(requireDescriptor(taskType), objectId)
   return {
     to: href.pathname as DepartureCompletedTo,
     params: href.params as { departureId: string },
@@ -43,6 +52,9 @@ export function isCurrentAgentTaskWorkspace(
   taskType?: string,
 ): boolean {
   const descriptor = descriptorFor(taskType)
+  if (!descriptor) {
+    return false
+  }
   const currentTaskId = new URLSearchParams(search.replace(/^\?/, '')).get(
     descriptor.workspace.taskIdSearchParam,
   )
