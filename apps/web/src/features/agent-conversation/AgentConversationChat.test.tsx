@@ -132,6 +132,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
     onStop,
     isRunning,
     onAddFile,
+    sendButton: SendButton,
   }: {
     value?: string
     onChange?: (value: string) => void
@@ -139,38 +140,47 @@ vi.mock('@copilotkit/react-core/v2', () => {
     onStop?: () => void
     isRunning?: boolean
     onAddFile?: () => void
-  }) => (
-    <div>
-      <button
-        type="button"
-        data-testid="copilot-add-menu-button"
-        aria-label="添加附件"
-        disabled={!onAddFile}
-        onClick={() => onAddFile?.()}
-      >
-        添加附件
-      </button>
-      <textarea
-        aria-label="询问小团宝业务"
-        value={value ?? ''}
-        onChange={(event) => onChange?.(event.target.value)}
-      />
-      <button
-        type="button"
-        aria-label={isRunning && onStop ? '停止当前处理' : '发送'}
-        onClick={() => {
-          if (isRunning && onStop) {
-            onStop()
-            return
-          }
-          onSubmitMessage?.(value ?? '')
-          onChange?.('')
-        }}
-      >
-        {isRunning && onStop ? '停止当前处理' : '发送'}
-      </button>
-    </div>
-  )
+    sendButton?: (props: {
+      onClick: () => void
+      disabled?: boolean
+      'aria-label'?: string
+    }) => React.ReactNode
+  }) => {
+    const showStop = Boolean(isRunning && onStop && !(value ?? '').trim())
+    const handleClick = () => {
+      if (showStop) {
+        onStop?.()
+        return
+      }
+      onSubmitMessage?.(value ?? '')
+      onChange?.('')
+    }
+    return (
+      <div>
+        <button
+          type="button"
+          data-testid="copilot-add-menu-button"
+          aria-label="添加附件"
+          disabled={!onAddFile}
+          onClick={() => onAddFile?.()}
+        >
+          添加附件
+        </button>
+        <textarea
+          aria-label="询问小团宝业务"
+          value={value ?? ''}
+          onChange={(event) => onChange?.(event.target.value)}
+        />
+        {SendButton ? (
+          <SendButton onClick={handleClick} aria-label={showStop ? '停止当前处理' : '发送'} />
+        ) : (
+          <button type="button" aria-label={showStop ? '停止当前处理' : '发送'} onClick={handleClick}>
+            {showStop ? '停止当前处理' : '发送'}
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return {
     CopilotKit: ({
@@ -204,7 +214,21 @@ vi.mock('@copilotkit/react-core/v2', () => {
         Toggle: () => null,
       },
     ),
-    CopilotChatInput: MockCopilotChatInput,
+    CopilotChatInput: Object.assign(MockCopilotChatInput, {
+      SendButton: ({
+        children,
+        ...props
+      }: {
+        children?: React.ReactNode
+        'aria-label'?: string
+        onClick?: () => void
+        disabled?: boolean
+      }) => (
+        <button type="button" {...props}>
+          {props['aria-label'] ?? children}
+        </button>
+      ),
+    }),
     useAttachments: useMockComposerAttachments,
     CopilotChatView: ({
       input: Input = MockCopilotChatInput,
@@ -810,7 +834,39 @@ describe('AgentConversationChat task and review activities', () => {
       expect.any(String),
     )
     expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue('还有吗')
+    const composer = screen.getByRole('textbox', { name: '询问小团宝业务' })
+    expect(composer).toHaveValue('还有吗')
+
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-8',
+          sequence: 8,
+          kind: 'user_message',
+          payload: { text: '还有吗，改过了' },
+          createdAt: '2026-08-27T00:00:07.000Z',
+        },
+        {
+          id: 'e-9',
+          sequence: 9,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-3', queued: true },
+          createdAt: '2026-08-27T00:00:07.000Z',
+        },
+      ],
+      lastSequence: 9,
+    } as never)
+    await user.type(composer, '，改过了')
+    expect(composer).toHaveValue('还有吗，改过了')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      'c-1',
+      { text: '还有吗，改过了' },
+      expect.any(String),
+    )
+    expect(await screen.findByText('排队中 · 1')).toBeInTheDocument()
+    expect(screen.getByText('还有吗，改过了')).toBeInTheDocument()
   })
 
   it('moves a queued send into the transcript when live output arrives before batch_status promotion', async () => {
@@ -1111,8 +1167,8 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       )
     })
     expect(await screen.findByText('已记下半段')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: '停止当前处理' })).toHaveLength(1)
-    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '停止当前处理' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument()
     expect(screen.getByText('AI 处理中')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '停止当前处理' }))
@@ -1145,15 +1201,53 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       lastSequence: 4,
     } as never)
     renderChat()
-    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '停止当前处理' })).toBeEnabled()
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '排队甲')
+    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '停止当前处理' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenCalledWith(
       'c-1',
       { text: '排队甲' },
       expect.any(String),
     )
+    expect(stopAgentConversationBatch).not.toHaveBeenCalled()
     expect(await screen.findByText('排队中 · 1')).toBeInTheDocument()
+
+    vi.mocked(retractQueuedAgentConversationBatch).mockResolvedValue({
+      conversationId: 'c-1',
+      batch: { id: 'batch-2', status: 'cancelled' },
+      events: [
+        {
+          id: 'e-5',
+          sequence: 5,
+          kind: 'batch_status',
+          payload: {
+            status: 'cancelled',
+            batchId: 'batch-2',
+            reason: 'queue_retracted',
+            retractedUserMessageSequence: 3,
+          },
+          createdAt: '2026-08-26T00:00:03.000Z',
+        },
+      ],
+      lastSequence: 5,
+      draft: {
+        conversationId: 'c-1',
+        text: '排队甲',
+        draftEpoch: 1,
+        revision: 2,
+        updatedAt: '2026-08-26T00:00:03.000Z',
+      },
+    } as never)
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    expect(retractQueuedAgentConversationBatch).toHaveBeenCalledWith(
+      'c-1',
+      'batch-2',
+      expect.any(String),
+    )
+    expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue('排队甲')
   })
 
   it('restores the current cumulative snapshot after EventSource reconnect without calling stop', async () => {

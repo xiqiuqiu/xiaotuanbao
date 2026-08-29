@@ -488,19 +488,35 @@ export function currentStoppableBatchId(
   events: AiConversationEventView[],
   activeBatch: AiInputBatchView | null = null,
 ): string | null {
-  const status = latestBatchStatus(events, activeBatch)
-  if (status === 'waiting_for_materials' && latestFailedCount(events, activeBatch) > 0) {
-    return null
-  }
-  if (!status || !RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
-    return null
-  }
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event.kind !== 'batch_status') {
       continue
     }
+    const status = String(event.payload.status ?? '')
+    if (event.payload.queued === true) {
+      continue
+    }
+    if (
+      status === 'waiting_for_materials' &&
+      (typeof event.payload.failedCount === 'number' ? event.payload.failedCount : 0) > 0
+    ) {
+      return null
+    }
+    if (!RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
+      return null
+    }
     return typeof event.payload.batchId === 'string' ? event.payload.batchId : null
+  }
+  if (activeBatch?.queued === true) {
+    return null
+  }
+  const status = activeBatch?.status ?? null
+  if (status === 'waiting_for_materials' && (activeBatch?.materialProgress?.failed ?? 0) > 0) {
+    return null
+  }
+  if (!status || !RUNNING_BATCH_STATUSES.has(status)) {
+    return null
   }
   return activeBatch?.id ?? null
 }

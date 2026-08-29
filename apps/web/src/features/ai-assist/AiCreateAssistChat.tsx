@@ -56,6 +56,7 @@ import {
   conversationCatchUpIntervalMs,
 } from './ai-create-assist-polling'
 import styles from './AiCreateAssistChat.module.css'
+import { ComposerSendButton } from './composer-send-button'
 import {
   filesFromAttachmentSources,
   MATERIAL_ACCEPT,
@@ -452,13 +453,21 @@ const DRAFT_SAVE_DEBOUNCE_MS = 600
 const DEFAULT_ATTACHMENT_TEXT = '请根据附件整理发团资料。'
 
 function DepartureAssistChatInputView(props: CopilotChatInputProps) {
+  const draftValue = String(props.value ?? '')
+  const hasDraft = draftValue.trim().length > 0
   return (
     <CopilotChatInput
       {...props}
-      isRunning={false}
-      onStop={undefined}
+      isRunning={Boolean(props.isRunning) && !hasDraft}
       textArea={{ 'aria-label': '询问当前发团草稿' }}
-      sendButton={{ 'aria-label': '发送' }}
+      sendButton={(buttonProps) => (
+        <ComposerSendButton
+          {...buttonProps}
+          isRunning={props.isRunning}
+          canStop={Boolean(props.onStop)}
+          draftValue={draftValue}
+        />
+      )}
     />
   )
 }
@@ -542,14 +551,8 @@ function ChatComposer({
           void handleDrop(event)
         }}
         input={DepartureAssistChatInput}
+        onStop={onStop}
       />
-      {onStop && isRunning ? (
-        <div className={styles.stopBar}>
-          <Button type="default" danger size="small" aria-label="停止当前处理" onClick={onStop}>
-            停止当前处理
-          </Button>
-        </div>
-      ) : null}
     </div>
   )
 }
