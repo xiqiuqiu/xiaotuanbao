@@ -1,4 +1,8 @@
-import { DepartureType } from '@xiaotuanbao/shared'
+import {
+  DepartureType,
+  RouteTemplateDayCountMismatchError,
+  assertRouteTemplateMatchesTourPeriod,
+} from '@xiaotuanbao/shared'
 import type { CreateDepartureDto } from '@/types/api'
 
 export type RouteStepMode = 'manual' | 'template' | 'copy'
@@ -147,6 +151,34 @@ export function computeEndDateFromDefaultDays(startDate: string, defaultDayCount
 
 export function isEndDateBeforeStartDate(startDate: string, endDate: string): boolean {
   return endDate < startDate
+}
+
+export function routeTemplateTourPeriodError(
+  route: Pick<RouteStepValues, 'mode' | 'defaultDayCount'>,
+  startDate: string | undefined,
+  endDate: string | undefined,
+): string | undefined {
+  if (route.mode !== 'template' || !route.defaultDayCount || !startDate || !endDate) {
+    return undefined
+  }
+  if (isEndDateBeforeStartDate(startDate, endDate)) {
+    return undefined
+  }
+
+  try {
+    assertRouteTemplateMatchesTourPeriod({
+      templateDayCount: route.defaultDayCount,
+      tourDayCount: computeDayCount(startDate, endDate),
+      startDate,
+      endDate,
+    })
+    return undefined
+  } catch (error) {
+    if (error instanceof RouteTemplateDayCountMismatchError) {
+      return error.message
+    }
+    throw error
+  }
 }
 
 const shanghaiDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' })

@@ -381,6 +381,13 @@ export {
   type OutOfRangeItinerarySegment,
   type OutOfRangeItinerarySegmentConflict,
 } from './departure/daily-segment-skeleton'
+export {
+  ROUTE_TEMPLATE_DAY_COUNT_MISMATCH,
+  RouteTemplateDayCountMismatchError,
+  assertRouteTemplateMatchesTourPeriod,
+  formatRouteTemplateDayCountMismatch,
+  type RouteTemplateDayCountMismatch,
+} from './departure/route-template-day-count'
 export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
 export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
 export { FareAdjustmentDirection } from './enums/fare-adjustment-direction.enum'

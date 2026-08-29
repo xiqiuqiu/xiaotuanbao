@@ -710,6 +710,133 @@ describe('CreateDepartureWizard', () => {
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
   })
 
+  it('keeps a user-chosen end date when selecting a common route', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+    ])
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '2026年8月1日 喀纳斯阿勒泰10日线',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(await screen.findByLabelText('结束日期')).toHaveValue('2026-08-10')
+    await selectCommonRoute(user)
+
+    expect(await screen.findAllByText('将复制 2 段行程、5 项资源草稿')).not.toHaveLength(0)
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-08-10')
+    expect(screen.getByLabelText('天数')).toHaveValue('10')
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
+  it('blocks create when the selected common route has more days than the tour period', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+    ])
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '2026年8月1日 喀纳斯阿勒泰10日线',
+          startDate: '2026-08-01',
+          endDate: '2026-08-03',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(await screen.findByLabelText('结束日期')).toHaveValue('2026-08-03')
+    await selectCommonRoute(user)
+    expect(await screen.findAllByText('将复制 2 段行程、5 项资源草稿')).not.toHaveLength(0)
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-08-03')
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    expect(
+      await screen.findByText(
+        '常用路线为 6 天，与所选团期 3 天（2026-08-01～2026-08-03）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+      ),
+    ).toBeInTheDocument()
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
+  it('blocks create when the selected common route days do not match the tour period', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'template',
+          routeName: '西安-青海湖-茶卡6日游',
+          templateId: 'template-1',
+          defaultDayCount: 6,
+          name: '2026年8月1日 西安-青海湖-茶卡6日游',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(await screen.findByLabelText('结束日期')).toHaveValue('2026-08-10')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    expect(
+      await screen.findByText(
+        '常用路线为 6 天，与所选团期 10 天（2026-08-01～2026-08-10）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+      ),
+    ).toBeInTheDocument()
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
   it('creates departure from template without copy flags', async () => {
     vi.mocked(listRouteTemplates).mockResolvedValue([
       {

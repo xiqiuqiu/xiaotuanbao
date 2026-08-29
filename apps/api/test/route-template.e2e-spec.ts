@@ -92,13 +92,14 @@ describe('Route Template API (e2e)', () => {
 
   let templateSeq = 0
 
-  async function createTemplate() {
+  async function createTemplate(overrides: { defaultDayCount?: number } = {}) {
     templateSeq += 1
+    const defaultDayCount = overrides.defaultDayCount ?? 10
     const response = await authRequest(app, coordinatorToken)
       .post('/api/route-templates')
       .send({
         name: `${testPrefix}-喀纳斯阿勒泰10日线-${templateSeq}`,
-        defaultDayCount: 10,
+        defaultDayCount,
         segments: [
           {
             sortOrder: 0,
@@ -216,6 +217,127 @@ describe('Route Template API (e2e)', () => {
       where: { id: template.id },
     })
     expect(updatedTemplate?.usageCount).toBe(1)
+  })
+
+  it('rejects create-from-template when route template has more days than the tour period', async () => {
+    const template = await createTemplate({ defaultDayCount: 10 })
+    const departureCountBefore = await prisma.departure.count({
+      where: { organizationId, name: { startsWith: testPrefix } },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-template-too-long`,
+        routeName: `${testPrefix}-喀纳斯阿勒泰10日线`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-06',
+        ownerUserId,
+        templateId: template.id,
+      })
+      .expect(400)
+
+    expect(response.body.message).toBe(
+      '常用路线为 10 天，与所选团期 6 天（2026-08-01～2026-08-06）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+    )
+    expect(response.body.data).toMatchObject({
+      code: 'ROUTE_TEMPLATE_DAY_COUNT_MISMATCH',
+      templateDayCount: 10,
+      tourDayCount: 6,
+      startDate: '2026-08-01',
+      endDate: '2026-08-06',
+    })
+    expect(
+      await prisma.departure.count({
+        where: { organizationId, name: { startsWith: testPrefix } },
+      }),
+    ).toBe(departureCountBefore)
+  })
+
+  it('rejects create-from-template when route template has fewer days than the tour period', async () => {
+    const template = await createTemplate({ defaultDayCount: 6 })
+    const departureCountBefore = await prisma.departure.count({
+      where: { organizationId, name: { startsWith: testPrefix } },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-template-too-short`,
+        routeName: `${testPrefix}-喀纳斯阿勒泰10日线`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+        templateId: template.id,
+      })
+      .expect(400)
+
+    expect(response.body.message).toBe(
+      '常用路线为 6 天，与所选团期 10 天（2026-08-01～2026-08-10）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+    )
+    expect(response.body.data).toMatchObject({
+      code: 'ROUTE_TEMPLATE_DAY_COUNT_MISMATCH',
+      templateDayCount: 6,
+      tourDayCount: 10,
+      startDate: '2026-08-01',
+      endDate: '2026-08-10',
+    })
+    expect(
+      await prisma.departure.count({
+        where: { organizationId, name: { startsWith: testPrefix } },
+      }),
+    ).toBe(departureCountBefore)
+  })
+
+  it('fills uncovered tour days after copying a matching route template', async () => {
+    templateSeq += 1
+    const templateResponse = await authRequest(app, coordinatorToken)
+      .post('/api/route-templates')
+      .send({
+        name: `${testPrefix}-乌鲁木齐三日线-${templateSeq}`,
+        defaultDayCount: 3,
+        segments: [
+          {
+            sortOrder: 0,
+            name: '乌鲁木齐',
+            dayCount: 1,
+            destination: '乌鲁木齐',
+          },
+        ],
+      })
+      .expect(201)
+    const templateId = templateResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-template-fill-skeleton`,
+        routeName: `${testPrefix}-乌鲁木齐三日线`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        ownerUserId,
+        templateId,
+      })
+      .expect(201)
+
+    const departureId = response.body.data.id as string
+    const segments = await prisma.itinerarySegment.findMany({
+      where: { departureId },
+      orderBy: { sortOrder: 'asc' },
+    })
+
+    expect(
+      segments.map((segment) => [
+        segment.name,
+        segment.startDate!.toISOString().slice(0, 10),
+        segment.endDate!.toISOString().slice(0, 10),
+        segment.dayCount,
+      ]),
+    ).toEqual([
+      ['乌鲁木齐', '2026-08-01', '2026-08-01', 1],
+      ['第2天', '2026-08-02', '2026-08-02', 1],
+      ['第3天', '2026-08-03', '2026-08-03', 1],
+    ])
   })
 
   it('rejects create-from-template when copy flags are present', async () => {
