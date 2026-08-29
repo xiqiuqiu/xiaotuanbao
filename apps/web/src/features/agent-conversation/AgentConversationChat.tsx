@@ -79,18 +79,34 @@ type QueuedMessagesContextValue = {
   editingBatchId: string | null
   messages: QueuedConversationMessage[]
   onEdit: (batchId: string) => void
+  stoppable: boolean
+  onStop?: () => void
 }
 
 const QueuedMessagesContext = createContext<QueuedMessagesContextValue>({
   editingBatchId: null,
   messages: [],
   onEdit: () => undefined,
+  stoppable: false,
 })
 
 function QueueAwareChatInputView(props: CopilotChatInputProps) {
-  const { editingBatchId, messages: queuedMessages, onEdit } = useContext(QueuedMessagesContext)
+  const {
+    editingBatchId,
+    messages: queuedMessages,
+    onEdit,
+    stoppable,
+    onStop,
+  } = useContext(QueuedMessagesContext)
   return (
     <div className={chatStyles.composerStack}>
+      {stoppable && onStop ? (
+        <div className={chatStyles.stopBar}>
+          <Button type="default" danger size="small" aria-label="停止当前处理" onClick={onStop}>
+            停止当前处理
+          </Button>
+        </div>
+      ) : null}
       {queuedMessages.length > 0 ? (
         <section
           className={chatStyles.queuePanel}
@@ -130,9 +146,11 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
       ) : null}
       <CopilotChatInput
         {...props}
+        isRunning={false}
+        onStop={undefined}
         textArea={{ 'aria-label': '询问小团宝业务' }}
         sendButton={{
-          'aria-label': props.isRunning && props.onStop ? '停止当前处理' : '发送',
+          'aria-label': '发送',
         }}
       />
     </div>
@@ -460,9 +478,7 @@ function useAgentConversationChatController() {
   )
   const attachCurrentPage = useAgentConversationStore((state) => state.attachCurrentPage)
   const detachCurrentPage = useAgentConversationStore((state) => state.detachCurrentPage)
-  const restoreCurrentPageAfterSend = useAgentConversationStore(
-    (state) => state.restoreCurrentPageAfterSend,
-  )
+  const composerEpoch = useAgentConversationStore((state) => state.composerEpoch)
   const syncDefaultPageAttachment = useAgentConversationStore(
     (state) => state.syncDefaultPageAttachment,
   )
@@ -498,6 +514,15 @@ function useAgentConversationChatController() {
   useEffect(() => {
     useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
   }, [conversationId])
+
+  const skipComposerEpochReset = useRef(true)
+  useEffect(() => {
+    if (skipComposerEpochReset.current) {
+      skipComposerEpochReset.current = false
+      return
+    }
+    useAgentConversationRuntimeStore.getState().clear()
+  }, [composerEpoch])
 
   useEffect(() => {
     let cancelled = false
@@ -691,7 +716,6 @@ function useAgentConversationChatController() {
           sendIdempotencyKey: null,
         })
         setPendingUploadCount(0)
-        restoreCurrentPageAfterSend(currentPageAttachment)
         if (!conversationIdRef.current) {
           persistConversation({
             id: result.conversationId,
@@ -713,11 +737,9 @@ function useAgentConversationChatController() {
     },
     [
       conversationIdRef,
-      currentPageAttachment,
       draftEpochRef,
       draftRevisionRef,
       persistConversation,
-      restoreCurrentPageAfterSend,
       updateDraft,
     ],
   )
@@ -922,6 +944,7 @@ function useAgentConversationChatController() {
     stop,
     stoppableBatchId,
     updateDraft,
+    composerEpoch,
   }
 }
 
@@ -933,8 +956,6 @@ function AgentConversationComposer({
   pendingText,
   queuedMessagesContextValue,
   send,
-  stop,
-  stoppableBatchId,
   updateDraft,
 }: {
   draft: string
@@ -944,8 +965,6 @@ function AgentConversationComposer({
   pendingText: string | null
   queuedMessagesContextValue: QueuedMessagesContextValue
   send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>
-  stop: () => Promise<void>
-  stoppableBatchId: string | null
   updateDraft: (value: string) => void
 }) {
   const {
@@ -1006,13 +1025,6 @@ function AgentConversationComposer({
             const files = filesFromAttachmentSources(consumeAttachments())
             void send(value, files, () => processFiles(files))
           }}
-          onStop={
-            stoppableBatchId
-              ? () => {
-                  void stop()
-                }
-              : undefined
-          }
         />
       </QueuedMessagesContext.Provider>
     </div>
@@ -1041,14 +1053,21 @@ export function AgentConversationChat() {
     stop,
     stoppableBatchId,
     updateDraft,
+    composerEpoch,
   } = useAgentConversationChatController()
   const queuedMessagesContextValue = useMemo(
     () => ({
       editingBatchId: editingQueueBatchId,
       messages: queuedMessages,
       onEdit: editQueuedMessage,
+      stoppable: stoppableBatchId != null,
+      onStop: stoppableBatchId
+        ? () => {
+            void stop()
+          }
+        : undefined,
     }),
-    [editQueuedMessage, editingQueueBatchId, queuedMessages],
+    [editQueuedMessage, editingQueueBatchId, queuedMessages, stop, stoppableBatchId],
   )
 
   return (
@@ -1092,6 +1111,7 @@ export function AgentConversationChat() {
             labels={{ chatInputPlaceholder: '询问小团宝业务…' }}
           >
             <AgentConversationComposer
+              key={composerEpoch}
               draft={draft}
               isRunning={isRunning}
               messages={messages}
@@ -1099,8 +1119,6 @@ export function AgentConversationChat() {
               pendingText={pendingText}
               queuedMessagesContextValue={queuedMessagesContextValue}
               send={send}
-              stop={stop}
-              stoppableBatchId={stoppableBatchId}
               updateDraft={updateDraft}
             />
           </CopilotChatConfigurationProvider>

@@ -73,6 +73,7 @@ import {
   CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
   CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
   WORKFLOW_AGENT_CONCURRENCY,
+  WORKFLOW_CANCEL_WATCH_MS,
   WORKFLOW_HEARTBEAT_MS,
   WORKFLOW_LEASE_MS,
   WORKFLOW_MAX_ATTEMPTS,
@@ -1961,6 +1962,12 @@ export class AiWorkflowProcessor {
     work: () => Promise<T>,
     abort?: AbortController,
   ): Promise<T> {
+    const abortIfLost = () =>
+      void this.stillClaimed(jobId).then((owned) => {
+        if (!owned) {
+          abort?.abort()
+        }
+      })
     const timer = setInterval(() => {
       void this.renewLease(jobId).then((owned) => {
         if (!owned) {
@@ -1968,11 +1975,25 @@ export class AiWorkflowProcessor {
         }
       })
     }, this.heartbeatMs())
+    const cancelWatch = setInterval(abortIfLost, this.cancelWatchMs())
     try {
       return await work()
     } finally {
       clearInterval(timer)
+      clearInterval(cancelWatch)
     }
+  }
+
+  private async stillClaimed(jobId: string): Promise<boolean> {
+    const job = await this.prisma.aiWorkflowJob.findFirst({
+      where: {
+        id: jobId,
+        status: AiWorkflowJobStatus.claimed,
+        claimedBy: this.workerId,
+      },
+      select: { id: true },
+    })
+    return job != null
   }
 
   private async scheduleRetry(
@@ -2078,6 +2099,10 @@ export class AiWorkflowProcessor {
 
   private heartbeatMs(): number {
     return this.configNumber('app.workflow.heartbeatMs', WORKFLOW_HEARTBEAT_MS)
+  }
+
+  private cancelWatchMs(): number {
+    return this.configNumber('app.workflow.cancelWatchMs', WORKFLOW_CANCEL_WATCH_MS)
   }
 
   private parseConcurrency(): number {

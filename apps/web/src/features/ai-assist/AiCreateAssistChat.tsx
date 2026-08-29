@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   CopilotChatConfigurationProvider,
+  CopilotChatInput,
   CopilotChatView,
   CopilotKit,
   useAgentContext,
+  type CopilotChatInputProps,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
 import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd'
@@ -449,6 +451,20 @@ function createSearchRouteTemplatesActivityRenderer(): ReactActivityMessageRende
 const DRAFT_SAVE_DEBOUNCE_MS = 600
 const DEFAULT_ATTACHMENT_TEXT = '请根据附件整理发团资料。'
 
+function DepartureAssistChatInputView(props: CopilotChatInputProps) {
+  return (
+    <CopilotChatInput
+      {...props}
+      isRunning={false}
+      onStop={undefined}
+      textArea={{ 'aria-label': '询问当前发团草稿' }}
+      sendButton={{ 'aria-label': '发送' }}
+    />
+  )
+}
+
+const DepartureAssistChatInput = Object.assign(DepartureAssistChatInputView, CopilotChatInput)
+
 function ChatComposer({
   messages,
   isRunning,
@@ -513,7 +529,6 @@ function ChatComposer({
           const files = filesFromAttachmentSources(ready)
           void onSend(value, files, () => processFiles(files))
         }}
-        onStop={onStop}
         welcomeScreen={WelcomeScreen}
         attachments={attachments}
         onRemoveAttachment={(id) => {
@@ -526,11 +541,15 @@ function ChatComposer({
         onDrop={(event) => {
           void handleDrop(event)
         }}
-        input={{
-          textArea: { 'aria-label': '询问当前发团草稿' },
-          sendButton: { 'aria-label': isRunning && onStop ? '停止当前处理' : '发送' },
-        }}
+        input={DepartureAssistChatInput}
       />
+      {onStop && isRunning ? (
+        <div className={styles.stopBar}>
+          <Button type="default" danger size="small" aria-label="停止当前处理" onClick={onStop}>
+            停止当前处理
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

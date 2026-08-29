@@ -30,9 +30,9 @@ interface AgentConversationState {
   openHistoricalConversation: (conversation: { id: string; title: string }) => void
   startNewConversation: (currentAttachment?: AgentCurrentPageAttachment | null) => void
   pageContextDismissed: boolean
+  composerEpoch: number
   attachCurrentPage: (currentAttachment: AgentCurrentPageAttachment | null) => void
   detachCurrentPage: () => void
-  restoreCurrentPageAfterSend: (currentAttachment: AgentCurrentPageAttachment | null) => void
   syncDefaultPageAttachment: (currentAttachment: AgentCurrentPageAttachment | null) => void
   expandToGlobal: (location: {
     pathname: string
@@ -57,6 +57,7 @@ const INITIAL_CONVERSATION_STATE = {
   globalOpen: false,
   attachedPageAttachment: null as AgentCurrentPageAttachment | null,
   pageContextDismissed: false,
+  composerEpoch: 0,
 }
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
@@ -99,6 +100,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         captured: false,
       }),
       pageContextDismissed: false,
+      composerEpoch: get().composerEpoch + 1,
     })
   },
   attachCurrentPage: (currentAttachment) =>
@@ -111,12 +113,6 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       pageContextDismissed: false,
     }),
   detachCurrentPage: () => set({ attachedPageAttachment: null, pageContextDismissed: true }),
-  restoreCurrentPageAfterSend: (currentAttachment) => {
-    if (!get().pageContextDismissed) {
-      return
-    }
-    set({ attachedPageAttachment: currentAttachment, pageContextDismissed: false })
-  },
   syncDefaultPageAttachment: (currentAttachment) => {
     const current = get()
     if (current.view === 'history' || current.pageContextDismissed) {

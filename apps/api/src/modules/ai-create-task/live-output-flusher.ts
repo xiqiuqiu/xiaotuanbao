@@ -1,3 +1,4 @@
+import { sanitizeVisibleReasoning } from '@xiaotuanbao/ai-contracts'
 import {
   LIVE_OUTPUT_EARLY_FLUSH_CHARS,
   LIVE_OUTPUT_FLUSH_MS,
@@ -70,7 +71,8 @@ export class LiveOutputFlusher {
     if (previous == null || previous === '') {
       return false
     }
-    return this.pendingReasoning !== previous && !this.pendingReasoning.startsWith(previous)
+    const next = sanitizeVisibleReasoning(this.pendingReasoning)
+    return next !== previous && !next.startsWith(previous)
   }
 
   private schedule(): void {
@@ -94,7 +96,7 @@ export class LiveOutputFlusher {
         return
       }
       const text = this.pendingText
-      const reasoningText = this.pendingReasoning
+      const reasoningText = sanitizeVisibleReasoning(this.pendingReasoning)
       if (this.lastFlushedText === text && this.lastFlushedReasoning === reasoningText) {
         return
       }

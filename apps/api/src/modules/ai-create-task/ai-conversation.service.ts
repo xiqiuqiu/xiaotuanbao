@@ -1588,69 +1588,23 @@ export class AiConversationService {
       idempotencyKey,
       request: { batchId },
       mutate: async (tx, batch) => {
-        if (batch.status === AiInputBatchStatus.cancelled) {
+        if (
+          batch.status === AiInputBatchStatus.cancelled ||
+          batch.status === AiInputBatchStatus.completed ||
+          batch.status === AiInputBatchStatus.failed
+        ) {
           return { batch, events: [] }
         }
         if (
+          batch.status !== AiInputBatchStatus.waiting_for_materials &&
           batch.status !== AiInputBatchStatus.ready_for_agent &&
           batch.status !== AiInputBatchStatus.preparing_context &&
           batch.status !== AiInputBatchStatus.agent_running &&
           batch.status !== AiInputBatchStatus.awaiting_user_input
         ) {
-          throw new ConflictException('仅可停止尚未结束的 Agent 处理；等待资料时请放弃本批')
+          throw new ConflictException('仅可停止尚未结束的 Agent 处理')
         }
-        await tx.aiWorkflowJob.updateMany({
-          where: {
-            inputBatchId: batch.id,
-            type: AiWorkflowJobType.agent_batch,
-            status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
-          },
-          data: {
-            status: AiWorkflowJobStatus.failed,
-            lastErrorCode: 'BATCH_CANCELLED',
-            leaseExpiresAt: null,
-            generation: { increment: 1 },
-          },
-        })
-        const runningAttempt = await tx.aiAgentAttempt.findFirst({
-          where: { inputBatchId: batch.id, status: AiAgentAttemptStatus.running },
-          orderBy: { startedAt: 'desc' },
-        })
-        await tx.aiAgentAttempt.updateMany({
-          where: { inputBatchId: batch.id, status: AiAgentAttemptStatus.running },
-          data: {
-            status: AiAgentAttemptStatus.failed,
-            errorCode: 'BATCH_CANCELLED',
-            endedAt: new Date(),
-          },
-        })
-        await tx.aiConversationInteraction.updateMany({
-          where: {
-            inputBatchId: batch.id,
-            status: AiConversationInteractionStatus.pending,
-          },
-          data: {
-            status: AiConversationInteractionStatus.cancelled,
-            version: { increment: 1 },
-          },
-        })
-        const updated = await tx.aiInputBatch.update({
-          where: { id: batch.id },
-          data: { status: AiInputBatchStatus.cancelled },
-          include: BATCH_MATERIAL_INCLUDE,
-        })
-        const statusEvent = await this.appendEvent(tx, {
-          organizationId,
-          conversationId: batch.conversationId,
-          kind: AiConversationEventKind.batch_status,
-          payload: {
-            batchId: batch.id,
-            status: AiInputBatchStatus.cancelled,
-            reason: 'user_stop',
-            attemptId: runningAttempt?.id ?? null,
-          },
-        })
-        return { batch: updated, events: [statusEvent] }
+        return this.cancelRunningBatch(tx, batch, 'user_stop')
       },
     })
     await discardLiveOutputAfterUserStop(this.liveOutput, conversationId, result.events)
@@ -2719,7 +2673,13 @@ export class AiConversationService {
     const running = await tx.aiInputBatch.findFirst({
       where: {
         conversationId,
-        status: { in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context] },
+        status: {
+          in: [
+            AiInputBatchStatus.agent_running,
+            AiInputBatchStatus.preparing_context,
+            AiInputBatchStatus.waiting_for_materials,
+          ],
+        },
       },
       include: BATCH_MATERIAL_INCLUDE,
       orderBy: { conversationVersion: 'asc' },
@@ -2748,7 +2708,6 @@ export class AiConversationService {
     await tx.aiWorkflowJob.updateMany({
       where: {
         inputBatchId: batch.id,
-        type: AiWorkflowJobType.agent_batch,
         status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
       },
       data: {

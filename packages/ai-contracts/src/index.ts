@@ -369,6 +369,7 @@ export {
   CONVERSATION_ROUTING_CAPABILITY_REF,
   conversationGeneralCapabilityDefinitionRegistry,
 } from './runtime/conversation-general-definitions'
+export { sanitizeVisibleReasoning } from './runtime/visible-reasoning'
 export {
   AI_EVIDENCE_SCHEMA_VERSION,
   AI_EVIDENCE_NORMALIZATION_VERSION,

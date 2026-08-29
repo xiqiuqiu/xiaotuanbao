@@ -43,6 +43,47 @@ function MockReasoningMessage({ content }: { content: string }) {
   )
 }
 
+function useMockComposerAttachments() {
+  const [files, setFiles] = useState<File[]>(() => {
+    const seeded = queuedFiles
+    queuedFiles = []
+    return seeded
+  })
+  return {
+    attachments: files.map((file) => ({
+      id: file.name,
+      filename: file.name,
+      status: 'ready',
+      source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+    })),
+    enabled: true,
+    dragOver: false,
+    fileInputRef: { current: null },
+    containerRef: { current: null },
+    processFiles: async (nextFiles: File[]) => {
+      setFiles((current) => [...current, ...nextFiles])
+    },
+    handleFileUpload: async () => {},
+    handleDragOver: () => {},
+    handleDragLeave: () => {},
+    handleDrop: async () => {},
+    removeAttachment: (id: string) => {
+      setFiles((current) => current.filter((file) => file.name !== id))
+    },
+    consumeAttachments: () => {
+      const snapshot = files
+      setFiles([])
+      return snapshot.map((file) => ({
+        id: file.name,
+        filename: file.name,
+        status: 'ready',
+        source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+        metadata: { file },
+      }))
+    },
+  }
+}
+
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
     id: 'c-1',
@@ -164,37 +205,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       },
     ),
     CopilotChatInput: MockCopilotChatInput,
-    useAttachments: () => ({
-      attachments: queuedFiles.map((file) => ({
-        id: file.name,
-        filename: file.name,
-        status: 'ready',
-        source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
-      })),
-      enabled: true,
-      dragOver: false,
-      fileInputRef: { current: null },
-      containerRef: { current: null },
-      processFiles: async (files: File[]) => {
-        queuedFiles = [...queuedFiles, ...files]
-      },
-      handleFileUpload: async () => {},
-      handleDragOver: () => {},
-      handleDragLeave: () => {},
-      handleDrop: async () => {},
-      removeAttachment: () => {},
-      consumeAttachments: () => {
-        const files = queuedFiles
-        queuedFiles = []
-        return files.map((file) => ({
-          id: file.name,
-          filename: file.name,
-          status: 'ready',
-          source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
-          metadata: { file },
-        }))
-      },
-    }),
+    useAttachments: useMockComposerAttachments,
     CopilotChatView: ({
       input: Input = MockCopilotChatInput,
       inputValue,
@@ -204,6 +215,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       isRunning,
       messages,
       onAddFile,
+      attachments,
     }: {
       input?: typeof MockCopilotChatInput
       inputValue?: string
@@ -212,6 +224,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       onStop?: () => void
       isRunning?: boolean
       onAddFile?: () => void
+      attachments?: Array<{ id?: string; filename?: string }>
       messages?: Array<{
         id?: string
         role?: string
@@ -220,6 +233,9 @@ vi.mock('@copilotkit/react-core/v2', () => {
       }>
     }) => (
       <div>
+        {(attachments ?? []).map((item) => (
+          <div key={item.id ?? item.filename}>{item.filename}</div>
+        ))}
         {(messages ?? []).map((message) => {
           if (message.role === 'reasoning' && typeof message.content === 'string') {
             return <MockReasoningMessage key={message.id} content={message.content} />
@@ -343,7 +359,8 @@ describe('AgentConversationChat page locator #371', () => {
       { text: '不带页面' },
       expect.any(String),
     )
-    expect(await screen.findByText('当前合作伙伴往来账款')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
+    expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
   })
 
   it('shows one task chip and sends it as the primary task candidate', async () => {
@@ -380,7 +397,8 @@ describe('AgentConversationChat page locator #371', () => {
       { text: '不带任务' },
       expect.any(String),
     )
-    expect(await screen.findByText('当前建团工作')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
+    expect(screen.queryByText('当前建团工作')).not.toBeInTheDocument()
   })
 
   it('shows the API validation message and restores the draft when sending fails', async () => {
@@ -455,6 +473,18 @@ describe('AgentConversationChat page locator #371', () => {
       },
       expect.any(String),
     )
+  })
+
+  it('drops unsaved composer attachments when starting a new conversation', async () => {
+    queuedFiles = [new File([new Uint8Array([1, 2, 3])], 'sample.pdf', { type: 'application/pdf' })]
+    renderChat()
+    expect(await screen.findByText('sample.pdf')).toBeInTheDocument()
+
+    await act(async () => {
+      useAgentConversationStore.getState().startNewConversation()
+    })
+
+    expect(screen.queryByText('sample.pdf')).not.toBeInTheDocument()
   })
 })
 
@@ -1082,6 +1112,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     })
     expect(await screen.findByText('已记下半段')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '停止当前处理' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
     expect(screen.getByText('AI 处理中')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '停止当前处理' }))
@@ -1089,6 +1120,40 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     expect(await screen.findByText('已停止当前处理')).toBeInTheDocument()
     expect(screen.queryByText('已记下半段')).not.toBeInTheDocument()
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+  })
+
+  it('keeps 发送 available while the Agent is running so the next turn can queue', async () => {
+    const user = userEvent.setup()
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'user_message',
+          payload: { text: '排队甲' },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+        {
+          id: 'e-4',
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      lastSequence: 4,
+    } as never)
+    renderChat()
+    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '排队甲')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      'c-1',
+      { text: '排队甲' },
+      expect.any(String),
+    )
+    expect(await screen.findByText('排队中 · 1')).toBeInTheDocument()
   })
 
   it('restores the current cumulative snapshot after EventSource reconnect without calling stop', async () => {

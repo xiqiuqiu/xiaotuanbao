@@ -14,6 +14,7 @@ describe('agent conversation store #370', () => {
       globalOpen: false,
       attachedPageAttachment: null,
       pageContextDismissed: false,
+      composerEpoch: 0,
     })
   })
 
@@ -116,6 +117,7 @@ describe('agent conversation store #370', () => {
       globalOpen: false,
       attachedPageAttachment: null,
       pageContextDismissed: false,
+      composerEpoch: 0,
     })
     useAgentConversationStore.getState().hydrateFromSession()
 
@@ -200,6 +202,23 @@ describe('agent conversation page locator #371', () => {
       kind: 'page_locator',
       locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
     })
+  })
+
+  it('does not restore a dismissed locator after send; 新建会话 bumps composerEpoch', () => {
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
+    })
+    const firstEpoch = useAgentConversationStore.getState().composerEpoch
+    useAgentConversationStore.getState().detachCurrentPage()
+    expect(useAgentConversationStore.getState().pageContextDismissed).toBe(true)
+
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1' },
+    })
+    expect(useAgentConversationStore.getState().composerEpoch).toBe(firstEpoch + 1)
+    expect(useAgentConversationStore.getState().pageContextDismissed).toBe(false)
   })
 
   it('keeps the attached locator when the first send persists a new conversation', () => {
