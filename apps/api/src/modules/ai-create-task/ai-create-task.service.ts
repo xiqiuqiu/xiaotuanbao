@@ -1204,7 +1204,7 @@ export class AiCreateTaskService {
           endDate,
           ownerUserId,
           departureType,
-          notes: snapshot.notes ?? undefined,
+          notes: snapshot.notes,
         },
         tx,
       )

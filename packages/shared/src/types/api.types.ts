@@ -812,7 +812,7 @@ export interface CopyDepartureDto {
   endDate: string
   ownerUserId: string
   departureType?: string
-  notes?: string
+  notes?: string | null
 }
 
 /** 发团创建草稿规范化快照（正式 Departure 创建前）。 */

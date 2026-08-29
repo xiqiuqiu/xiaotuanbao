@@ -353,7 +353,7 @@ export function createInfoFormValues(
 
 export function buildRouteSummary(route: RouteStepValues): string | null {
   if (route.mode === 'copy' && route.sourceDepartureNo) {
-    return `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
+    return buildCopySourceSummary(route.sourceDepartureNo)
   }
 
   if (route.mode === 'manual') {
@@ -381,7 +381,7 @@ function buildTemplateCopySummary(route: RouteStepValues): string | null {
 
     if (segmentCount === 0 && resourceCount === 0) {
       return route.sourceDepartureNo
-        ? `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
+        ? buildCopySourceSummary(route.sourceDepartureNo)
         : null
     }
 
@@ -389,4 +389,8 @@ function buildTemplateCopySummary(route: RouteStepValues): string | null {
   }
 
   return null
+}
+
+function buildCopySourceSummary(sourceDepartureNo: string): string {
+  return `复制自发团 ${sourceDepartureNo}，复用发团类型、备注与执行结构，不含客源、财务、金额与供应关系`
 }

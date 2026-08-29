@@ -138,6 +138,19 @@ describe('departure-wizard-form', () => {
     expect(buildRouteSummary(manual)).toBe('填写路线名称，不带出执行安排')
   })
 
+  it('explains copy source as structure-only reuse without amounts or supply relations', () => {
+    expect(
+      buildRouteSummary({
+        mode: 'copy',
+        routeName: '喀纳斯线',
+        copyFromDepartureId: 'dep-1',
+        sourceDepartureNo: 'XTB2026090001',
+        previewSegmentCount: 3,
+        previewResourceCount: 7,
+      }),
+    ).toBe('复制自发团 XTB2026090001，复用发团类型、备注与执行结构，不含客源、财务、金额与供应关系')
+  })
+
   it('backfills end date from template days only when it is empty or still equal to start date', () => {
     expect(resolveEndDateAfterTemplateSelect('2026-08-01', undefined, 6)).toBe('2026-08-06')
     expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-01', 6)).toBe('2026-08-06')

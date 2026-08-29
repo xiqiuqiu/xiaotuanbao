@@ -3,13 +3,21 @@ import { message } from 'antd'
 import type { NavigateOptions } from '@tanstack/react-router'
 import { getDeparture } from '@/services/departure.service'
 import { listSegments } from '@/services/segment.service'
-import type { RouteStepValues } from '../utils/departure-wizard-form'
+import type { InfoStepValues, RouteStepValues } from '../utils/departure-wizard-form'
+
+interface CopiedDepartureBasics {
+  departureType: InfoStepValues['departureType']
+  notes?: string
+}
 
 interface UseCopyFromDepartureSearchOptions {
   copyFrom?: string
   navigate: (options: NavigateOptions) => void
   setRouteValues: React.Dispatch<React.SetStateAction<RouteStepValues>>
-  enterInfoStep: (routeValues: RouteStepValues) => void | Promise<void>
+  enterInfoStep: (
+    routeValues: RouteStepValues,
+    copiedBasics?: CopiedDepartureBasics,
+  ) => void | Promise<void>
   onLoadError?: () => void
 }
 
@@ -61,7 +69,10 @@ export function useCopyFromDepartureSearch({
           previewResourceCount: segmentList.summary.resourceCount,
         }
         setRouteValuesRef.current(nextRouteValues)
-        await enterInfoStepRef.current(nextRouteValues)
+        await enterInfoStepRef.current(nextRouteValues, {
+          departureType: departure.departureType as InfoStepValues['departureType'],
+          notes: departure.notes ?? undefined,
+        })
       } catch (error) {
         if (cancelled) {
           return
