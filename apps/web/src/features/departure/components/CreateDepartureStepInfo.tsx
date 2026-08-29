@@ -34,6 +34,7 @@ import {
   computeDayCount,
   isEndDateBeforeStartDate,
   resolveEndDateAfterStartChange,
+  routeTemplateTourPeriodError,
   switchRouteSourceToManual,
 } from '../utils/departure-wizard-form'
 import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
@@ -350,6 +351,10 @@ function DepartureInfoForm({
                     if (isEndDateBeforeStartDate(startDate, value)) {
                       return Promise.reject(new Error('结束日期不能早于出团日期'))
                     }
+                    const mismatch = routeTemplateTourPeriodError(route, startDate, value)
+                    if (mismatch) {
+                      return Promise.reject(new Error(mismatch))
+                    }
                     return Promise.resolve()
                   },
                 }),
@@ -518,6 +523,9 @@ export function CreateDepartureStepInfo({
       committedStartDateRef.current = watchedStartDate
     }
   }, [watchedStartDate])
+  useEffect(() => {
+    void form.validateFields(['endDate']).catch(() => undefined)
+  }, [form, route.defaultDayCount, route.mode])
 
   const {
     data: employeeOptionsResult,

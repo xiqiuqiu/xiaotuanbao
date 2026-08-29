@@ -8,6 +8,8 @@ import {
   buildOutOfRangeItinerarySegmentConflict,
   formatOutOfRangeItinerarySegmentSummary,
   listOutOfRangeItinerarySegments,
+  assertRouteTemplateMatchesTourPeriod,
+  RouteTemplateDayCountMismatchError,
   type DepartureArchiveHistoryItem,
   type DepartureDetail,
   type DepartureListResult,
@@ -497,6 +499,7 @@ export class DepartureService {
     const templateId = dto.templateId?.trim()
     let routeSource: DepartureRouteSource = DepartureRouteSource.manual
     let sourceTemplateId: string | null = null
+    const dayCount = computeDayCount(startDate, endDate)
 
     if (templateId) {
       const template = await this.routeTemplateService.findForCopy(organizationId, templateId)
@@ -504,6 +507,28 @@ export class DepartureService {
       sourceTemplateId = template.id
       if (!routeName) {
         routeName = template.name
+      }
+      try {
+        assertRouteTemplateMatchesTourPeriod({
+          templateDayCount: template.defaultDayCount,
+          tourDayCount: dayCount,
+          startDate: formatDateOnly(startDate),
+          endDate: formatDateOnly(endDate),
+        })
+      } catch (error) {
+        if (error instanceof RouteTemplateDayCountMismatchError) {
+          throw new BadRequestException({
+            message: error.message,
+            data: {
+              code: error.code,
+              templateDayCount: error.templateDayCount,
+              tourDayCount: error.tourDayCount,
+              startDate: error.startDate,
+              endDate: error.endDate,
+            },
+          })
+        }
+        throw error
       }
     }
 
@@ -527,8 +552,6 @@ export class DepartureService {
         '导游必须选择含「导游」类别的供应商',
       )
     }
-
-    const dayCount = computeDayCount(startDate, endDate)
 
     const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
 

@@ -36,7 +36,7 @@ const initialValues: InfoFormValues = {
   dayCount: 10,
 }
 
-function renderStep(values: InfoFormValues = initialValues) {
+function renderStep(values: InfoFormValues = initialValues, routeValues: RouteStepValues = route) {
   let formRef: FormInstance<InfoFormValues> | undefined
 
   function Harness() {
@@ -47,7 +47,7 @@ function renderStep(values: InfoFormValues = initialValues) {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ConfigProvider locale={zhCN}>
-          <CreateDepartureStepInfo form={form} route={route} />
+          <CreateDepartureStepInfo form={form} route={routeValues} />
         </ConfigProvider>
       </QueryClientProvider>
     )
@@ -83,6 +83,54 @@ describe('CreateDepartureStepInfo', () => {
       screen.getByText('选择执行班组（司机、导游）不会自动提交应付'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('联系电话')).toHaveAttribute('type', 'tel')
+  })
+
+  it('选用常用路线且天数大于或小于团期时均给出字段级错误', async () => {
+    const shorterTour = renderStep(
+      {
+        ...initialValues,
+        startDate: '2026-08-01',
+        endDate: '2026-08-06',
+        dayCount: 6,
+      },
+      {
+        mode: 'template',
+        routeName: '喀纳斯阿勒泰10日线',
+        defaultDayCount: 10,
+        templateId: 'template-10',
+      },
+    )
+
+    await expect(shorterTour!.validateFields(['endDate'])).rejects.toBeTruthy()
+    expect(
+      await screen.findByText(
+        '常用路线为 10 天，与所选团期 6 天（2026-08-01～2026-08-06）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+      ),
+    ).toBeInTheDocument()
+
+    cleanup()
+
+    const longerTour = renderStep(
+      {
+        ...initialValues,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        dayCount: 10,
+      },
+      {
+        mode: 'template',
+        routeName: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        templateId: 'template-1',
+      },
+    )
+
+    await expect(longerTour!.validateFields(['endDate'])).rejects.toBeTruthy()
+    expect(
+      await screen.findByText(
+        '常用路线为 6 天，与所选团期 10 天（2026-08-01～2026-08-10）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('结束日期早于出团日期时给出字段级错误', async () => {

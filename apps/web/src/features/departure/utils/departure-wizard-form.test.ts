@@ -18,6 +18,7 @@ import {
   isEndDateBeforeStartDate,
   resolveEndDateAfterStartChange,
   resolveEndDateAfterTemplateSelect,
+  routeTemplateTourPeriodError,
   switchRouteSourceToManual,
 } from './departure-wizard-form'
 
@@ -141,6 +142,45 @@ describe('departure-wizard-form', () => {
     expect(resolveEndDateAfterTemplateSelect('2026-08-01', undefined, 6)).toBe('2026-08-06')
     expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-01', 6)).toBe('2026-08-06')
     expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-10', 6)).toBe('2026-08-10')
+  })
+
+  it('does not rewrite a user-chosen end date when a route template is selected', () => {
+    expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-03', 6)).toBe('2026-08-03')
+  })
+
+  it('explains when a selected route template does not match the tour period', () => {
+    expect(
+      routeTemplateTourPeriodError(
+        { mode: 'template', defaultDayCount: 6 },
+        '2026-08-01',
+        '2026-08-10',
+      ),
+    ).toBe(
+      '常用路线为 6 天，与所选团期 10 天（2026-08-01～2026-08-10）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+    )
+    expect(
+      routeTemplateTourPeriodError(
+        { mode: 'template', defaultDayCount: 10 },
+        '2026-08-01',
+        '2026-08-06',
+      ),
+    ).toBe(
+      '常用路线为 10 天，与所选团期 6 天（2026-08-01～2026-08-06）不一致。请调整常用路线或团期后再创建，系统不会自动改结束日。',
+    )
+    expect(
+      routeTemplateTourPeriodError(
+        { mode: 'template', defaultDayCount: 6 },
+        '2026-08-01',
+        '2026-08-06',
+      ),
+    ).toBeUndefined()
+    expect(
+      routeTemplateTourPeriodError(
+        { mode: 'manual', defaultDayCount: 6 },
+        '2026-08-01',
+        '2026-08-10',
+      ),
+    ).toBeUndefined()
   })
 
   it('recomputes a generated end date when start date changes, but keeps a user-edited end date', () => {
