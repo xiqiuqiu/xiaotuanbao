@@ -115,6 +115,7 @@ export default registerAs('app', () => {
     workflow: {
       leaseMs: positiveInt(process.env.WORKFLOW_LEASE_MS, 120_000),
       heartbeatMs: positiveInt(process.env.WORKFLOW_HEARTBEAT_MS, 30_000),
+      cancelWatchMs: positiveInt(process.env.WORKFLOW_CANCEL_WATCH_MS, 1_000),
       parseConcurrency: positiveInt(process.env.WORKFLOW_PARSE_CONCURRENCY, 2),
       agentConcurrency: positiveInt(process.env.WORKFLOW_AGENT_CONCURRENCY, 2),
     },

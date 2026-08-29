@@ -2,6 +2,7 @@ import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
 import {
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   registeredTaskDescriptors,
+  sanitizeVisibleReasoning,
 } from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
@@ -259,7 +260,16 @@ function failedBatchLabel(errorCode?: string): string {
   if (errorCode === 'CONTEXT_PREPARE_FAILED') {
     return '会话上下文整理失败，将自动重试'
   }
-  return '处理失败'
+  if (errorCode === 'PERMISSION_DENIED') {
+    return '当前权限不足，无法完成这次处理'
+  }
+  if (errorCode === 'AGENT_UNAVAILABLE') {
+    return 'AI 辅助暂时不可用，请稍后重试'
+  }
+  if (errorCode === 'INVALID_FORMAT') {
+    return '这次处理结果无法使用，请换一种说法再试'
+  }
+  return errorCode ? `处理失败（${errorCode}）` : '处理失败'
 }
 
 export function interactionFromPayload(
@@ -835,11 +845,15 @@ export function pruneSessionReasoning(
   return next
 }
 
-function reasoningMessage(attemptId: string, content: string): ChatMessage {
+function reasoningMessage(attemptId: string, content: string): ChatMessage | null {
+  const sanitized = sanitizeVisibleReasoning(content)
+  if (!sanitized) {
+    return null
+  }
   return {
     id: `live-reasoning-${attemptId}`,
     role: 'reasoning',
-    content,
+    content: sanitized,
   }
 }
 
@@ -871,7 +885,11 @@ function injectSessionReasoning(
     if (already) {
       continue
     }
-    result.splice(index, 0, reasoningMessage(attemptId, text))
+    const inserted = reasoningMessage(attemptId, text)
+    if (!inserted) {
+      continue
+    }
+    result.splice(index, 0, inserted)
   }
   return result
 }
@@ -892,7 +910,10 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
   }
   const liveParts: ChatMessage[] = []
   if (live.reasoningText) {
-    liveParts.push(reasoningMessage(live.attemptId, live.reasoningText))
+    const liveReasoning = reasoningMessage(live.attemptId, live.reasoningText)
+    if (liveReasoning) {
+      liveParts.push(liveReasoning)
+    }
   }
   if (live.text) {
     liveParts.push({

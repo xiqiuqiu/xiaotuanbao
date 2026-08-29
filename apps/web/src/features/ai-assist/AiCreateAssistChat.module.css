@@ -38,6 +38,15 @@
   pointer-events: none;
 }
 
+.stopBar {
+  display: flex;
+  justify-content: flex-end;
+  width: calc(100% - 32px);
+  max-width: 46rem;
+  margin: 0 auto 8px;
+  pointer-events: auto;
+}
+
 .queuePanel {
   width: calc(100% - 32px);
   max-width: 46rem;

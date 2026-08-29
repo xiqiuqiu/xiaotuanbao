@@ -86,13 +86,15 @@ describe('AI create chat status projection', () => {
     const statuses = messages
       .filter((message) => message.activityType === 'ai-create-batch-status')
       .map((message) => message.content as { label?: string; showBatchRetryAction?: boolean })
-    expect(statuses.map((item) => item.label)).toEqual(['处理失败'])
+    expect(statuses.map((item) => item.label)).toEqual(['当前权限不足，无法完成这次处理'])
     expect(statuses.some((item) => item.showBatchRetryAction)).toBe(true)
     expect(JSON.stringify(messages)).not.toContain('修改后重试')
   })
 
   it('distinguishes context capacity and missing profile failures from agent outages', () => {
-    expect(batchStatusLabel('failed', null, { errorCode: 'AGENT_UNAVAILABLE' })).toBe('处理失败')
+    expect(batchStatusLabel('failed', null, { errorCode: 'AGENT_UNAVAILABLE' })).toBe(
+      'AI 辅助暂时不可用，请稍后重试',
+    )
     expect(batchStatusLabel('failed', null, { errorCode: 'CONTEXT_CAPACITY_EXCEEDED' })).toBe(
       '上下文超出容量上限，请拆分或精简后再试',
     )
@@ -1048,7 +1050,7 @@ describe('projectConversationFrame live reasoning #416', () => {
         batchId: 'batch-1',
         generation: 3,
         revision: 1,
-        reasoningText: '可以调用 proposeReviewPackage 再核对',
+        reasoningText: '可以再核对审核包',
         text: '',
       },
     })
@@ -1060,9 +1062,29 @@ describe('projectConversationFrame live reasoning #416', () => {
       {
         id: 'live-reasoning-attempt-9',
         role: 'reasoning',
-        content: '可以调用 proposeReviewPackage 再核对',
+        content: '可以再核对审核包',
       },
     ])
+  })
+
+  it('hides leaked system prompt fragments and English chain-of-thought from 思考过程', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 1,
+        reasoningText:
+          'Let me reconsider: the conversation context is about 小团宝工作台. 根据当前 User 输入用中文给出简洁、可执行的说明。调用 routeConversation 登记建团目标。',
+        text: '',
+      },
+    })
+    const reasoning = messages.filter((message) => message.role === 'reasoning')
+    expect(JSON.stringify(reasoning)).not.toContain('Let me reconsider')
+    expect(JSON.stringify(reasoning)).not.toContain('routeConversation')
+    expect(JSON.stringify(reasoning)).not.toContain('根据当前 User 输入')
   })
 
   it('drops 思考过程 after a failed batch_status so it is not treated as a finished answer', () => {

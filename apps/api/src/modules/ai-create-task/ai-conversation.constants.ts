@@ -31,7 +31,7 @@ export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v2
 export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v9'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v9'
 /** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
-export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v4'
+export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v5'
 /** 无任务会话向模型暴露会话原文回读工具；Manifest 必须与 recall schema 对齐。 */
 export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-routing-recall/v2'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
@@ -40,6 +40,8 @@ export const CONVERSATION_HISTORY_MAX_PAGE_SIZE = 50
 export const CONVERSATION_SEARCH_MAX_CHARS = 80
 export const WORKFLOW_LEASE_MS = 120_000
 export const WORKFLOW_HEARTBEAT_MS = 30_000
+/** 停止后轮询当前 job 是否仍被本 Worker 持有，尽快 abort 模型流。 */
+export const WORKFLOW_CANCEL_WATCH_MS = 1_000
 export const WORKFLOW_PARSE_CONCURRENCY = 2
 export const WORKFLOW_AGENT_CONCURRENCY = 2
 /** 租约过期后最多再执行的次数；超出则失败并释放 `agent_running`，避免毒任务永久占锁。 */

@@ -107,6 +107,12 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     return <div data-testid="copilot-kit">{children}</div>
   },
   CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
+  CopilotChatInput: Object.assign(
+    () => null,
+    {
+      SendButton: () => null,
+    },
+  ),
   CopilotChatView: ({
     messages = [],
     isRunning,
@@ -1327,7 +1333,7 @@ describe('AiCreateAssistChat', () => {
       />,
     )
 
-    expect(screen.getByText('处理失败')).toBeInTheDocument()
+    expect(screen.getByText('当前权限不足，无法完成这次处理')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
     expect(screen.queryByText('本批处理失败，可修改后重试')).not.toBeInTheDocument()
   })

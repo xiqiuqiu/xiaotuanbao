@@ -323,7 +323,7 @@ describe('buildBudgetedContext', () => {
     })
 
     expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
-      version: 'conversation-general/v4',
+      version: 'conversation-general/v5',
       sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({
