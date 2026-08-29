@@ -6,7 +6,13 @@ import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.s
 import { useAgentConversationDraft } from './use-agent-conversation-draft'
 
 vi.mock('@/services/agent-conversation.service', () => ({
-  saveAgentConversationDraft: vi.fn(),
+  saveAgentConversationDraft: vi.fn().mockResolvedValue({
+    conversationId: 'c-1',
+    text: '',
+    draftEpoch: 0,
+    revision: 1,
+    updatedAt: '2026-08-25T00:00:00.000Z',
+  }),
 }))
 
 function draft(partial: Partial<AiConversationDraftView> = {}): AiConversationDraftView {
@@ -81,5 +87,18 @@ describe('useAgentConversationDraft', () => {
     })
 
     expect(useAgentConversationRuntimeStore.getState().draft).toBe('另一台设备')
+  })
+
+  it('applies a retracted queue draft even if composer just cleared after send', () => {
+    const { result } = renderHook(() => useAgentConversationDraft('c-1'))
+
+    act(() => {
+      result.current.updateDraft('')
+      result.current.applyServerDraft(
+        draft({ text: '排队甲', draftEpoch: 1, revision: 2 }),
+      )
+    })
+
+    expect(useAgentConversationRuntimeStore.getState().draft).toBe('排队甲')
   })
 })

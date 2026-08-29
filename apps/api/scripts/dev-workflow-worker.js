@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const path = require('node:path')
 
-const entry = path.join(__dirname, '../dist/src/workflow-worker.main.js')
+const entry = path.join(__dirname, '../dist/workflow-worker.main.js')
 const POLL_MS = 400
 
 let stopping = false
@@ -46,7 +46,7 @@ async function runOnce() {
 }
 
 async function main() {
-  console.log('[workflow-worker] 等待 API 编译 dist/src/workflow-worker.main.js …')
+  console.log('[workflow-worker] 等待 API 编译 dist/workflow-worker.main.js …')
   while (!stopping) {
     const code = await runOnce()
     if (stopping) {

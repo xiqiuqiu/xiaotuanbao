@@ -108,9 +108,64 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   },
   CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
   CopilotChatInput: Object.assign(
-    () => null,
+    ({
+      value,
+      onChange,
+      onSubmitMessage,
+      onStop,
+      isRunning,
+      sendButton: SendButton,
+    }: {
+      value?: string
+      onChange?: (value: string) => void
+      onSubmitMessage?: (value: string) => void
+      onStop?: () => void
+      isRunning?: boolean
+      sendButton?: (props: {
+        onClick: () => void
+        disabled?: boolean
+        'aria-label'?: string
+      }) => ReactNode
+    }) => {
+      const showStop = Boolean(isRunning && onStop && !(value ?? '').trim())
+      const handleClick = () => {
+        if (showStop) {
+          onStop?.()
+          return
+        }
+        onSubmitMessage?.(value ?? '')
+      }
+      return (
+        <div>
+          <textarea
+            aria-label="询问当前发团草稿"
+            value={value ?? ''}
+            onChange={(event) => onChange?.(event.target.value)}
+          />
+          {SendButton ? (
+            <SendButton onClick={handleClick} aria-label={showStop ? '停止当前处理' : '发送'} />
+          ) : (
+            <button type="button" aria-label={showStop ? '停止当前处理' : '发送'} onClick={handleClick}>
+              {showStop ? '停止当前处理' : '发送'}
+            </button>
+          )}
+        </div>
+      )
+    },
     {
-      SendButton: () => null,
+      SendButton: ({
+        children,
+        ...props
+      }: {
+        children?: ReactNode
+        'aria-label'?: string
+        onClick?: () => void
+        disabled?: boolean
+      }) => (
+        <button type="button" {...props}>
+          {props['aria-label'] ?? children}
+        </button>
+      ),
     },
   ),
   CopilotChatView: ({
@@ -120,6 +175,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     onInputChange,
     onSubmitMessage,
     onStop,
+    input: Input,
     welcomeScreen,
     suggestions,
     onSelectSuggestion,
@@ -135,6 +191,13 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
     onStop?: () => void
+    input?: (props: {
+      value?: string
+      onChange?: (value: string) => void
+      onSubmitMessage?: (value: string) => void
+      onStop?: () => void
+      isRunning?: boolean
+    }) => ReactNode
     welcomeScreen?:
       | false
       | ((props: { input?: ReactNode; suggestionView?: ReactNode }) => ReactNode)
@@ -142,7 +205,15 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     onSelectSuggestion?: (suggestion: { title: string; message: string }, index: number) => void
   }) => {
     capturedView = { messages, isRunning, inputValue, onInputChange, onSubmitMessage, onStop }
-    const input = (
+    const input = Input ? (
+      <Input
+        value={inputValue}
+        onChange={onInputChange}
+        onSubmitMessage={onSubmitMessage}
+        onStop={onStop}
+        isRunning={isRunning}
+      />
+    ) : (
       <textarea
         aria-label="询问当前发团草稿"
         placeholder="询问当前发团草稿…"
@@ -231,14 +302,6 @@ vi.mock('@copilotkit/react-core/v2', () => ({
           })}
         </div>
         {welcome ? null : input}
-        <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
-          发送
-        </button>
-        {isRunning && onStop ? (
-          <button type="button" onClick={() => onStop()}>
-            停止当前处理
-          </button>
-        ) : null}
       </div>
     )
   },

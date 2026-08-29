@@ -1265,6 +1265,23 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
         status: 'agent_running',
       } as never),
     ).toBe('batch-active')
+    expect(
+      currentStoppableBatchId([
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'user_message',
+          payload: { text: '排队甲' },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ]),
+    ).toBe('batch-1')
   })
 })
 

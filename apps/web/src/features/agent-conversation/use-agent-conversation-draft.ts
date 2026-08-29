@@ -50,13 +50,21 @@ export function useAgentConversationDraft(conversationId: string | null) {
     ) {
       return
     }
-    if (editingDraftRef.current) {
+    const localDraft = useAgentConversationRuntimeStore.getState().draft.trim()
+    if (editingDraftRef.current && localDraft.length > 0) {
       const deferred = deferredDraftRef.current
       if (!deferred || isNewerDraftVersion(next, deferred)) {
         deferredDraftRef.current = next
       }
       return
     }
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current)
+      draftSaveTimerRef.current = undefined
+    }
+    pendingDraftTextRef.current = null
+    editingDraftRef.current = false
+    deferredDraftRef.current = null
     draftEpochRef.current = next.draftEpoch
     draftRevisionRef.current = next.revision
     useAgentConversationRuntimeStore.getState().hydrate({

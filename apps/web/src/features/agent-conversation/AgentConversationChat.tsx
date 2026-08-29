@@ -65,6 +65,7 @@ import {
 } from './task-descriptor-navigation'
 import { useCurrentPageAttachment } from './use-current-page-locator'
 import { formatReviewFieldList } from '@/features/ai-assist/review-field-labels'
+import { ComposerSendButton } from '@/features/ai-assist/composer-send-button'
 import {
   DEFAULT_TASKLESS_ATTACHMENT_TEXT,
   filesFromAttachmentSources,
@@ -98,15 +99,12 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
     stoppable,
     onStop,
   } = useContext(QueuedMessagesContext)
+  const draftValue = String(props.value ?? '')
+  const hasDraft = draftValue.trim().length > 0
+  const draftEpoch = useAgentConversationRuntimeStore((state) => state.draftEpoch)
+  const draftRevision = useAgentConversationRuntimeStore((state) => state.revision)
   return (
     <div className={chatStyles.composerStack}>
-      {stoppable && onStop ? (
-        <div className={chatStyles.stopBar}>
-          <Button type="default" danger size="small" aria-label="停止当前处理" onClick={onStop}>
-            停止当前处理
-          </Button>
-        </div>
-      ) : null}
       {queuedMessages.length > 0 ? (
         <section
           className={chatStyles.queuePanel}
@@ -146,12 +144,18 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
       ) : null}
       <CopilotChatInput
         {...props}
-        isRunning={false}
-        onStop={undefined}
+        key={`${draftEpoch}-${draftRevision}`}
+        isRunning={stoppable && !hasDraft}
+        onStop={onStop}
         textArea={{ 'aria-label': '询问小团宝业务' }}
-        sendButton={{
-          'aria-label': '发送',
-        }}
+        sendButton={(buttonProps) => (
+          <ComposerSendButton
+            {...buttonProps}
+            isRunning={stoppable}
+            canStop={Boolean(onStop)}
+            draftValue={draftValue}
+          />
+        )}
       />
     </div>
   )
@@ -956,6 +960,7 @@ function AgentConversationComposer({
   pendingText,
   queuedMessagesContextValue,
   send,
+  stop,
   updateDraft,
 }: {
   draft: string
@@ -965,6 +970,7 @@ function AgentConversationComposer({
   pendingText: string | null
   queuedMessagesContextValue: QueuedMessagesContextValue
   send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  stop?: () => void
   updateDraft: (value: string) => void
 }) {
   const {
@@ -1025,6 +1031,7 @@ function AgentConversationComposer({
             const files = filesFromAttachmentSources(consumeAttachments())
             void send(value, files, () => processFiles(files))
           }}
+          onStop={stop}
         />
       </QueuedMessagesContext.Provider>
     </div>
@@ -1119,6 +1126,7 @@ export function AgentConversationChat() {
               pendingText={pendingText}
               queuedMessagesContextValue={queuedMessagesContextValue}
               send={send}
+              stop={stoppableBatchId ? stop : undefined}
               updateDraft={updateDraft}
             />
           </CopilotChatConfigurationProvider>
