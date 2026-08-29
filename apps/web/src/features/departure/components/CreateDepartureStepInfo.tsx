@@ -479,7 +479,7 @@ function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSumm
           {route.mode === 'copy' ? (
             <Typography.Text>
               <CopyOutlined className={styles.summaryIcon} aria-hidden />
-              复制已有发团的行程与资源
+              将带出执行安排结构（资源金额为 0，不含供应关系）
             </Typography.Text>
           ) : null}
         </Space>

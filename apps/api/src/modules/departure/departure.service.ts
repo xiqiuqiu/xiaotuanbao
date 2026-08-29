@@ -58,6 +58,7 @@ import {
   deriveDepartureProgress,
   formatDateOnly,
   parseDateOnly,
+  parseDateOnlyStrict,
 } from './departure-date.utils'
 import { fillMissingDailySkeletonInTx } from './daily-segment-skeleton.write'
 import { DepartureCopyService } from './departure-copy.service'
@@ -627,8 +628,14 @@ export class DepartureService {
       throw new BadRequestException('团名不能为空')
     }
 
-    const startDate = parseDateOnly(dto.startDate)
-    const endDate = parseDateOnly(dto.endDate)
+    let startDate: Date
+    let endDate: Date
+    try {
+      startDate = parseDateOnlyStrict(dto.startDate)
+      endDate = parseDateOnlyStrict(dto.endDate)
+    } catch {
+      throw new BadRequestException('出团日与结束日须为 YYYY-MM-DD')
+    }
 
     if (endDate < startDate) {
       throw new BadRequestException('结束日期不能早于出团日期')
@@ -654,7 +661,7 @@ export class DepartureService {
         dayCount,
         ownerUserId: dto.ownerUserId,
         status: DepartureStatus.editing,
-        notes: dto.notes?.trim() || null,
+        notes: dto.notes === undefined ? sourceDeparture.notes : dto.notes?.trim() || null,
       },
     })
 
@@ -664,6 +671,7 @@ export class DepartureService {
       sourceDepartureId,
       targetDepartureId: created.id,
       targetStartDate: startDate,
+      targetEndDate: endDate,
     })
 
     await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)

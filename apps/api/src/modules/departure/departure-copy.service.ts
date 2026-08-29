@@ -1,6 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import type { Prisma } from '@prisma/client'
+import {
+  CounterpartyType,
+  type Prisma,
+  type SegmentResource,
+} from '@prisma/client'
+import {
+  buildOutOfRangeItinerarySegmentConflict,
+  formatOutOfRangeItinerarySegmentSummary,
+  listOutOfRangeItinerarySegments,
+} from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { formatDateOnly } from './departure-date.utils'
 import type { CreateRouteTemplateFromDepartureDto } from './dto/route-template.dto'
 import { allocateSegmentDates } from './route-template-date.utils'
 import type { RouteTemplateDetailSummary } from './route-template.service'
@@ -12,6 +22,7 @@ export interface CopyFromDepartureParams {
   sourceDepartureId: string
   targetDepartureId: string
   targetStartDate: Date
+  targetEndDate: Date
 }
 
 @Injectable()
@@ -46,6 +57,7 @@ export class DepartureCopyService {
       sourceDepartureId,
       targetDepartureId,
       targetStartDate,
+      targetEndDate,
     } = params
 
     const sourceDeparture = await this.findForCopy(organizationId, sourceDepartureId)
@@ -59,6 +71,7 @@ export class DepartureCopyService {
       targetStartDate,
       segments.map((segment) => segment.dayCount),
     )
+    this.assertCopiedSegmentsFitTourPeriod(segments, dateRanges, targetStartDate, targetEndDate)
 
     for (const [index, sourceSegment] of segments.entries()) {
       const dateRange = dateRanges[index]
@@ -82,17 +95,9 @@ export class DepartureCopyService {
       }
 
       await tx.segmentResource.createMany({
-        data: sourceSegment.resources.map((resource) => ({
-          segmentId: itinerarySegment.id,
-          resourceKind: resource.resourceKind,
-          counterpartyType: resource.counterpartyType,
-          partnerId: resource.partnerId,
-          supplierId: resource.supplierId,
-          title: resource.title,
-          amountCents: 0,
-          notes: resource.notes,
-          pendingCheck: true,
-        })),
+        data: sourceSegment.resources.map((resource) =>
+          toCopiedSegmentResource(itinerarySegment.id, resource),
+        ),
       })
     }
   }
@@ -134,5 +139,65 @@ export class DepartureCopyService {
       defaultDayCount: dto.defaultDayCount,
       segments: templateSegments,
     })
+  }
+
+  private assertCopiedSegmentsFitTourPeriod(
+    segments: Array<{ id: string; name: string }>,
+    dateRanges: Array<{ startDate: Date | null; endDate: Date | null }>,
+    targetStartDate: Date,
+    targetEndDate: Date,
+  ) {
+    const periodStartDate = formatDateOnly(targetStartDate)
+    const periodEndDate = formatDateOnly(targetEndDate)
+    const proposed = segments.map((segment, index) => {
+      const range = dateRanges[index]
+      return {
+        id: segment.id,
+        name: segment.name,
+        startDate: range.startDate ? formatDateOnly(range.startDate) : null,
+        endDate: range.endDate ? formatDateOnly(range.endDate) : null,
+      }
+    })
+    const outOfRange = listOutOfRangeItinerarySegments(
+      periodStartDate,
+      periodEndDate,
+      proposed,
+    )
+    if (outOfRange.length === 0) {
+      return
+    }
+
+    const conflict = buildOutOfRangeItinerarySegmentConflict(
+      periodStartDate,
+      periodEndDate,
+      outOfRange,
+    )
+    throw new BadRequestException({
+      message: formatOutOfRangeItinerarySegmentSummary(conflict).replace(
+        '保存被拒绝',
+        '复制被拒绝',
+      ),
+      data: conflict,
+    })
+  }
+}
+
+function toCopiedSegmentResource(
+  segmentId: string,
+  resource: Pick<
+    SegmentResource,
+    'resourceKind' | 'title' | 'notes'
+  >,
+) {
+  return {
+    segmentId,
+    resourceKind: resource.resourceKind,
+    counterpartyType: CounterpartyType.supplier,
+    partnerId: null,
+    supplierId: null,
+    title: resource.title,
+    amountCents: 0,
+    notes: resource.notes,
+    pendingCheck: true,
   }
 }

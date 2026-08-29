@@ -11,7 +11,7 @@ import {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, DEPARTURE_NO_REGEX, loginAs } from './helpers'
+import { authRequest, createTestApp, DEPARTURE_NO_REGEX, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Departure copy & save template (e2e)', () => {
   let app: INestApplication
@@ -21,6 +21,8 @@ describe('Departure copy & save template (e2e)', () => {
   let ownerUserId: string
   let partnerId: string
   let supplierId: string
+  let transportSupplierId: string
+  let guideSupplierId: string
   const testPrefix = `e2e-departure-copy-${Date.now()}`
 
   beforeAll(async () => {
@@ -57,11 +59,39 @@ describe('Departure copy & save template (e2e)', () => {
       },
     })
     supplierId = supplier.id
+
+    const transportSupplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-transport`,
+        categories: [ResourceKind.transport],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    transportSupplierId = transportSupplier.id
+
+    const guideSupplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-guide`,
+        categories: [ResourceKind.guide],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    guideSupplierId = guideSupplier.id
   })
 
   afterAll(async () => {
     await prisma.paymentSchedule.deleteMany({
       where: { organizationId, scheduleNo: { startsWith: testPrefix } },
+    })
+    await prisma.departureMaterial.deleteMany({
+      where: {
+        departure: { organizationId, name: { startsWith: testPrefix } },
+      },
+    })
+    await prisma.storedObject.deleteMany({
+      where: { organizationId, originalFilename: { startsWith: testPrefix } },
     })
     await prisma.sourceOrderGuest.deleteMany({
       where: {
@@ -80,6 +110,16 @@ describe('Departure copy & save template (e2e)', () => {
         segment: {
           departure: { organizationId, name: { startsWith: testPrefix } },
         },
+      },
+    })
+    await prisma.departureResource.deleteMany({
+      where: {
+        departure: { organizationId, name: { startsWith: testPrefix } },
+      },
+    })
+    await prisma.departureIncomeRecord.deleteMany({
+      where: {
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.itinerarySegment.deleteMany({
@@ -111,6 +151,16 @@ describe('Departure copy & save template (e2e)', () => {
     await prisma.supplier.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
+    const leftoverOrgs = await prisma.organization.findMany({
+      where: { name: { startsWith: testPrefix } },
+      select: { id: true },
+    })
+    if (leftoverOrgs.length > 0) {
+      const leftoverIds = leftoverOrgs.map((org) => org.id)
+      await prisma.departure.deleteMany({ where: { organizationId: { in: leftoverIds } } })
+      await prisma.user.deleteMany({ where: { organizationId: { in: leftoverIds } } })
+      await prisma.organization.deleteMany({ where: { id: { in: leftoverIds } } })
+    }
     await prisma.$disconnect()
     await app.close()
   })
@@ -124,6 +174,8 @@ describe('Departure copy & save template (e2e)', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
+        departureType: 'independent',
+        notes: '源团基础备注',
       })
       .expect(201)
 
@@ -154,6 +206,67 @@ describe('Departure copy & save template (e2e)', () => {
       },
     })
 
+    await prisma.itinerarySegment.update({
+      where: { id: segmentId },
+      data: {
+        fullTicketCount: 8,
+        halfTicketCount: 2,
+      },
+    })
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departureId}`)
+      .send({
+        driverSupplierId: transportSupplierId,
+        guideSupplierId,
+        vehiclePlate: '新A·20601',
+        contactPhone: '13800138000',
+      })
+      .expect(200)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId: transportSupplierId,
+        title: '全程用车',
+        amountCents: 200000,
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/income-records`)
+      .send({
+        type: 'coach_sales',
+        projectName: '车销干果',
+        amountCents: 12000,
+      })
+      .expect(201)
+
+    const storedObject = await prisma.storedObject.create({
+      data: {
+        organizationId,
+        objectKey: `orgs/${organizationId}/${testPrefix}-${suffix}-attachment`,
+        originalFilename: `${testPrefix}-${suffix}.pdf`,
+        contentType: 'application/pdf',
+        sizeBytes: 4,
+        createdByUserId: ownerUserId,
+      },
+    })
+    await prisma.departureMaterial.create({
+      data: {
+        organizationId,
+        departureId,
+        storedObjectId: storedObject.id,
+        originalFilename: `${testPrefix}-${suffix}.pdf`,
+        contentType: 'application/pdf',
+        sizeBytes: 4,
+        sha256: `${testPrefix}-${suffix}-sha256`,
+        contentDigest: `${testPrefix}-${suffix}-digest`,
+        createdByUserId: ownerUserId,
+      },
+    })
+
     const sourceOrderResponse = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
@@ -168,6 +281,11 @@ describe('Departure copy & save template (e2e)', () => {
       .expect(201)
 
     const sourceOrderId = sourceOrderResponse.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/guests`)
+      .send({ name: '张三', phone: '13800000000', gender: 'male' })
+      .expect(201)
 
     await prisma.paymentSchedule.create({
       data: {
@@ -265,10 +383,27 @@ describe('Departure copy & save template (e2e)', () => {
       routeSource: DepartureRouteSource.copy,
       sourceTemplateId: null,
       routeName: `${testPrefix}-喀纳斯线`,
+      departureType: 'independent',
+      notes: '源团基础备注',
+      status: 'editing',
+      sourceOrderCount: 0,
     })
     expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
 
     const copiedDepartureId = response.body.data.id as string
+    const copiedRow = await prisma.departure.findUnique({ where: { id: copiedDepartureId } })
+    expect(copiedRow?.organizationId).toBe(organizationId)
+
+    const copiedDetail = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}`)
+      .expect(200)
+    expect(copiedDetail.body.data).toMatchObject({
+      driverSupplierId: null,
+      guideSupplierId: null,
+      vehiclePlate: null,
+      contactPhone: null,
+      status: 'editing',
+    })
 
     const segmentsResponse = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${copiedDepartureId}/segments`)
@@ -287,6 +422,13 @@ describe('Departure copy & save template (e2e)', () => {
       dayCount: 3,
     })
     expect(copiedSegment).not.toHaveProperty('fromTemplate')
+    expect(
+      segmentsResponse.body.data.items.every(
+        (item: { startDate: string | null; endDate: string | null }) =>
+          !item.startDate ||
+          (item.startDate >= '2026-09-01' && (item.endDate ?? item.startDate) <= '2026-09-10'),
+      ),
+    ).toBe(true)
 
     const segmentId = copiedSegment!.id as string
     const resourcesResponse = await authRequest(app, coordinatorToken)
@@ -297,6 +439,9 @@ describe('Departure copy & save template (e2e)', () => {
     expect(resourcesResponse.body.data.items[0].pendingCheck).toBe(true)
     expect(resourcesResponse.body.data.items[0].amountCents).toBe(0)
     expect(resourcesResponse.body.data.items[0].title).toBe('喀纳斯酒店')
+    expect(resourcesResponse.body.data.items[0].resourceKind).toBe(ResourceKind.hotel)
+    expect(resourcesResponse.body.data.items[0].supplierId).toBeNull()
+    expect(resourcesResponse.body.data.items[0].partnerId).toBeNull()
 
     const segments = await prisma.itinerarySegment.findMany({
       where: { departureId: copiedDepartureId },
@@ -307,6 +452,8 @@ describe('Departure copy & save template (e2e)', () => {
     expect(dbCopied).toBeTruthy()
     expect(dbCopied).not.toHaveProperty('fromTemplate')
     expect(dbCopied!.pendingCheck).toBe(true)
+    expect(dbCopied!.fullTicketCount).toBe(0)
+    expect(dbCopied!.halfTicketCount).toBe(0)
 
     const resources = await prisma.segmentResource.findMany({
       where: { segmentId: dbCopied!.id },
@@ -315,6 +462,9 @@ describe('Departure copy & save template (e2e)', () => {
     expect(resources[0]).not.toHaveProperty('fromTemplate')
     expect(resources[0].pendingCheck).toBe(true)
     expect(resources[0].amountCents).toBe(0)
+    expect(resources[0].supplierId).toBeNull()
+    expect(resources[0].partnerId).toBeNull()
+    expect(resources[0].resourceKind).toBe(ResourceKind.hotel)
 
     const clearedSegment = await authRequest(app, coordinatorToken)
       .patch(`/api/segments/${segmentId}`)
@@ -330,9 +480,10 @@ describe('Departure copy & save template (e2e)', () => {
     const resourceId = resourcesResponse.body.data.items[0].id as string
     const clearedResource = await authRequest(app, coordinatorToken)
       .patch(`/api/segment-resources/${resourceId}`)
-      .send({ title: '喀纳斯酒店' })
+      .send({ title: '喀纳斯酒店', supplierId })
       .expect(200)
     expect(clearedResource.body.data.pendingCheck).toBe(false)
+    expect(clearedResource.body.data.supplierId).toBe(supplierId)
 
     const segmentsAfterResourceSave = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${copiedDepartureId}/segments`)
@@ -347,10 +498,30 @@ describe('Departure copy & save template (e2e)', () => {
     })
     expect(sourceOrders).toBe(0)
 
+    const guests = await prisma.sourceOrderGuest.count({
+      where: { sourceOrder: { departureId: copiedDepartureId } },
+    })
+    expect(guests).toBe(0)
+
     const paymentSchedules = await prisma.paymentSchedule.count({
       where: { departureId: copiedDepartureId },
     })
     expect(paymentSchedules).toBe(0)
+
+    const departureResources = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/resources`)
+      .expect(200)
+    expect(departureResources.body.data.items).toHaveLength(0)
+
+    const incomeRecords = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/income-records`)
+      .expect(200)
+    expect(incomeRecords.body.data.items).toHaveLength(0)
+
+    const attachments = await prisma.departureMaterial.count({
+      where: { departureId: copiedDepartureId },
+    })
+    expect(attachments).toBe(0)
   })
 
   it('copies departure including segments with unset dates', async () => {
@@ -418,6 +589,23 @@ describe('Departure copy & save template (e2e)', () => {
     })
   })
 
+  it('allows copied base notes to be explicitly cleared', async () => {
+    const { departureId } = await createRichDeparture('copy-clear-notes')
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-copied-clear-notes`,
+        startDate: '2026-09-01',
+        endDate: '2026-09-10',
+        ownerUserId,
+        notes: null,
+      })
+      .expect(201)
+
+    expect(response.body.data.notes).toBeNull()
+  })
+
   it('rejects departure copy when copy flags are present', async () => {
     const { departureId } = await createRichDeparture('copy-flags')
 
@@ -437,6 +625,111 @@ describe('Departure copy & save template (e2e)', () => {
     expect(String(response.body.message)).toContain('copySegments')
     expect(String(response.body.message)).toContain('copyResources')
     expect(String(response.body.message)).toContain('copyReferencePrices')
+  })
+
+  it('rejects copy when the allocated itinerary overflows the new tour period', async () => {
+    const { departureId } = await createRichDeparture('copy-overflow')
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-copied-overflow`,
+        startDate: '2026-09-01',
+        endDate: '2026-09-02',
+        ownerUserId,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('复制被拒绝')
+    expect(String(response.body.message)).toContain('2026-09-01～2026-09-02')
+    expect(response.body.data).toMatchObject({
+      code: 'ITINERARY_SEGMENT_OUT_OF_RANGE',
+      periodStartDate: '2026-09-01',
+      periodEndDate: '2026-09-02',
+    })
+
+    const leaked = await prisma.departure.findFirst({
+      where: { organizationId, name: `${testPrefix}-copied-overflow` },
+    })
+    expect(leaked).toBeNull()
+  })
+
+  it('rejects copy when startDate is a full ISO datetime instead of YYYY-MM-DD', async () => {
+    const { departureId } = await createRichDeparture('copy-date-only')
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-copied-datetime`,
+        startDate: '2026-09-01T00:00:00.000Z',
+        endDate: '2026-09-10',
+        ownerUserId,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('YYYY-MM-DD')
+  })
+
+  it.each([
+    ['2026-02-30', '2026-03-10'],
+    ['2026-13-01', '2026-13-10'],
+  ])('rejects copy when the tour period contains an invalid calendar date (%s)', async (startDate, endDate) => {
+    const { departureId } = await createRichDeparture(`copy-invalid-date-${startDate}`)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-copied-invalid-date-${startDate}`,
+        startDate,
+        endDate,
+        ownerUserId,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('YYYY-MM-DD')
+  })
+
+  it('returns 404 when copying a departure from another organization', async () => {
+    const otherOrg = await prisma.organization.create({
+      data: {
+        name: `${testPrefix}-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`copy${Math.random().toString(36)}xyz`),
+      },
+    })
+    const otherUser = await prisma.user.create({
+      data: {
+        organizationId: otherOrg.id,
+        username: `${testPrefix}-other-user`,
+        passwordHash: 'unused',
+        name: '其他企业用户',
+      },
+    })
+    const foreign = await prisma.departure.create({
+      data: {
+        organizationId: otherOrg.id,
+        departureNo: `${testPrefix}-foreign`,
+        name: `${testPrefix}-foreign-name`,
+        routeName: '外部路线',
+        startDate: new Date('2026-08-01T00:00:00.000Z'),
+        endDate: new Date('2026-08-03T00:00:00.000Z'),
+        dayCount: 3,
+        ownerUserId: otherUser.id,
+      },
+    })
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${foreign.id}/copy`)
+      .send({
+        name: `${testPrefix}-copied-foreign`,
+        startDate: '2026-09-01',
+        endDate: '2026-09-10',
+        ownerUserId,
+      })
+      .expect(404)
+
+    await prisma.departure.delete({ where: { id: foreign.id } })
+    await prisma.user.delete({ where: { id: otherUser.id } })
+    await prisma.organization.delete({ where: { id: otherOrg.id } })
   })
 
   it('keeps copied departure unchanged after source segment rename', async () => {

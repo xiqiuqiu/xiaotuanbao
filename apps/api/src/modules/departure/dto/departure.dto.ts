@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  registerDecorator,
 } from 'class-validator'
 import { Transform, Type } from 'class-transformer'
 import {
@@ -14,6 +15,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { DepartureStatus as PrismaDepartureStatus, DepartureType as PrismaDepartureType } from '@prisma/client'
 import type { DepartureOperationalWindow } from '../departure-operational-window'
+import { isDateOnly } from '../departure-date.utils'
 
 export class CreateDepartureDto {
   @IsString()
@@ -225,15 +227,27 @@ export class UnarchiveDepartureDto {
   reason!: string
 }
 
+function IsDateOnly(message: string) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'isDateOnly',
+      target: object.constructor,
+      propertyName,
+      options: { message },
+      validator: { validate: isDateOnly },
+    })
+  }
+}
+
 export class CopyDepartureDto {
   @IsString()
   @IsNotEmpty()
   name!: string
 
-  @IsDateString()
+  @IsDateOnly('出团日须为 YYYY-MM-DD')
   startDate!: string
 
-  @IsDateString()
+  @IsDateOnly('结束日须为 YYYY-MM-DD')
   endDate!: string
 
   @IsString()
@@ -246,7 +260,7 @@ export class CopyDepartureDto {
 
   @IsOptional()
   @IsString()
-  notes?: string
+  notes?: string | null
 }
 
 export class RegisterDepartureAttachmentDto {

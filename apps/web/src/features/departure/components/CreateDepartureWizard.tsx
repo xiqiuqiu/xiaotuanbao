@@ -342,7 +342,10 @@ function useCreateDepartureWizardController() {
   }, [infoForm])
 
   const enterInfoStep = useCallback(
-    async (nextRouteValues: RouteStepValues) => {
+    async (
+      nextRouteValues: RouteStepValues,
+      copiedBasics?: Pick<InfoFormValues, 'departureType' | 'notes'>,
+    ) => {
       if (!user) {
         message.error('请先登录')
         return
@@ -351,12 +354,10 @@ function useCreateDepartureWizardController() {
       setInitializingForm(true)
       try {
         const startDate = nextRouteValues.startDate ?? getShanghaiTodayString()
-        const initialValues = createInfoFormValues(
-          nextRouteValues,
-          user.id,
-          startDate,
-          '',
-        )
+        const initialValues = {
+          ...createInfoFormValues(nextRouteValues, user.id, startDate, ''),
+          ...copiedBasics,
+        }
         infoForm.setFieldsValue(initialValues)
         await loadDepartureNo()
         setRouteValues(nextRouteValues)

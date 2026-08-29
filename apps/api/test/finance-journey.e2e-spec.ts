@@ -1956,11 +1956,12 @@ describe('Finance journeys (cross-module e2e)', () => {
       throw new Error('Copied resource not found')
     }
     expect(resource.amountCents).toBe(0)
+    expect(resource.supplierId).toBeNull()
 
     const copiedResourceAmountCents = 88000
     await prisma.segmentResource.update({
       where: { id: resource.id },
-      data: { amountCents: copiedResourceAmountCents },
+      data: { amountCents: copiedResourceAmountCents, supplierId },
     })
 
     const receivable = await authRequest(app, coordinatorToken)

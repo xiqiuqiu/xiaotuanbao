@@ -10,6 +10,24 @@ export function parseDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`)
 }
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+export function isDateOnly(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_ONLY_PATTERN.test(value)) {
+    return false
+  }
+
+  const parsed = parseDateOnly(value)
+  return !Number.isNaN(parsed.getTime()) && formatDateOnly(parsed) === value
+}
+
+export function parseDateOnlyStrict(value: string): Date {
+  if (!isDateOnly(value)) {
+    throw new RangeError(`日期须为 YYYY-MM-DD：${value}`)
+  }
+  return parseDateOnly(value)
+}
+
 export function getShanghaiTodayString(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: SHANGHAI_TIME_ZONE }).format(new Date())
 }
