@@ -260,7 +260,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       },
     })
 
-    const opened = await openTask({ endDate: '2026-09-03' })
+    const opened = await openTask({ endDate: '2026-09-06' })
     const submitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
@@ -300,7 +300,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       routeName: `${testPrefix}-采用线-已改名`,
       defaultDayCount: 6,
       startDate: '2026-09-01',
-      endDate: '2026-09-03',
+      endDate: '2026-09-06',
     })
 
     const created = await authRequest(app, coordinatorToken)
@@ -313,8 +313,20 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       where: { departureId },
       orderBy: { sortOrder: 'asc' },
     })
-    expect(segments).toHaveLength(1)
-    expect(segments[0]).toMatchObject({ name: '喀纳斯', pendingCheck: true })
+    expect(
+      segments.map((segment) => [
+        segment.name,
+        segment.startDate?.toISOString().slice(0, 10),
+        segment.endDate?.toISOString().slice(0, 10),
+        segment.dayCount,
+      ]),
+    ).toEqual([
+      ['喀纳斯', '2026-09-01', '2026-09-03', 3],
+      ['第4天', '2026-09-04', '2026-09-04', 1],
+      ['第5天', '2026-09-05', '2026-09-05', 1],
+      ['第6天', '2026-09-06', '2026-09-06', 1],
+    ])
+    expect(segments[0]).toMatchObject({ pendingCheck: true })
     const resources = await prisma.segmentResource.findMany({
       where: { segmentId: segments[0]!.id },
     })
