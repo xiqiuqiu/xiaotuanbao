@@ -39,6 +39,7 @@ import {
 import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
 import { PendingCandidateOverlay } from '@/features/ai-assist/PendingCandidateOverlay'
 import { findReviewCandidate } from '@/features/ai-assist/review-field-labels'
+import { CriticalQueryErrorAlert } from '@/lib/draft-lifecycle'
 import styles from './CreateDepartureStepInfo.module.css'
 
 interface CreateDepartureStepInfoProps {
@@ -61,6 +62,10 @@ interface DepartureInfoFormProps {
   route: RouteStepValues
   employeeOptions: Array<{ value: string; label: string }>
   helperTextStyle: CSSProperties
+  hasEmployeeError: boolean
+  employeeErrorMessage?: string
+  onRetryEmployees: () => void
+  isEmployeeOptionsFetching?: boolean
   hasSupplierError: boolean
   onRetrySuppliers: () => void
   driverSuppliers: SupplierSummary[]
@@ -185,6 +190,10 @@ function DepartureInfoForm({
   route,
   employeeOptions,
   helperTextStyle,
+  hasEmployeeError,
+  employeeErrorMessage,
+  onRetryEmployees,
+  isEmployeeOptionsFetching,
   hasSupplierError,
   onRetrySuppliers,
   driverSuppliers,
@@ -235,6 +244,14 @@ function DepartureInfoForm({
       </div>
 
       <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
+        {hasEmployeeError ? (
+          <CriticalQueryErrorAlert
+            title="负责人列表加载失败"
+            description={employeeErrorMessage}
+            onRetry={onRetryEmployees}
+            retrying={isEmployeeOptionsFetching}
+          />
+        ) : null}
         {hasSupplierError ? (
           <Alert
             type="error"
@@ -298,7 +315,8 @@ function DepartureInfoForm({
               <Select
                 showSearch={{ optionFilterProp: 'label' }}
                 options={employeeOptions}
-                placeholder="选择负责人"
+                placeholder={hasEmployeeError ? '负责人列表加载失败' : '选择负责人'}
+                disabled={hasEmployeeError}
               />
             </Form.Item>
           </Col>
@@ -501,7 +519,13 @@ export function CreateDepartureStepInfo({
     }
   }, [watchedStartDate])
 
-  const { data: employeeOptionsResult } = useQuery({
+  const {
+    data: employeeOptionsResult,
+    error: employeeOptionsError,
+    isError: isEmployeeOptionsError,
+    isFetching: isEmployeeOptionsFetching,
+    refetch: refetchEmployeeOptions,
+  } = useQuery({
     queryKey: ['employees', 'options', 'create-departure'],
     queryFn: () => listEmployeeOptions(),
   })
@@ -602,6 +626,14 @@ export function CreateDepartureStepInfo({
             route={route}
             employeeOptions={employeeOptions}
             helperTextStyle={helperTextStyle}
+            hasEmployeeError={isEmployeeOptionsError}
+            employeeErrorMessage={
+              employeeOptionsError instanceof Error ? employeeOptionsError.message : undefined
+            }
+            onRetryEmployees={() => {
+              void refetchEmployeeOptions()
+            }}
+            isEmployeeOptionsFetching={isEmployeeOptionsFetching}
             hasSupplierError={isDriverSuppliersError || isGuideSuppliersError}
             onRetrySuppliers={() => {
               void Promise.all([refetchDriverSuppliers(), refetchGuideSuppliers()])

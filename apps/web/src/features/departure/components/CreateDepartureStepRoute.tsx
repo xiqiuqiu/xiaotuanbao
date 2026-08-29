@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Col, Empty, Input, Modal, Row, Spin, Typography, message, theme } from 'antd'
 import { ClockCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
+import { CriticalQueryErrorAlert, criticalQueryPresentation } from '@/lib/draft-lifecycle'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 import styles from './CreateDepartureStepRoute.module.css'
 
@@ -29,10 +30,22 @@ export function CreateDepartureStepRoute({
   const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
 
-  const { data: templates = [], isLoading } = useQuery({
+  const {
+    data: templates,
+    error: templatesError,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['route-templates', keyword],
     queryFn: () => listRouteTemplates(keyword || undefined),
     enabled,
+  })
+  const templatesView = criticalQueryPresentation({
+    isError,
+    isLoading,
+    hasData: templates != null,
   })
 
   const deleteMutation = useMutation({
@@ -84,61 +97,79 @@ export function CreateDepartureStepRoute({
         onSearch={setKeyword}
       />
 
-      <Typography.Text style={helperTextStyle}>共 {templates.length} 条路线</Typography.Text>
-
-      {isLoading ? (
-        <div className={styles.loading}>
-          <Spin />
-        </div>
-      ) : templates.length === 0 ? (
-        <Empty description="暂无常用路线。可先填写路线名称" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      {templatesView === 'error' ? (
+        <CriticalQueryErrorAlert
+          title="常用路线加载失败"
+          description={templatesError instanceof Error ? templatesError.message : undefined}
+          onRetry={() => {
+            void refetch()
+          }}
+          retrying={isFetching}
+        />
       ) : (
-        <Row gutter={[16, 16]} className={styles.templateGrid}>
-          {templates.map((template) => {
-            const selected = values.templateId === template.id
+        <>
+          <Typography.Text style={helperTextStyle}>
+            共 {templates?.length ?? 0} 条路线
+          </Typography.Text>
 
-            return (
-              <Col key={template.id} xs={24} xl={12}>
-                <div
-                  className={
-                    selected
-                      ? `${styles.templateCardShell} ${styles.templateCardShellSelected}`
-                      : styles.templateCardShell
-                  }
-                >
-                  <button
-                    type="button"
-                    className={styles.templateSelect}
-                    aria-pressed={selected}
-                    aria-label={`选择路线 ${template.name}`}
-                    onClick={() => onSelect(template)}
-                  >
-                    <Typography.Text strong className={styles.templateName}>
-                      {template.name}
-                    </Typography.Text>
-                    <div className={styles.templateMeta}>
-                      <Typography.Text style={helperTextStyle}>
-                        <ClockCircleOutlined aria-hidden /> {template.defaultDayCount} 天
-                      </Typography.Text>
-                      <Typography.Text style={helperTextStyle}>
-                        已使用 {template.usageCount} 次
-                      </Typography.Text>
+          {templatesView === 'loading' ? (
+            <div className={styles.loading}>
+              <Spin />
+            </div>
+          ) : templatesView === 'empty' || (templates?.length ?? 0) === 0 ? (
+            <Empty
+              description="暂无常用路线。可先填写路线名称"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          ) : (
+            <Row gutter={[16, 16]} className={styles.templateGrid}>
+              {templates?.map((template) => {
+                const selected = values.templateId === template.id
+
+                return (
+                  <Col key={template.id} xs={24} xl={12}>
+                    <div
+                      className={
+                        selected
+                          ? `${styles.templateCardShell} ${styles.templateCardShellSelected}`
+                          : styles.templateCardShell
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={styles.templateSelect}
+                        aria-pressed={selected}
+                        aria-label={`选择路线 ${template.name}`}
+                        onClick={() => onSelect(template)}
+                      >
+                        <Typography.Text strong className={styles.templateName}>
+                          {template.name}
+                        </Typography.Text>
+                        <div className={styles.templateMeta}>
+                          <Typography.Text style={helperTextStyle}>
+                            <ClockCircleOutlined aria-hidden /> {template.defaultDayCount} 天
+                          </Typography.Text>
+                          <Typography.Text style={helperTextStyle}>
+                            已使用 {template.usageCount} 次
+                          </Typography.Text>
+                        </div>
+                      </button>
+                      <Button
+                        type="text"
+                        size="small"
+                        danger
+                        className={styles.templateDelete}
+                        icon={<DeleteOutlined />}
+                        aria-label={`删除常用路线 ${template.name}`}
+                        onClick={() => handleDeleteTemplate(template)}
+                      />
                     </div>
-                  </button>
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    className={styles.templateDelete}
-                    icon={<DeleteOutlined />}
-                    aria-label={`删除常用路线 ${template.name}`}
-                    onClick={() => handleDeleteTemplate(template)}
-                  />
-                </div>
-              </Col>
-            )
-          })}
-        </Row>
+                  </Col>
+                )
+              })}
+            </Row>
+          )}
+        </>
       )}
     </div>
   )

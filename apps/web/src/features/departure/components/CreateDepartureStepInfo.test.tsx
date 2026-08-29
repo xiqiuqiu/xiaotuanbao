@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
+import { listEmployeeOptions } from '@/services/employee.service'
 
 vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: 'user-1', name: '阿财' }]),
@@ -122,5 +123,13 @@ describe('CreateDepartureStepInfo', () => {
 
     expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-12')
     expect(screen.getByLabelText('天数')).toHaveValue('10')
+  })
+
+  it('shows owner load errors instead of an empty select', async () => {
+    vi.mocked(listEmployeeOptions).mockRejectedValueOnce(new Error('网络中断'))
+    renderStep()
+
+    expect(await screen.findByText('负责人列表加载失败')).toBeInTheDocument()
+    expect(screen.queryByText('暂无数据')).not.toBeInTheDocument()
   })
 })

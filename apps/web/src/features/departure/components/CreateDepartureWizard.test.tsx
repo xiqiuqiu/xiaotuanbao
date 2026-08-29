@@ -32,6 +32,12 @@ vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
 
 const mockNavigate = vi.fn()
 let mockSearch: { copyFrom?: string; taskId?: string } = {}
+const navigationGuard = vi.hoisted(() => ({
+  shouldBlockFn: null as null | ((args: {
+    current: { pathname: string }
+    next: { pathname: string }
+  }) => boolean | Promise<boolean>),
+}))
 const hitlRegistration = vi.hoisted(() => ({
   current: null as null | {
     render: ComponentType<{
@@ -70,6 +76,14 @@ vi.mock('@tanstack/react-router', () => ({
     select({
       location: { pathname: '/departures/new', searchStr: '', hash: '' },
     }),
+  useBlocker: (opts: {
+    shouldBlockFn: (args: {
+      current: { pathname: string }
+      next: { pathname: string }
+    }) => boolean | Promise<boolean>
+  }) => {
+    navigationGuard.shouldBlockFn = opts.shouldBlockFn
+  },
 }))
 
 vi.mock('@/app/store/auth.store', () => ({
@@ -410,6 +424,7 @@ describe('CreateDepartureWizard', () => {
     useAgentConversationStore.getState().reset()
     useAgentConversationRuntimeStore.getState().clear()
     hitlRegistration.current = null
+    navigationGuard.shouldBlockFn = null
   })
 
   beforeEach(() => {
@@ -2317,5 +2332,131 @@ describe('CreateDepartureWizard', () => {
       })
     })
     expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
+  })
+
+  it('does not show a half-initialized form when task restore fails', async () => {
+    mockSearch = { taskId: 'missing-task' }
+    vi.mocked(getAiCreateTask).mockRejectedValue(new Error('任务不存在'))
+
+    renderWizard()
+
+    expect(await screen.findByText('发团创建草稿恢复失败')).toBeInTheDocument()
+    expect(screen.getByText('任务不存在')).toBeInTheDocument()
+    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新建草稿' })).toBeInTheDocument()
+  })
+
+  it('retries a failed task restore without leaving the recovery view until it succeeds', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockRejectedValueOnce(new Error('网络中断'))
+
+    renderWizard()
+    expect(await screen.findByText('发团创建草稿恢复失败')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.queryByText('发团创建草稿恢复失败')).not.toBeInTheDocument()
+  })
+
+  it('starts a new draft from restore failure instead of exposing an empty form', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'missing-task' }
+    vi.mocked(getAiCreateTask).mockRejectedValue(new Error('任务不存在'))
+
+    renderWizard()
+    await screen.findByText('发团创建草稿恢复失败')
+    await user.click(screen.getByRole('button', { name: '新建草稿' }))
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/departure/new',
+      search: {},
+      replace: true,
+    })
+    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
+  })
+
+  it('offers retry after draft save failure', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+
+    vi.mocked(saveDepartureCreationDraft).mockRejectedValueOnce(new Error('发团创建草稿保存失败'))
+    await user.type(screen.getByLabelText('团名'), '改')
+
+    expect(await screen.findByText('发团创建草稿保存失败')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '重试保存' }))
+    expect(await screen.findByText('发团创建草稿已保存')).toBeInTheDocument()
+  })
+
+  it('flushes a dirty draft before SPA navigation and stays when save fails', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+    vi.mocked(saveDepartureCreationDraft).mockClear()
+    await user.type(screen.getByLabelText('团名'), '改')
+
+    const blocked = await navigationGuard.shouldBlockFn?.({
+      current: { pathname: '/departure/new' },
+      next: { pathname: '/' },
+    })
+
+    expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    expect(blocked).toBe(false)
+  })
+
+  it('blocks SPA navigation when flush fails and keeps a retry action', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+    vi.mocked(saveDepartureCreationDraft).mockRejectedValue(new Error('发团创建草稿保存失败'))
+    await user.type(screen.getByLabelText('团名'), '改')
+
+    const blocked = await navigationGuard.shouldBlockFn?.({
+      current: { pathname: '/departure/new' },
+      next: { pathname: '/departure' },
+    })
+
+    expect(blocked).toBe(true)
+    expect(await screen.findByText('发团创建草稿保存失败')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试保存' })).toBeInTheDocument()
+    expect(screen.getByLabelText('团名')).toBeInTheDocument()
+  })
+
+  it('shows AI availability errors instead of hiding the assist entry', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockRejectedValueOnce(new Error('网络中断'))
+
+    renderWizard()
+    expect(await screen.findByText('AI 辅助状态加载失败')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /AI 辅助/ })).not.toBeInTheDocument()
+
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
+  })
+
+  it('shows route template load errors instead of an empty list', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listRouteTemplates).mockRejectedValue(new Error('网络中断'))
+
+    renderWizard()
+    await user.click(screen.getByText('选用常用路线'))
+
+    expect(await screen.findByText('常用路线加载失败')).toBeInTheDocument()
+    expect(screen.queryByText('暂无常用路线。可先填写路线名称')).not.toBeInTheDocument()
   })
 })

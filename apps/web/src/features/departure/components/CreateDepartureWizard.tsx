@@ -37,6 +37,14 @@ import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
 import { useCopyFromDepartureSearch } from '../hooks/useCopyFromDepartureSearch'
 import { ApiError } from '@/lib/request'
+import {
+  CriticalQueryErrorAlert,
+  DraftRestoreFailure,
+  draftRestoreView,
+  persistWithConflictRetry,
+  useDraftLifecycle,
+  type DraftRestorePhase,
+} from '@/lib/draft-lifecycle'
 import styles from './CreateDepartureWizard.module.css'
 import {
   applyDraftSnapshotToInfoForm,
@@ -61,8 +69,6 @@ import {
   proposedTaskToClaim,
 } from '../utils/wizard-task-claim'
 
-const AUTOSAVE_DEBOUNCE_MS = 800
-
 const ASSIST_TASK_STATUS_LABELS: Partial<Record<AiCreateAssistTaskStatus, string>> = {
   parsing: '解析中',
   ai_processing: 'AI 处理中',
@@ -70,8 +76,6 @@ const ASSIST_TASK_STATUS_LABELS: Partial<Record<AiCreateAssistTaskStatus, string
   awaiting_review: '待审核',
   failed: '处理失败',
 }
-
-type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 function newConfirmIdempotencyKey(taskId: string): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -103,14 +107,15 @@ function useCreateDepartureWizardController() {
   const [initializingForm, setInitializingForm] = useState(
     () => Boolean(copyFromId) || Boolean(searchTaskId),
   )
-  const [restoringTask, setRestoringTask] = useState(() => Boolean(searchTaskId))
+  const [restorePhase, setRestorePhase] = useState<DraftRestorePhase>(() =>
+    searchTaskId ? 'loading' : 'idle',
+  )
+  const [restoreError, setRestoreError] = useState<Error | null>(null)
+  const [restoreAttempt, setRestoreAttempt] = useState(0)
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
-  const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const persistInFlightRef = useRef<Promise<void> | null>(null)
   const taskClaimInFlightRef = useRef<Promise<void> | null>(null)
   const confirmIdempotencyKeyRef = useRef<string | null>(null)
   const taskIdRef = useRef(taskId)
@@ -156,7 +161,10 @@ function useCreateDepartureWizardController() {
 
   const isCopyMode = routeValues.mode === 'copy'
   const awaitingCopySource = Boolean(copyFromId) && !isCopyMode && !searchTaskId
-  const showCopyBootstrap = awaitingCopySource || restoringTask || (isCopyMode && initializingForm)
+  const restoreView = draftRestoreView(restorePhase)
+  const showCopyBootstrap =
+    awaitingCopySource || restoreView === 'loading' || (isCopyMode && initializingForm)
+  const showRestoreFailure = restoreView === 'failed'
 
   const syncTaskSearch = useCallback(
     (nextTaskId: string) => {
@@ -180,7 +188,6 @@ function useCreateDepartureWizardController() {
       draftVersionRef.current = result.draft.version
       if (!options?.keepDirty) {
         dirtyRef.current = false
-        setSaveStatus('saved')
       }
     },
     [],
@@ -195,76 +202,54 @@ function useCreateDepartureWizardController() {
       await taskClaimInFlightRef.current
     }
 
-    if (persistInFlightRef.current) {
-      await persistInFlightRef.current
+    const info = infoForm.getFieldsValue(true)
+    const pending = pendingReviewRef.current
+    const draft = pending?.baselineSnapshot
+      ? preservePendingCandidateBaseline({
+          draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
+          baselineSnapshot: pending.baselineSnapshot,
+          candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
+        })
+      : buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
+    if (!canPersistDepartureCreationDraft(draft)) {
+      return
     }
 
-    const run = (async () => {
-      const info = infoForm.getFieldsValue(true)
-      const pending = pendingReviewRef.current
-      const draft = pending?.baselineSnapshot
-        ? preservePendingCandidateBaseline({
-            draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
-            baselineSnapshot: pending.baselineSnapshot,
-            candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
-          })
-        : buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
-      if (!canPersistDepartureCreationDraft(draft)) {
-        return
-      }
-
-      setSaveStatus('saving')
-      try {
-        const currentTaskId = taskIdRef.current
-        const currentVersion = draftVersionRef.current
-        const result = await saveDepartureCreationDraft(
+    const currentTaskId = taskIdRef.current
+    const result = await persistWithConflictRetry({
+      persist: () =>
+        saveDepartureCreationDraft(
           {
-            taskId: currentTaskId ?? undefined,
-            expectedVersion: currentTaskId ? (currentVersion ?? undefined) : undefined,
+            taskId: taskIdRef.current ?? undefined,
+            expectedVersion: taskIdRef.current
+              ? (draftVersionRef.current ?? undefined)
+              : undefined,
             draft,
           },
           { silentError: true },
-        )
-        applySavedDraft(result)
-        if (!currentTaskId) {
-          syncTaskSearch(result.id)
-        }
-      } catch (error) {
-        const conflict = readAiCreateTaskConflict(error)
-        if (conflict) {
-          applySavedDraft(conflict, { keepDirty: true })
-          try {
-            const retried = await saveDepartureCreationDraft(
-              {
-                taskId: conflict.id,
-                expectedVersion: conflict.draft.version,
-                draft,
-              },
-              { silentError: true },
-            )
-            applySavedDraft(retried)
-            return
-          } catch (retryError) {
-            const retryConflict = readAiCreateTaskConflict(retryError)
-            if (retryConflict) {
-              applySavedDraft(retryConflict, { keepDirty: true })
-            }
-            setSaveStatus('error')
-            throw retryError
-          }
-        }
-        setSaveStatus('error')
-        throw error
-      }
-    })()
-
-    persistInFlightRef.current = run.finally(() => {
-      if (persistInFlightRef.current === run) {
-        persistInFlightRef.current = null
-      }
+        ),
+      readConflict: readAiCreateTaskConflict,
+      applyConflict: (conflict) => applySavedDraft(conflict, { keepDirty: true }),
     })
-    await persistInFlightRef.current
+    applySavedDraft(result)
+    if (!currentTaskId) {
+      syncTaskSearch(result.id)
+    }
   }, [applySavedDraft, infoForm, syncTaskSearch, user])
+
+  const {
+    saveStatus,
+    scheduleAutosave: schedulePersistedAutosave,
+    flush,
+    retrySave,
+  } = useDraftLifecycle({
+    persist: persistDraft,
+    isDirty: () => dirtyRef.current,
+    debounceMs: 800,
+    onAutosaveError: (error) => {
+      message.error(error.message || '发团创建草稿保存失败，请勿离开本页')
+    },
+  })
 
   useEffect(() => {
     const cursor = claimCursorRef.current
@@ -325,21 +310,10 @@ function useCreateDepartureWizardController() {
 
   const scheduleAutosave = useCallback(() => {
     dirtyRef.current = true
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-    }
-    saveTimerRef.current = setTimeout(() => {
-      void persistDraft().catch((error) => {
-        message.error(error instanceof Error ? error.message : '发团创建草稿保存失败，请勿离开本页')
-      })
-    }, AUTOSAVE_DEBOUNCE_MS)
-  }, [message, persistDraft])
+    schedulePersistedAutosave()
+  }, [schedulePersistedAutosave])
 
   const flushDraft = useCallback(async (options?: { restorePendingBaseline?: boolean }) => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
     if (options?.restorePendingBaseline) {
       const pending = pendingReviewRef.current
       if (pending?.baselineSnapshot && pending.candidates.length > 0) {
@@ -358,11 +332,8 @@ function useCreateDepartureWizardController() {
         }
       }
     }
-    if (!dirtyRef.current && taskIdRef.current && draftVersionRef.current != null) {
-      return
-    }
-    await persistDraft()
-  }, [infoForm, persistDraft])
+    await flush()
+  }, [flush, infoForm])
 
   const loadDepartureNo = useCallback(async () => {
     const result = await previewDepartureNo()
@@ -391,14 +362,14 @@ function useCreateDepartureWizardController() {
         setRouteValues(nextRouteValues)
         routeValuesRef.current = nextRouteValues
         dirtyRef.current = true
-        await persistDraft()
+        await flush()
       } catch (error) {
         message.error(error instanceof Error ? error.message : '发团创建草稿保存失败')
       } finally {
         setInitializingForm(false)
       }
     },
-    [infoForm, loadDepartureNo, message, persistDraft, user],
+    [flush, infoForm, loadDepartureNo, message, user],
   )
 
   const handleCopyLoadError = useCallback(() => {
@@ -414,12 +385,20 @@ function useCreateDepartureWizardController() {
   })
 
   useEffect(() => {
+    if (!searchTaskId) {
+      setRestorePhase('idle')
+      setRestoreError(null)
+    }
+  }, [searchTaskId])
+
+  useEffect(() => {
     if (!searchTaskId || !user) {
       return
     }
 
     let cancelled = false
-    setRestoringTask(true)
+    setRestorePhase('loading')
+    setRestoreError(null)
     void getAiCreateTask(searchTaskId)
       .then(async (task) => {
         if (cancelled) return
@@ -441,7 +420,6 @@ function useCreateDepartureWizardController() {
         taskIdRef.current = task.id
         draftVersionRef.current = task.draft.version
         dirtyRef.current = false
-        setSaveStatus('saved')
         const restoreConversationId =
           task.pendingReview?.conversationId ??
           task.pendingReviews?.find((pkg) => pkg.conversationId)?.conversationId
@@ -453,14 +431,17 @@ function useCreateDepartureWizardController() {
         } catch {
           // 预览团号失败不阻断恢复
         }
+        if (!cancelled) {
+          setRestorePhase('ready')
+        }
       })
       .catch((error) => {
         if (cancelled) return
-        message.error(error instanceof Error ? error.message : '恢复发团创建草稿失败')
+        setRestoreError(error instanceof Error ? error : new Error('恢复发团创建草稿失败'))
+        setRestorePhase('failed')
       })
       .finally(() => {
         if (!cancelled) {
-          setRestoringTask(false)
           setInitializingForm(false)
         }
       })
@@ -468,22 +449,27 @@ function useCreateDepartureWizardController() {
     return () => {
       cancelled = true
     }
-  }, [infoForm, loadDepartureNo, message, navigate, openHistoricalConversation, searchTaskId, user])
+  }, [
+    infoForm,
+    loadDepartureNo,
+    navigate,
+    openHistoricalConversation,
+    restoreAttempt,
+    searchTaskId,
+    user,
+  ])
 
-  useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirtyRef.current) return
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current)
-      }
-    }
+  const retryRestore = useCallback(() => {
+    setRestoreAttempt((current) => current + 1)
   }, [])
+
+  const startFreshDraft = useCallback(() => {
+    void navigate({
+      to: '/departure/new',
+      search: copyFromId ? { copyFrom: copyFromId } : {},
+      replace: true,
+    })
+  }, [copyFromId, navigate])
 
   const formInitializedRef = useRef(false)
 
@@ -683,7 +669,13 @@ function useCreateDepartureWizardController() {
       })
   }, [flushDraft, message, navigate])
 
-  const { data: assistAvailability } = useQuery({
+  const {
+    data: assistAvailability,
+    error: assistAvailabilityError,
+    isError: isAssistAvailabilityError,
+    isFetching: isAssistAvailabilityFetching,
+    refetch: refetchAssistAvailability,
+  } = useQuery({
     queryKey: ['ai-create-assist-availability'],
     queryFn: getAiCreateAssistAvailability,
   })
@@ -739,14 +731,14 @@ function useCreateDepartureWizardController() {
   )
 
   useEffect(() => {
-    if (!taskReview || draftVersion == null || initializingForm || restoringTask) {
+    if (!taskReview || draftVersion == null || initializingForm || restorePhase === 'loading') {
       return
     }
     if (taskReview.draft.version <= draftVersion) {
       return
     }
     applyConfirmedTask(taskReview)
-  }, [applyConfirmedTask, draftVersion, initializingForm, restoringTask, taskReview])
+  }, [applyConfirmedTask, draftVersion, initializingForm, restorePhase, taskReview])
 
   const correctTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleCorrectCandidate = useCallback(
@@ -870,11 +862,21 @@ function useCreateDepartureWizardController() {
     },
   })
 
+  const handleRetrySave = useCallback(() => {
+    void retrySave().catch((error) => {
+      message.error(error instanceof Error ? error.message : '发团创建草稿保存失败')
+    })
+  }, [message, retrySave])
+
   const openAssist = useCallback(() => {
     setAssistPaneCollapsed(false)
   }, [setAssistPaneCollapsed])
 
-  const stepEnterKey = showCopyBootstrap ? 'bootstrap' : 'form'
+  const stepEnterKey = showRestoreFailure
+    ? 'restore-failed'
+    : showCopyBootstrap
+      ? 'bootstrap'
+      : 'form'
 
   const saveStatusLabel =
     saveStatus === 'saving'
@@ -891,6 +893,10 @@ function useCreateDepartureWizardController() {
     isCopyMode,
     copyFromId,
     assistAvailability,
+    assistAvailabilityError,
+    isAssistAvailabilityError,
+    isAssistAvailabilityFetching,
+    refetchAssistAvailability,
     openAssist,
     assistTaskStatusLabel,
     pendingReview,
@@ -899,7 +905,12 @@ function useCreateDepartureWizardController() {
     rejectReviewMutation,
     stepEnterKey,
     showCopyBootstrap,
-    restoringTask,
+    showRestoreFailure,
+    restoreError,
+    restorePhase,
+    retryRestore,
+    startFreshDraft,
+    handleRetrySave,
     infoForm,
     routeValues,
     scheduleAutosave,
@@ -923,6 +934,10 @@ function CreateDepartureWizardView({
   isCopyMode,
   copyFromId,
   assistAvailability,
+  assistAvailabilityError,
+  isAssistAvailabilityError,
+  isAssistAvailabilityFetching,
+  refetchAssistAvailability,
   openAssist,
   assistTaskStatusLabel,
   pendingReview,
@@ -931,7 +946,12 @@ function CreateDepartureWizardView({
   rejectReviewMutation,
   stepEnterKey,
   showCopyBootstrap,
-  restoringTask,
+  showRestoreFailure,
+  restoreError,
+  restorePhase,
+  retryRestore,
+  startFreshDraft,
+  handleRetrySave,
   infoForm,
   routeValues,
   scheduleAutosave,
@@ -972,6 +992,20 @@ function CreateDepartureWizardView({
           </Button>
         ) : null}
       </div>
+      {isAssistAvailabilityError ? (
+        <CriticalQueryErrorAlert
+          title="AI 辅助状态加载失败"
+          description={
+            assistAvailabilityError instanceof Error
+              ? assistAvailabilityError.message
+              : undefined
+          }
+          onRetry={() => {
+            void refetchAssistAvailability()
+          }}
+          retrying={isAssistAvailabilityFetching}
+        />
+      ) : null}
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>
         <div className={`${styles.wizardBody} ${styles.wizardBodyNoRail}`}>
@@ -986,10 +1020,20 @@ function CreateDepartureWizardView({
               />
             ) : null}
             <div key={stepEnterKey} className={styles.stepEnter}>
-              {showCopyBootstrap ? (
+              {showRestoreFailure ? (
+                <DraftRestoreFailure
+                  title="发团创建草稿恢复失败"
+                  description={restoreError?.message}
+                  onRetry={retryRestore}
+                  onStartFresh={startFreshDraft}
+                  retrying={restorePhase === 'loading'}
+                />
+              ) : showCopyBootstrap ? (
                 <div className={styles.loadingState}>
                   <Spin
-                    description={restoringTask ? '正在恢复发团创建草稿…' : '正在加载源发团…'}
+                    description={
+                      restorePhase === 'loading' ? '正在恢复发团创建草稿…' : '正在加载源发团…'
+                    }
                   />
                 </div>
               ) : (
@@ -1019,16 +1063,29 @@ function CreateDepartureWizardView({
                 {saveStatusLabel}
               </Typography.Text>
             ) : null}
+            {saveStatus === 'error' ? (
+              <Button
+                type="link"
+                size="small"
+                aria-label="重试保存"
+                style={{ marginInlineStart: 4 }}
+                onClick={handleRetrySave}
+              >
+                重试保存
+              </Button>
+            ) : null}
           </div>
           <div>
-            <Button
-              type={pendingReview ? 'default' : 'primary'}
-              loading={createMutation.isPending}
-              disabled={showCopyBootstrap || initializingForm}
-              onClick={() => void handleCreate()}
-            >
-              创建发团
-            </Button>
+            {showRestoreFailure ? null : (
+              <Button
+                type={pendingReview ? 'default' : 'primary'}
+                loading={createMutation.isPending}
+                disabled={showCopyBootstrap || initializingForm}
+                onClick={() => void handleCreate()}
+              >
+                创建发团
+              </Button>
+            )}
           </div>
         </footer>
       </Card>
