@@ -627,8 +627,8 @@ export class DepartureService {
       throw new BadRequestException('团名不能为空')
     }
 
-    const startDate = parseDateOnly(dto.startDate)
-    const endDate = parseDateOnly(dto.endDate)
+    const startDate = parseDateOnly(assertCopyDateOnly(dto.startDate, '出团日'))
+    const endDate = parseDateOnly(assertCopyDateOnly(dto.endDate, '结束日'))
 
     if (endDate < startDate) {
       throw new BadRequestException('结束日期不能早于出团日期')
@@ -664,6 +664,7 @@ export class DepartureService {
       sourceDepartureId,
       targetDepartureId: created.id,
       targetStartDate: startDate,
+      targetEndDate: endDate,
     })
 
     await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
@@ -1515,4 +1516,13 @@ function sumRouteLedgerTotals(items: RouteLedgerTotals[]): RouteLedgerTotals {
     }),
     emptyRouteLedgerTotals(),
   )
+}
+
+const COPY_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+function assertCopyDateOnly(value: string, fieldLabel: string): string {
+  if (!COPY_DATE_ONLY.test(value)) {
+    throw new BadRequestException(`${fieldLabel}须为 YYYY-MM-DD`)
+  }
+  return value
 }

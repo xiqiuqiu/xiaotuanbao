@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Min,
 } from 'class-validator'
 import { Transform, Type } from 'class-transformer'
@@ -225,15 +226,17 @@ export class UnarchiveDepartureDto {
   reason!: string
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
 export class CopyDepartureDto {
   @IsString()
   @IsNotEmpty()
   name!: string
 
-  @IsDateString()
+  @Matches(DATE_ONLY, { message: '出团日须为 YYYY-MM-DD' })
   startDate!: string
 
-  @IsDateString()
+  @Matches(DATE_ONLY, { message: '结束日须为 YYYY-MM-DD' })
   endDate!: string
 
   @IsString()

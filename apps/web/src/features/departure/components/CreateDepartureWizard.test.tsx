@@ -1044,7 +1044,7 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('正在加载源发团…')).not.toBeInTheDocument()
-    expect(screen.getByText('复制自发团 XTB2026060009，不含客源与财务')).toBeInTheDocument()
+    expect(screen.getByText('复制自发团 XTB2026060009，只复用执行结构，不含客源、财务、金额与供应关系')).toBeInTheDocument()
   })
 
   it('enters copy mode without copy modal and creates without copy flags', async () => {
@@ -1096,7 +1096,7 @@ describe('CreateDepartureWizard', () => {
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
     expect(screen.queryByText('复制已有发团')).not.toBeInTheDocument()
-    expect(screen.getByText('复制自发团 XTB2026060009，不含客源与财务')).toBeInTheDocument()
+    expect(screen.getByText('复制自发团 XTB2026060009，只复用执行结构，不含客源、财务、金额与供应关系')).toBeInTheDocument()
 
     const { default: wizardStyles } = await import('./CreateDepartureWizard.module.css')
     const workspace = screen.getByText('发团基础信息').closest(`.${wizardStyles.wizardBody}`)
