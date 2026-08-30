@@ -11,7 +11,7 @@ describe('DepartureAgentTaskAdapter #440', () => {
       proposeReviewPackageForAgent: jest.fn().mockResolvedValue({ status: 'accepted' }),
       submitReviewPackageForAgent: jest.fn().mockResolvedValue({ reviewPackageId: 'pkg-1' }),
       resolveOwnedReviewTaskId: jest.fn().mockResolvedValue('task-1'),
-      confirmReviewPackage: jest.fn().mockResolvedValue({ id: 'task-1' }),
+      confirmDepartureReviewPackage: jest.fn().mockResolvedValue({ id: 'task-1' }),
       confirm: jest.fn().mockResolvedValue({ id: 'departure-1' }),
     }
     const adapter = new DepartureAgentTaskAdapter(tasks as never)
@@ -53,7 +53,7 @@ describe('DepartureAgentTaskAdapter #440', () => {
     expect(tasks.proposeReviewPackageForAgent).toHaveBeenCalled()
     expect(tasks.submitReviewPackageForAgent).toHaveBeenCalled()
     expect(tasks.confirm).toHaveBeenCalled()
-    expect(tasks.confirmReviewPackage).toHaveBeenCalledWith(
+    expect(tasks.confirmDepartureReviewPackage).toHaveBeenCalledWith(
       'org-1',
       'user-1',
       'task-1',

@@ -11,6 +11,7 @@ const pendingReview: AiReviewPackageView = {
   status: 'pending',
   confirmationUnit: 'basic_info_draft',
   payloadSchema: 'departure.basic_info_draft@v1',
+  schemaSupported: true,
   baseObjectVersion: 1,
   version: 1,
   runId: 'run-1',
@@ -98,5 +99,24 @@ describe('AiReviewStickyBar', () => {
     expect(reject).toBeEnabled()
     await user.click(reject)
     expect(onReject).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when a legacy payload omits schemaSupported #440', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <AiReviewStickyBar
+          pendingReview={{ ...pendingReview, schemaSupported: undefined }}
+          onConfirm={onConfirm}
+          onReject={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    const confirm = screen.getByRole('button', { name: '确认写入草稿' })
+    expect(confirm).toBeDisabled()
+    await user.click(confirm)
+    expect(onConfirm).not.toHaveBeenCalled()
   })
 })

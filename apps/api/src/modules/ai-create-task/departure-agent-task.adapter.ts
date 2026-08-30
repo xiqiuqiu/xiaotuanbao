@@ -73,7 +73,7 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
       command.userId,
       command.reviewPackageId,
     )
-    return this.tasks.confirmReviewPackage(
+    return this.tasks.confirmDepartureReviewPackage(
       command.organizationId,
       command.userId,
       taskId,

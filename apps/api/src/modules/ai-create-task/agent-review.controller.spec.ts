@@ -4,7 +4,7 @@ describe('AgentReviewController #440', () => {
   it('routes a HITL confirm through the registered domain adapter', async () => {
     const tasks = {
       resolveOwnedReviewTaskId: jest.fn().mockResolvedValue('task-1'),
-      confirmReviewPackage: jest.fn(),
+      confirmDepartureReviewPackage: jest.fn(),
     }
     const adapter = {
       confirmReview: jest.fn().mockResolvedValue({ id: 'task-1' }),
@@ -26,6 +26,6 @@ describe('AgentReviewController #440', () => {
       input: { expectedVersion: 1, expectedPackageVersion: 1 },
       decisionCommandId: 'decision-1',
     })
-    expect(tasks.confirmReviewPackage).not.toHaveBeenCalled()
+    expect(tasks.confirmDepartureReviewPackage).not.toHaveBeenCalled()
   })
 })

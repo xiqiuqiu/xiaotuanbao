@@ -40,7 +40,7 @@ export function AiReviewStickyBar({
   const unit = registered?.confirmationUnits.find(
     (candidate) => candidate.key === pendingReview.confirmationUnit,
   )
-  const schemaSupported = pendingReview.schemaSupported !== false && Boolean(unit)
+  const schemaSupported = pendingReview.schemaSupported === true && Boolean(unit)
   const fieldList = formatReviewFieldList(
     pendingReview.candidates.map((candidate) => candidate.fieldKey),
     pendingReview.payloadSchema,

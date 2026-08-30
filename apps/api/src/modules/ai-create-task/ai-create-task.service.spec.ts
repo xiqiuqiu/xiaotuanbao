@@ -1,10 +1,17 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common'
+import {
+  DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
+  registeredReviewSchemas,
+} from '@xiaotuanbao/ai-contracts'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
-import { departureReviewProposalHash } from './review-package.envelope'
+import {
+  departureReviewProposalHash,
+  reviewDecisionRequestHash,
+} from './review-package.envelope'
 
-describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
+describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440', () => {
   it('rejects an unknown schema version before applying any business write', async () => {
     const organizationId = 'org-1'
     const userId = 'user-1'
@@ -84,7 +91,7 @@ describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
     )
 
     await expect(
-      service.confirmReviewPackage(
+      service.confirmDepartureReviewPackage(
         organizationId,
         userId,
         taskId,
@@ -300,7 +307,7 @@ describe('AiCreateTaskService review disposition #440', () => {
     const { service, tx } = createService(pkg)
 
     await expect(
-      service.confirmReviewPackage(
+      service.confirmDepartureReviewPackage(
         'org-1',
         'user-1',
         'task-1',
@@ -319,6 +326,138 @@ describe('AiCreateTaskService review disposition #440', () => {
     expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }) }),
     )
+  })
+
+  it('does not confirm an empty package as a successful no-op', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-empty',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [],
+      }),
+      candidates: [],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        { expectedVersion: 1, expectedPackageVersion: 1 },
+        'decision-empty',
+      ),
+    ).rejects.toThrow(BadRequestException)
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
+  })
+
+  it('does not apply a second registered schema through the departure draft writer', async () => {
+    const secondSchema = {
+      ...DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
+      schemaId: 'partner.profile',
+      payloadSchema: 'partner.profile@v1',
+      targetKind: 'partner_profile',
+    }
+    const lookup = jest
+      .spyOn(registeredReviewSchemas, 'findByPayloadSchema')
+      .mockImplementation((payloadSchema) =>
+        payloadSchema === secondSchema.payloadSchema
+          ? secondSchema
+          : payloadSchema === DEPARTURE_BASIC_INFO_REVIEW_SCHEMA.payloadSchema
+            ? DEPARTURE_BASIC_INFO_REVIEW_SCHEMA
+            : undefined,
+      )
+    const modelCandidate = {
+      fieldKey: 'name' as const,
+      proposedValue: '不应写入发团草稿',
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '伙伴名称' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-second-schema',
+      payloadSchema: secondSchema.payloadSchema,
+      targetKind: secondSchema.targetKind,
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const { service, tx } = createService(pkg)
+
+    try {
+      await expect(
+        service.confirmDepartureReviewPackage(
+          'org-1',
+          'user-1',
+          'task-1',
+          pkg.id,
+          { expectedVersion: 1, expectedPackageVersion: 1 },
+          'decision-second-schema',
+        ),
+      ).rejects.toThrow(BadRequestException)
+      expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
+    } finally {
+      lookup.mockRestore()
+    }
+  })
+
+  it('replays the same effective corrections regardless of extra non-candidate fields', async () => {
+    const modelCandidate = {
+      fieldKey: 'name' as const,
+      proposedValue: '确认后的川西团',
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '修改团名' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-replay',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const { service, tx } = createService(pkg)
+    tx.aiCreateIdempotencyRecord.upsert.mockResolvedValue({
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      operation: 'review.confirm',
+      idempotencyKey: 'decision-replay',
+      requestHash: reviewDecisionRequestHash({
+        reviewPackageId: pkg.id,
+        reviewVersion: 1,
+        decisionCommandId: 'decision-replay',
+        expectedVersion: 1,
+        corrections: { name: '用户确认团名' },
+      }),
+      completedAt: new Date(),
+      resultJson: { kind: 'ok', summary: task },
+    })
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        {
+          expectedVersion: 1,
+          expectedPackageVersion: 1,
+          corrections: { name: '用户确认团名', routeName: '非候选字段' },
+        },
+        'decision-replay',
+      ),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -349,7 +488,7 @@ describe('AiCreateTaskService review disposition #440', () => {
       const { service, tx } = createService(validPackage, { siblings: [sibling] })
 
       await expect(
-        service.confirmReviewPackage(
+        service.confirmDepartureReviewPackage(
           'org-1',
           'user-1',
           'task-1',
