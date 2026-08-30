@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
@@ -13,21 +13,25 @@ import { claimedPositiveIntField, claimedStringField } from '../ai-action/ai-act
 import type { AiActionActor, AiActionForwardContext, AiActionNormalizedTarget } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiConversationRecallService } from './ai-conversation-recall.service'
-import { AiCreateTaskService } from './ai-create-task.service'
+import {
+  AGENT_TASK_DOMAIN_ADAPTER,
+  type AgentTaskDomainAdapter,
+} from './agent-task-domain.adapter'
 import type { AiToolRequestUser } from './ai-operation-delegation.guard'
 
 @Injectable()
 export class AiToolHttpAdapter {
   constructor(
     private readonly gateway: AiActionGateway,
-    private readonly tasks: AiCreateTaskService,
+    @Inject(AGENT_TASK_DOMAIN_ADAPTER)
+    private readonly domain: AgentTaskDomainAdapter,
     private readonly recall: AiConversationRecallService,
   ) {}
 
   getTaskContext(user: AiToolRequestUser, body: unknown): Promise<GetTaskContextOutput> {
     const caller = requireTaskBoundUser(user)
     return this.executeRegistered('getTaskContext', caller, body, ({ target }) =>
-      this.tasks.getTaskContextForAgent(caller, {
+      this.domain.getSnapshot(caller, {
         taskId: target.id,
         runId: caller.runId,
       }),
@@ -40,7 +44,7 @@ export class AiToolHttpAdapter {
   ): Promise<SearchRouteTemplatesOutput> {
     const caller = requireTaskBoundUser(user)
     return this.executeRegistered('searchRouteTemplates', caller, body, ({ target }) =>
-      this.tasks.searchRouteTemplatesForAgent(
+      this.domain.searchReferences(
         { ...caller, organizationId: target.id },
         {
           taskId: caller.taskId,
@@ -58,7 +62,7 @@ export class AiToolHttpAdapter {
   ): Promise<GetMaterialParseResultOutput> {
     const caller = requireTaskBoundUser(user)
     return this.executeRegistered('getMaterialParseResult', caller, body, ({ target }) =>
-      this.tasks.getMaterialParseResultForAgent(caller, {
+      this.domain.getMaterial(caller, {
         taskId: caller.taskId,
         runId: caller.runId,
         materialId: target.id,
@@ -106,7 +110,7 @@ export class AiToolHttpAdapter {
     body: unknown,
   ): Promise<ProposeReviewPackageOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.tasks.proposeReviewPackageForAgent(caller, body)
+    return this.domain.proposeReview(caller, body)
   }
 
   submitReviewPackage(
@@ -118,7 +122,7 @@ export class AiToolHttpAdapter {
       if (!action?.id) {
         throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
       }
-      return this.tasks.submitReviewPackageForAgent(
+      return this.domain.submitReview(
         caller,
         {
           taskId: caller.taskId,

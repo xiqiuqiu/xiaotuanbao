@@ -1,5 +1,7 @@
 import {
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  registeredReviewSchemas,
   type AiReviewCandidateInput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
@@ -91,12 +93,37 @@ export function toReviewPackageView(pkg: {
   baselineSnapshot: unknown
   userCorrections?: unknown
 }): AiReviewPackageView {
+  const payloadSchema = pkg.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA
+  const registeredSchema = registeredReviewSchemas.findByPayloadSchema(payloadSchema)
+  const confirmationUnit = registeredSchema?.confirmationUnits.find(
+    (unit) => unit.key === pkg.confirmationUnit,
+  )
+  const candidatePayloadSupported = Boolean(
+    confirmationUnit &&
+      Array.isArray(pkg.candidates) &&
+      pkg.candidates.length > 0 &&
+      pkg.candidates.every((candidate) => {
+        try {
+          registeredSchema?.parseCandidate(candidate)
+          return confirmationUnit.fields.some(
+            (field) =>
+              candidate != null &&
+              typeof candidate === 'object' &&
+              'fieldKey' in candidate &&
+              field.key === candidate.fieldKey,
+          )
+        } catch {
+          return false
+        }
+      }),
+  )
   const corrections = parseUserCorrections(pkg.userCorrections)
   return {
     id: pkg.id,
     status: pkg.status as AiReviewPackageView['status'],
-    confirmationUnit: 'basic_info_draft',
-    payloadSchema: 'departure.basic_info_draft@v1',
+    confirmationUnit: pkg.confirmationUnit,
+    payloadSchema,
+    schemaSupported: candidatePayloadSupported,
     baseObjectVersion: pkg.baseObjectVersion,
     version: pkg.version,
     runId: pkg.runId ?? null,
@@ -108,7 +135,7 @@ export function toReviewPackageView(pkg: {
     targetKind: pkg.targetKind ?? 'departure_creation_draft',
     targetId: pkg.targetId ?? '',
     proposalHash: pkg.proposalHash ?? '',
-    candidates: parseStoredCandidates(pkg.candidates).map((candidate) => ({
+    candidates: (candidatePayloadSupported ? parseStoredCandidates(pkg.candidates) : []).map((candidate) => ({
       fieldKey: candidate.fieldKey,
       proposedValue: candidate.proposedValue,
       userCorrectedValue:

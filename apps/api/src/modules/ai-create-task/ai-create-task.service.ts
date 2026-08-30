@@ -31,11 +31,12 @@ import {
   searchRouteTemplatesOutputSchema,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
-  aiReviewCandidateInputSchema,
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
   DEPARTURE_REVIEW_TARGET_KIND,
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  registeredReviewSchemas,
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
@@ -1471,9 +1472,25 @@ export class AiCreateTaskService {
     pkg: AiReviewPackage,
     candidates: StoredReviewCandidate[],
   ): void {
+    const payloadSchema = pkg.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA
+    let registeredSchema
+    try {
+      registeredSchema = registeredReviewSchemas.requireConfirmationUnit(
+        payloadSchema,
+        pkg.confirmationUnit,
+      ).schema
+    } catch {
+      throw new BadRequestException('审核包 Schema 版本不受支持，请重新生成')
+    }
+    if (pkg.targetKind && pkg.targetKind !== registeredSchema.targetKind) {
+      throw new BadRequestException('审核包目标类型与 Schema 不匹配，请重新生成')
+    }
+    if (!Array.isArray(pkg.candidates) || pkg.candidates.length !== candidates.length) {
+      throw new BadRequestException('审核包载荷与 Schema 不匹配，请重新生成')
+    }
     for (const candidate of candidates) {
       try {
-        aiReviewCandidateInputSchema.parse({
+        registeredSchema.parseCandidate({
           fieldKey: candidate.fieldKey,
           proposedValue: candidate.proposedValue,
           clarity: candidate.clarity,

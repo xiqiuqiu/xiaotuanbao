@@ -10,11 +10,15 @@ import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { ConfirmAiCreateTaskDto, SaveDepartureCreationDraftDto } from './dto/ai-create-task.dto'
+import { DepartureAgentTaskAdapter } from './departure-agent-task.adapter'
 
 @Controller('ai-create-tasks')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class AiCreateTaskController {
-  constructor(private readonly aiCreateTaskService: AiCreateTaskService) {}
+  constructor(
+    private readonly aiCreateTaskService: AiCreateTaskService,
+    private readonly departureAdapter: DepartureAgentTaskAdapter,
+  ) {}
 
   @Get('assist-availability')
   getAssistAvailability(
@@ -48,12 +52,13 @@ export class AiCreateTaskController {
     @Body() dto: ConfirmAiCreateTaskDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<DepartureSummary> {
-    return this.aiCreateTaskService.confirm(
-      request.user.organizationId,
-      request.user.userId,
+    return this.departureAdapter.executeBusinessCommand({
+      kind: 'complete',
+      organizationId: request.user.organizationId,
+      userId: request.user.userId,
       taskId,
-      dto,
+      input: dto,
       idempotencyKey,
-    )
+    })
   }
 }

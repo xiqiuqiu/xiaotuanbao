@@ -1,7 +1,100 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
+
+describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
+  it('rejects an unknown schema version before applying any business write', async () => {
+    const organizationId = 'org-1'
+    const userId = 'user-1'
+    const taskId = 'task-1'
+    const snapshot = {
+      mode: DepartureCreationDraftMode.MANUAL,
+      routeName: '川西',
+      name: '原团名',
+      startDate: '2026-09-01',
+      endDate: '2026-09-05',
+      ownerUserId: userId,
+      departureType: DepartureType.COMBINED,
+    }
+    const task = {
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      draft: { id: 'draft-1', version: 1, snapshot },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 1,
+        reviewPackages: [],
+      },
+    }
+    const pkg = {
+      id: 'pkg-1',
+      organizationId,
+      taskId,
+      status: AiReviewPackageStatus.pending,
+      version: 1,
+      confirmationUnit: 'basic_info_draft',
+      payloadSchema: 'departure.basic_info_draft@v999',
+      targetKind: 'departure_creation_draft',
+      baseObjectVersion: 1,
+      baselineSnapshot: snapshot,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '候选团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '候选团名' }],
+        },
+      ],
+    }
+    const businessWrite = jest.fn()
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      aiCreateIdempotencyRecord: {
+        upsert: jest.fn().mockImplementation(({ create }) =>
+          Promise.resolve({ ...create, completedAt: null }),
+        ),
+      },
+      aiCreateTask: {
+        findFirst: jest.fn().mockResolvedValue(task),
+        findFirstOrThrow: jest.fn().mockResolvedValue(task),
+      },
+      aiReviewPackage: { findFirst: jest.fn().mockResolvedValue(pkg) },
+      departureCreationDraft: { update: businessWrite },
+    }
+    const prisma = {
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      ),
+    }
+    const service = new AiCreateTaskService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getPermissionKeysForUser: jest.fn().mockResolvedValue(['departure:write']) } as never,
+      {} as never,
+      {} as never,
+    )
+
+    await expect(
+      service.confirmReviewPackage(
+        organizationId,
+        userId,
+        taskId,
+        pkg.id,
+        { expectedVersion: 1, expectedPackageVersion: 1 },
+        'decision-1',
+      ),
+    ).rejects.toThrow(BadRequestException)
+    expect(businessWrite).not.toHaveBeenCalled()
+  })
+})
 
 describe('AiCreateTaskService.saveDraft pendingReview', () => {
   const organizationId = 'org-1'

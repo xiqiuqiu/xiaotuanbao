@@ -22,6 +22,8 @@ import { AiWorkflowProcessor } from './ai-workflow.processor'
 import { AgentServiceIdentityGuard } from './agent-service-identity.guard'
 import { AiOperationDelegationGuard } from './ai-operation-delegation.guard'
 import { DepartureMaterialService } from './departure-material.service'
+import { DepartureAgentTaskAdapter } from './departure-agent-task.adapter'
+import { AGENT_TASK_DOMAIN_ADAPTER } from './agent-task-domain.adapter'
 import { PageLocatorResolver } from './page-locator.resolver'
 import { ParseWorkerClient } from './parse-worker.client'
 
@@ -56,6 +58,11 @@ import { ParseWorkerClient } from './parse-worker.client'
     AgentServiceIdentityGuard,
     AiOperationDelegationGuard,
     DepartureMaterialService,
+    DepartureAgentTaskAdapter,
+    {
+      provide: AGENT_TASK_DOMAIN_ADAPTER,
+      useExisting: DepartureAgentTaskAdapter,
+    },
     PageLocatorResolver,
     ParseWorkerClient,
   ],

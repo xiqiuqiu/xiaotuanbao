@@ -1129,8 +1129,10 @@ export interface AiReviewCandidateView {
 export interface AiReviewPackageView {
   id: string
   status: AiReviewPackageStatus
-  confirmationUnit: 'basic_info_draft'
-  payloadSchema: 'departure.basic_info_draft@v1'
+  confirmationUnit: string
+  payloadSchema: string
+  /** 当前应用是否登记并能安全解释该审核包版本。 */
+  schemaSupported?: boolean
   baseObjectVersion: number
   version: number
   runId: string | null

@@ -112,4 +112,40 @@ describe('toReviewPackageView user provenance', () => {
       }),
     ])
   })
+
+  it('preserves an unknown persisted schema and does not project its fields as departure fields #440', () => {
+    const view = toReviewPackageView({
+      id: 'pkg-stale',
+      status: 'pending',
+      confirmationUnit: 'basic_info_draft',
+      payloadSchema: 'departure.basic_info_draft@v999',
+      baseObjectVersion: 1,
+      version: 1,
+      candidates: [candidate({ fieldKey: 'name', proposedValue: '不应投影' })],
+      baselineSnapshot: { name: '原团名' },
+    })
+
+    expect(view.payloadSchema).toBe('departure.basic_info_draft@v999')
+    expect(view.schemaSupported).toBe(false)
+    expect(view.candidates).toEqual([])
+  })
+
+  it('does not partially project a registered package containing an invalid field #440', () => {
+    const view = toReviewPackageView({
+      id: 'pkg-corrupt',
+      status: 'pending',
+      confirmationUnit: 'basic_info_draft',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      baseObjectVersion: 1,
+      version: 1,
+      candidates: [
+        candidate({ fieldKey: 'name', proposedValue: '可识别字段' }),
+        { ...candidate({ fieldKey: 'name', proposedValue: '未知字段' }), fieldKey: 'secretField' },
+      ],
+      baselineSnapshot: { name: '原团名' },
+    })
+
+    expect(view.schemaSupported).toBe(false)
+    expect(view.candidates).toEqual([])
+  })
 })
