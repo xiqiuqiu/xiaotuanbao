@@ -4,6 +4,8 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { AiReviewStickyBar } from './AiReviewStickyBar'
 
 const pendingReview: AiReviewPackageView = {
@@ -118,5 +120,10 @@ describe('AiReviewStickyBar', () => {
     expect(confirm).toBeDisabled()
     await user.click(confirm)
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('keeps mobile review actions at least 44px high', () => {
+    const css = readFileSync(resolve(__dirname, './AiReviewStickyBar.module.css'), 'utf8')
+    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*\.actions[^}]*\{[^}]*min-height:\s*44px/)
   })
 })

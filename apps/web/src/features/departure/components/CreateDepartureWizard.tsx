@@ -1082,6 +1082,7 @@ function CreateDepartureWizardView({
                 type={pendingReview ? 'default' : 'primary'}
                 loading={createMutation.isPending}
                 disabled={showCopyBootstrap || initializingForm}
+                className={styles.primaryAction}
                 onClick={() => void handleCreate()}
               >
                 创建发团

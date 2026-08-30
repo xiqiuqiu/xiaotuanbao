@@ -61,7 +61,7 @@ describe('evaluateReviewConfirmMerge', () => {
     })
   })
 
-  it('does not write user-only fields from submissions', () => {
+  it('writes explicit non-reference fields but never writes the user-only owner field', () => {
     const result = evaluateReviewConfirmMerge({
       baselineSnapshot: baseline,
       currentSnapshot: baseline,
@@ -69,13 +69,19 @@ describe('evaluateReviewConfirmMerge', () => {
         name: '八月川西团',
         ownerUserId: 'hijacked',
         departureType: 'independent',
+        notes: '客人需要轮椅',
+        vehiclePlate: '新A·12345',
+        contactPhone: '13800138000',
       } as never,
     })
 
     expect(result.status).toBe('ok')
     if (result.status === 'ok') {
       expect(result.nextSnapshot.ownerUserId).toBe('user-owner')
-      expect(result.nextSnapshot.departureType).toBe('combined')
+      expect(result.nextSnapshot.departureType).toBe('independent')
+      expect(result.nextSnapshot.notes).toBe('客人需要轮椅')
+      expect(result.nextSnapshot.vehiclePlate).toBe('新A·12345')
+      expect(result.nextSnapshot.contactPhone).toBe('13800138000')
       expect(result.nextSnapshot.name).toBe('八月川西团')
     }
   })

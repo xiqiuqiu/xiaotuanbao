@@ -225,6 +225,7 @@ vi.mock('@/services/employee.service', () => ({
 
 vi.mock('@/services/supplier.service', () => ({
   listSuppliers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  getSupplier: vi.fn(),
 }))
 
 import {
@@ -317,6 +318,7 @@ function mockPendingReview(
     status: 'pending',
     confirmationUnit: 'basic_info_draft',
     payloadSchema: 'departure.basic_info_draft@v1',
+    schemaSupported: true,
     baseObjectVersion: 1,
     version: 1,
     runId: 'run-1',
@@ -1008,6 +1010,11 @@ describe('CreateDepartureWizard', () => {
       hasContent || hasWidthFloor,
       'nested Spin tip collapses vertically when the placeholder has no width floor',
     ).toBe(true)
+  })
+
+  it('keeps the mobile create action at least 44px high', () => {
+    const css = readFileSync(resolve(__dirname, './CreateDepartureWizard.module.css'), 'utf8')
+    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*\.primaryAction\s*\{[^}]*min-height:\s*44px/)
   })
 
   it('exits copy-source loading under StrictMode after source resolves', async () => {

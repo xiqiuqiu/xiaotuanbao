@@ -156,7 +156,7 @@ export class AiCreateTaskService {
     userId: string,
     dto: SaveDepartureCreationDraftDto,
   ): Promise<AiCreateTaskSummary> {
-    const snapshot = this.normalizeSnapshot(dto.draft)
+    const snapshot = this.normalizeSnapshot(dto.draft, userId)
     this.assertValidDraft(snapshot)
 
     if (!dto.taskId) {
@@ -256,7 +256,10 @@ export class AiCreateTaskService {
       : await this.createTaskWithDraft(
           organizationId,
           userId,
-          this.normalizeSnapshot(dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' }),
+          this.normalizeSnapshot(
+            dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' },
+            userId,
+          ),
         ).then((summary) => this.findOwnedTaskOrThrow(organizationId, userId, summary.id))
 
     const conversation = await this.conversationService.openOrResume(
@@ -1416,6 +1419,7 @@ export class AiCreateTaskService {
 
   private normalizeSnapshot(
     draft: DepartureCreationDraftSnapshotDto,
+    ownerUserIdFallback?: string,
   ): DepartureCreationDraftSnapshot {
     const mode = draft.mode
     return {
@@ -1430,7 +1434,7 @@ export class AiCreateTaskService {
       name: emptyToNull(draft.name),
       startDate: emptyToNull(draft.startDate),
       endDate: emptyToNull(draft.endDate),
-      ownerUserId: emptyToNull(draft.ownerUserId),
+      ownerUserId: emptyToNull(draft.ownerUserId) ?? ownerUserIdFallback ?? null,
       departureType: draft.departureType ?? DepartureType.COMBINED,
       notes: emptyToNull(draft.notes),
       driverSupplierId: emptyToNull(draft.driverSupplierId),

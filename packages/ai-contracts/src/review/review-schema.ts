@@ -11,7 +11,7 @@ import {
   DEPARTURE_REVIEW_TARGET_KIND,
 } from './envelope'
 
-export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'reference'
+export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'choice' | 'reference'
 export type ReviewRiskLevel = 'standard' | 'sensitive' | 'high'
 export type ReviewSchemaCandidate = {
   fieldKey: string
@@ -27,6 +27,7 @@ export type ReviewFieldDescriptor<FieldKey extends string = string> = {
   editable: boolean
   valueSchema: ZodType
   number?: { min?: number; max?: number; precision?: number }
+  options?: readonly { label: string; value: string }[]
   format: (value: unknown) => string
   evidence: {
     presentation: 'expandable'
@@ -117,6 +118,7 @@ function departureField(
   label: string,
   control: ReviewFieldControl,
   number?: ReviewFieldDescriptor['number'],
+  options?: ReviewFieldDescriptor['options'],
 ): ReviewFieldDescriptor<AiReviewableBasicInfoField> {
   const option = aiReviewCandidateInputSchema.options.find(
     (candidate) => candidate.shape.fieldKey.value === key,
@@ -128,7 +130,9 @@ function departureField(
     control,
     valueSchema: option.shape.proposedValue,
     ...(number ? { number } : {}),
-    format: formatReviewValue,
+    ...(options ? { options } : {}),
+    format: (value) =>
+      options?.find((option) => option.value === value)?.label ?? formatReviewValue(value),
     ...commonPresentation,
     editable: control !== 'reference',
   }
@@ -140,6 +144,13 @@ const DEPARTURE_BASIC_INFO_FIELDS = [
   departureField('templateId', '常用路线', 'reference'),
   departureField('startDate', '出团日期', 'date'),
   departureField('endDate', '结束日期', 'date'),
+  departureField('departureType', '发团类型', 'choice', undefined, [
+    { label: '拼团', value: 'combined' },
+    { label: '独立团', value: 'independent' },
+  ]),
+  departureField('notes', '备注', 'text'),
+  departureField('vehiclePlate', '车牌', 'text'),
+  departureField('contactPhone', '联系电话', 'text'),
   departureField('expectedGuestCountHint', '预计人数提示', 'integer', {
     min: 0,
     max: 9999,

@@ -97,6 +97,20 @@ describe('createSubmitReviewPackageTool', () => {
         }),
       }),
     )
+    const candidateKeys = (
+      jsonSchema as {
+        properties: {
+          candidates: {
+            items: { oneOf: Array<{ properties: { fieldKey: { const: string } } }> }
+          }
+        }
+      }
+    ).properties.candidates.items.oneOf.map(
+      (candidate) => candidate.properties.fieldKey.const,
+    )
+    expect(candidateKeys).toEqual(
+      expect.arrayContaining(['departureType', 'notes', 'vehiclePlate', 'contactPhone']),
+    )
   })
 
   it('rejects a textual guest count at the model-facing schema boundary', () => {

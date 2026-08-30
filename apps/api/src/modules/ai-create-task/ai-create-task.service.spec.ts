@@ -675,6 +675,66 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
   })
 })
 
+describe('AiCreateTaskService.saveDraft defaults #442', () => {
+  it('persists the current user and combined type when a new draft omits both', async () => {
+    const now = new Date('2026-08-30T00:00:00.000Z')
+    const agentTaskCreate = jest.fn().mockResolvedValue({ id: 'task-1' })
+    const tx = {
+      agentTask: { create: agentTaskCreate },
+      aiCreateTask: {
+        findUniqueOrThrow: jest.fn().mockImplementation(() => {
+          const snapshot =
+            agentTaskCreate.mock.calls[0]?.[0].data.departureCreationTask.create.draft.create
+              .snapshot
+          return Promise.resolve({
+            id: 'task-1',
+            currentPhase: AiCreatePhase.BASIC_INFO,
+            departureId: null,
+            draft: {
+              id: 'draft-1',
+              taskId: 'task-1',
+              version: 1,
+              snapshot,
+              createdAt: now,
+              updatedAt: now,
+            },
+            agentTask: {
+              id: 'task-1',
+              organizationId: 'org-1',
+              ownerUserId: 'user-1',
+              status: AgentTaskStatus.active,
+              statusVersion: 1,
+              createdAt: now,
+              updatedAt: now,
+              reviewPackages: [],
+            },
+          })
+        }),
+      },
+    }
+    const service = new AiCreateTaskService(
+      {
+        $transaction: (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.saveDraft('org-1', 'user-1', {
+      draft: { mode: DepartureCreationDraftMode.MANUAL, routeName: '川西' },
+    })
+
+    expect(result.draft.snapshot).toMatchObject({
+      ownerUserId: 'user-1',
+      departureType: DepartureType.COMBINED,
+    })
+  })
+})
+
 describe('AiCreateTaskService.getTask statusVersion', () => {
   const organizationId = 'org-1'
   const userId = 'user-1'

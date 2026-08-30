@@ -1,4 +1,4 @@
-import { Button, DatePicker, Input, InputNumber, Typography, theme } from 'antd'
+import { Button, DatePicker, Input, InputNumber, Select, Typography, theme } from 'antd'
 import { useState } from 'react'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -53,6 +53,14 @@ export function PendingCandidateOverlay({
           precision={field.number?.precision}
           style={{ width: '100%' }}
           value={value == null ? null : Number(value)}
+          onChange={(next) => correct(next)}
+        />
+      ) : field.control === 'choice' ? (
+        <Select
+          aria-label={`${field.label}候选`}
+          className={styles.fullWidth}
+          value={typeof value === 'string' ? value : undefined}
+          options={field.options ? [...field.options] : []}
           onChange={(next) => correct(next)}
         />
       ) : field.control === 'date' ? (

@@ -163,6 +163,22 @@ export function evaluateReviewConfirmMerge(args: {
     }
     if (field === 'endDate') {
       nextSnapshot.endDate = text.length > 0 ? text : null
+      continue
+    }
+    if (field === 'departureType') {
+      nextSnapshot.departureType = text.length > 0 ? text : null
+      continue
+    }
+    if (field === 'notes') {
+      nextSnapshot.notes = text.length > 0 ? text : null
+      continue
+    }
+    if (field === 'vehiclePlate') {
+      nextSnapshot.vehiclePlate = text.length > 0 ? text : null
+      continue
+    }
+    if (field === 'contactPhone') {
+      nextSnapshot.contactPhone = text.length > 0 ? text : null
     }
   }
 
