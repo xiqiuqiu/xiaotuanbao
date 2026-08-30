@@ -197,6 +197,19 @@ export {
   type ReviewProposalIdentity,
 } from './review/envelope'
 export {
+  DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
+  ReviewSchemaRegistry,
+  UnsupportedReviewSchemaError,
+  registeredReviewSchemas,
+  resolveReviewField,
+  type ReviewConfirmationUnitDescriptor,
+  type ReviewFieldControl,
+  type ReviewFieldDescriptor,
+  type ReviewRiskLevel,
+  type ReviewSchema,
+  type ReviewSchemaCandidate,
+} from './review/review-schema'
+export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,
   aiCollaborationErrorSchema,

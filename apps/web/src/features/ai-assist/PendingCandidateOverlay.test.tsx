@@ -4,7 +4,13 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AiReviewCandidateView } from '@xiaotuanbao/shared'
+import { AI_REVIEW_CONFIRMATION_UNIT, DEPARTURE_REVIEW_PAYLOAD_SCHEMA } from '@xiaotuanbao/ai-contracts'
 import { PendingCandidateOverlay } from './PendingCandidateOverlay'
+
+const reviewCoordinates = {
+  payloadSchema: DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  confirmationUnit: AI_REVIEW_CONFIRMATION_UNIT,
+}
 
 function candidate(
   overrides: Partial<AiReviewCandidateView> & Pick<AiReviewCandidateView, 'fieldKey' | 'proposedValue'>,
@@ -28,6 +34,7 @@ describe('PendingCandidateOverlay', () => {
     render(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="name"
           candidate={candidate({ fieldKey: 'name', proposedValue: '八月川西团' })}
           savedDisplay="喀纳斯阿勒泰10日线 8月1日团"
@@ -53,6 +60,7 @@ describe('PendingCandidateOverlay', () => {
     render(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="startDate"
           candidate={candidate({
             fieldKey: 'startDate',
@@ -73,6 +81,7 @@ describe('PendingCandidateOverlay', () => {
     render(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="expectedGuestCountHint"
           candidate={candidate({
             fieldKey: 'expectedGuestCountHint',
@@ -86,6 +95,8 @@ describe('PendingCandidateOverlay', () => {
     )
 
     expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveAttribute('aria-valuemin', '0')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveAttribute('aria-valuemax', '9999')
   })
 
   it('reports clearing a date and guest-count candidate as null', () => {
@@ -93,6 +104,7 @@ describe('PendingCandidateOverlay', () => {
     const { rerender } = render(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="startDate"
           candidate={candidate({ fieldKey: 'startDate', proposedValue: '2026-09-01' })}
           savedDisplay="2026-08-01"
@@ -109,6 +121,7 @@ describe('PendingCandidateOverlay', () => {
     rerender(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="expectedGuestCountHint"
           candidate={candidate({ fieldKey: 'expectedGuestCountHint', proposedValue: 8 })}
           savedDisplay="8"
@@ -125,6 +138,7 @@ describe('PendingCandidateOverlay', () => {
     render(
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
+          {...reviewCoordinates}
           fieldKey="templateId"
           candidate={candidate({
             fieldKey: 'templateId',

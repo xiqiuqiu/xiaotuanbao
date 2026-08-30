@@ -14,6 +14,7 @@ import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import type { AiCreateTaskService } from './ai-create-task.service'
 import type { AiToolRequestUser } from './ai-operation-delegation.guard'
 import { AiToolHttpAdapter } from './ai-tool-http.adapter'
+import { DepartureAgentTaskAdapter } from './departure-agent-task.adapter'
 
 const user: AiToolRequestUser = {
   userId: 'user-1',
@@ -141,7 +142,11 @@ function adapterWith(
       text: '摘录',
     }),
   } as unknown as import('./ai-conversation-recall.service').AiConversationRecallService
-  return new AiToolHttpAdapter(new AiActionGateway(store, authorityForActor(user)), tasks, recall)
+  return new AiToolHttpAdapter(
+    new AiActionGateway(store, authorityForActor(user)),
+    new DepartureAgentTaskAdapter(tasks),
+    recall,
+  )
 }
 
 describe('AiToolHttpAdapter.getTaskContext', () => {

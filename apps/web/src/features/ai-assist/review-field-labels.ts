@@ -1,28 +1,45 @@
 import type { AiReviewCandidateView, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
+import {
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  registeredReviewSchemas,
+  resolveReviewField,
+} from '@xiaotuanbao/ai-contracts'
 
-export const REVIEW_FIELD_LABELS: Record<AiReviewableBasicInfoField, string> = {
-  name: '团名',
-  routeName: '路线',
-  templateId: '常用路线',
-  startDate: '出团日期',
-  endDate: '结束日期',
-  expectedGuestCountHint: '预计人数提示',
-}
+const departureUnit = registeredReviewSchemas.requireConfirmationUnit(
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  'basic_info_draft',
+).unit
 
-export function formatReviewFieldList(fieldKeys: string[]): string {
+export const REVIEW_FIELD_LABELS = Object.fromEntries(
+  departureUnit.fields.map((field) => [field.key, field.label]),
+) as Record<AiReviewableBasicInfoField, string>
+
+export function formatReviewFieldList(
+  fieldKeys: string[],
+  payloadSchema: string,
+  confirmationUnit: string,
+): string {
   return fieldKeys
-    .map((key) => REVIEW_FIELD_LABELS[key as AiReviewableBasicInfoField] ?? key)
+    .map((key) => resolveReviewField(payloadSchema, confirmationUnit, key)?.label ?? key)
     .join('、')
 }
 
-export function formatSavedValue(value: string | number | null | undefined): string {
-  if (value == null || value === '') return '未填写'
-  return String(value)
-}
-
 export function findReviewCandidate(
-  pending: { candidates: AiReviewCandidateView[] } | null | undefined,
+  pending:
+    | {
+        candidates: AiReviewCandidateView[]
+        payloadSchema: string
+        confirmationUnit: string
+      }
+    | null
+    | undefined,
   fieldKey: AiReviewableBasicInfoField,
 ): AiReviewCandidateView | undefined {
-  return pending?.candidates.find((candidate) => candidate.fieldKey === fieldKey)
+  if (!pending) return undefined
+  if (!resolveReviewField(
+    pending.payloadSchema,
+    pending.confirmationUnit,
+    fieldKey,
+  )) return undefined
+  return pending.candidates.find((candidate) => candidate.fieldKey === fieldKey)
 }

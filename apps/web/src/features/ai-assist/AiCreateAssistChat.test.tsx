@@ -878,6 +878,8 @@ describe('AiCreateAssistChat', () => {
               text: '已提交待审核建议，请在中间表单确认。',
               reviewPackageId: 'pkg-1',
               fieldKeys: ['name', 'routeName'],
+              payloadSchema: 'departure.basic_info_draft@v1',
+              confirmationUnit: 'basic_info_draft',
             },
             createdAt: '2026-08-14T00:00:00.000Z',
           },

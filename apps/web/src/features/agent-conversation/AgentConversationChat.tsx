@@ -306,7 +306,11 @@ function createReviewPackageActivityRenderer(
           }
         >
           <Typography.Paragraph className={chatStyles.activityDescription} type="secondary">
-            {formatReviewFieldList(content.fieldKeys) || '发团基础信息'}
+            {formatReviewFieldList(
+              content.fieldKeys,
+              content.payloadSchema ?? '',
+              content.confirmationUnit ?? '',
+            ) || '发团基础信息'}
           </Typography.Paragraph>
           <div className={chatStyles.activityActions}>
             {content.taskId ? (

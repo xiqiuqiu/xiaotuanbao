@@ -1493,6 +1493,12 @@ export class AiWorkflowProcessor {
         result.kind === 'awaiting_review' && job.taskId
           ? await this.projectReviewPackageViaGateway(tx, job, attemptId, result.reviewPackage)
           : null
+      const reviewPackageCoordinates = reviewPackageId
+        ? await tx.aiReviewPackage.findUniqueOrThrow({
+            where: { id: reviewPackageId },
+            select: { payloadSchema: true, confirmationUnit: true },
+          })
+        : null
 
       const agentEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
@@ -1507,6 +1513,8 @@ export class AiWorkflowProcessor {
           ...(reviewPackageId
             ? {
                 reviewPackageId,
+                payloadSchema: reviewPackageCoordinates?.payloadSchema,
+                confirmationUnit: reviewPackageCoordinates?.confirmationUnit,
                 fieldKeys:
                   result.kind === 'awaiting_review'
                     ? result.reviewPackage.candidates.map((candidate) => candidate.fieldKey)

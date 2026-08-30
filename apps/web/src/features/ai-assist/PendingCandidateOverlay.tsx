@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import type { AiReviewCandidateView, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
-import { formatSavedValue, REVIEW_FIELD_LABELS } from './review-field-labels'
+import { resolveReviewField } from '@xiaotuanbao/ai-contracts'
 import styles from './PendingCandidateOverlay.module.css'
 
 export interface PendingCandidateOverlayProps {
@@ -11,17 +11,9 @@ export interface PendingCandidateOverlayProps {
   candidate: AiReviewCandidateView
   savedDisplay: string
   displayValue?: string
+  payloadSchema: string
+  confirmationUnit: string
   onCorrect: (value: string | number | null) => void
-}
-
-function evidenceText(candidate: AiReviewCandidateView): string {
-  return candidate.evidence
-    .map((item) => {
-      if (item.kind === 'user_message') return item.excerpt
-      if (item.kind === 'material_region') return `资料第 ${item.pageNumber} 页：${item.excerpt}`
-      return item.rule
-    })
-    .join('；')
 }
 
 export function PendingCandidateOverlay({
@@ -29,6 +21,8 @@ export function PendingCandidateOverlay({
   candidate,
   savedDisplay,
   displayValue,
+  payloadSchema,
+  confirmationUnit,
   onCorrect,
 }: PendingCandidateOverlayProps) {
   const { token } = theme.useToken()
@@ -37,6 +31,11 @@ export function PendingCandidateOverlay({
     candidate.userCorrectedValue !== undefined
       ? candidate.userCorrectedValue
       : candidate.proposedValue
+  const field = resolveReviewField(payloadSchema, confirmationUnit, fieldKey)
+  if (!field) return null
+  const correct = (next: string | number | null) => {
+    if (next === null || field.valueSchema.safeParse(next).success) onCorrect(next)
+  }
 
   return (
     <div
@@ -46,36 +45,36 @@ export function PendingCandidateOverlay({
         background: token.colorWarningBg,
       }}
     >
-      {fieldKey === 'expectedGuestCountHint' ? (
+      {field.control === 'integer' ? (
         <InputNumber
-          aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}
-          min={0}
-          max={9999}
-          precision={0}
+          aria-label={`${field.label}候选`}
+          min={field.number?.min}
+          max={field.number?.max}
+          precision={field.number?.precision}
           style={{ width: '100%' }}
           value={value == null ? null : Number(value)}
-          onChange={(next) => onCorrect(next)}
+          onChange={(next) => correct(next)}
         />
-      ) : fieldKey === 'startDate' || fieldKey === 'endDate' ? (
+      ) : field.control === 'date' ? (
         <DatePicker
-          aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}
+          aria-label={`${field.label}候选`}
           className={styles.fullWidth}
           value={typeof value === 'string' && value ? dayjs(value) : null}
-          onChange={(next: Dayjs | null) => onCorrect(next?.format('YYYY-MM-DD') ?? null)}
+          onChange={(next: Dayjs | null) => correct(next?.format('YYYY-MM-DD') ?? null)}
         />
-      ) : fieldKey === 'templateId' ? (
-        <Typography.Text aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}>
+      ) : field.control === 'reference' || !field.editable ? (
+        <Typography.Text aria-label={`${field.label}候选`}>
           {displayValue ?? String(value ?? '')}
         </Typography.Text>
       ) : (
         <Input
-          aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}
+          aria-label={`${field.label}候选`}
           value={String(value ?? '')}
-          onChange={(event) => onCorrect(event.target.value)}
+          onChange={(event) => correct(event.target.value)}
         />
       )}
       <Typography.Text type="secondary" className={styles.saved}>
-        已保存：{formatSavedValue(savedDisplay)}
+        已保存：{field.format(savedDisplay)}
       </Typography.Text>
       <Button
         type="link"
@@ -83,11 +82,11 @@ export function PendingCandidateOverlay({
         className={styles.evidenceToggle}
         onClick={() => setEvidenceOpen((open) => !open)}
       >
-        {evidenceOpen ? '收起证据' : '查看证据'}
+        {evidenceOpen ? '收起证据' : field.evidence.label}
       </Button>
       {evidenceOpen ? (
         <Typography.Paragraph type="secondary" className={styles.evidence}>
-          {evidenceText(candidate)}
+          {field.evidence.format(candidate.evidence)}
         </Typography.Paragraph>
       ) : null}
     </div>

@@ -146,8 +146,12 @@ function formatMatchReason(reason: Record<string, unknown> | RouteTemplateMatchR
   return '常用路线'
 }
 
-function ReviewPackageNotice({ fieldKeys }: { fieldKeys: string[] }) {
-  const labels = formatReviewFieldList(fieldKeys)
+function ReviewPackageNotice({ content }: { content: ReviewPackageActivityContent }) {
+  const labels = formatReviewFieldList(
+    content.fieldKeys,
+    content.payloadSchema ?? '',
+    content.confirmationUnit ?? '',
+  )
   return (
     <p className={styles.notice}>
       已建议修改{labels || '基础信息'}。请到中间表单确认，不会自动写入发团创建草稿。
@@ -426,7 +430,7 @@ function createReviewPackageActivityRenderer(): ReactActivityMessageRenderer<Rev
         },
       },
     },
-    render: ({ content }) => <ReviewPackageNotice fieldKeys={content.fieldKeys} />,
+    render: ({ content }) => <ReviewPackageNotice content={content} />,
   }
 }
 

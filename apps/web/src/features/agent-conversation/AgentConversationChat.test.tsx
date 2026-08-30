@@ -563,6 +563,8 @@ describe('AgentConversationChat task and review activities', () => {
             taskId: 'task-1',
             reviewPackageId: 'pkg-1',
             fieldKeys: ['routeName', 'startDate', 'endDate'],
+            payloadSchema: 'departure.basic_info_draft@v1',
+            confirmationUnit: 'basic_info_draft',
           },
           createdAt: '2026-08-27T00:00:02.000Z',
         },
