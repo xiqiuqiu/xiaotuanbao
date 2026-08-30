@@ -69,11 +69,11 @@ export function AiReviewStickyBar({
             <Typography.Text type="secondary">风险：{riskLabels}</Typography.Text>
           </>
         ) : (
-          <Alert type="error" showIcon title="审核包版本不受支持，请重新生成建议" />
+          <Alert type="error" showIcon title="审核包版本不受支持，请拒绝本次建议" />
         )}
       </div>
       <Space>
-        <Button onClick={onReject} loading={rejecting} disabled={confirming || !schemaSupported}>
+        <Button onClick={onReject} loading={rejecting} disabled={confirming}>
           拒绝建议
         </Button>
         <Button type="primary" onClick={onConfirm} loading={confirming} disabled={rejecting || !schemaSupported}>

@@ -74,6 +74,7 @@ describe('AiReviewStickyBar', () => {
   it('safely blocks confirmation for an unknown or stale Review Schema #440', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
+    const onReject = vi.fn()
     render(
       <ConfigProvider locale={zhCN}>
         <AiReviewStickyBar
@@ -83,15 +84,19 @@ describe('AiReviewStickyBar', () => {
             schemaSupported: false,
           }}
           onConfirm={onConfirm}
-          onReject={vi.fn()}
+          onReject={onReject}
         />
       </ConfigProvider>,
     )
 
-    expect(screen.getByText('审核包版本不受支持，请重新生成建议')).toBeInTheDocument()
+    expect(screen.getByText('审核包版本不受支持，请拒绝本次建议')).toBeInTheDocument()
     const confirm = screen.getByRole('button', { name: '确认写入草稿' })
     expect(confirm).toBeDisabled()
     await user.click(confirm)
     expect(onConfirm).not.toHaveBeenCalled()
+    const reject = screen.getByRole('button', { name: '拒绝建议' })
+    expect(reject).toBeEnabled()
+    await user.click(reject)
+    expect(onReject).toHaveBeenCalledTimes(1)
   })
 })

@@ -179,7 +179,10 @@ describe('AiCreateTaskService review disposition #440', () => {
     },
   }
 
-  function createService(pkg: Record<string, unknown>) {
+  function createService(
+    pkg: Record<string, unknown>,
+    options?: { siblings?: Record<string, unknown>[] },
+  ) {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
       aiCreateTask: {
@@ -188,7 +191,7 @@ describe('AiCreateTaskService review disposition #440', () => {
       },
       aiReviewPackage: {
         findFirst: jest.fn().mockResolvedValue(pkg),
-        findMany: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue(options?.siblings ?? []),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       aiReviewRecord: { create: jest.fn().mockResolvedValue({}) },
@@ -203,6 +206,7 @@ describe('AiCreateTaskService review disposition #440', () => {
     const conversationService = {
       finalizeReviewDisposition: jest.fn().mockResolvedValue([]),
       finalizeReviewCancel: jest.fn().mockResolvedValue([]),
+      recordReviewConflict: jest.fn().mockResolvedValue([]),
       publish: jest.fn(),
     }
     const service = new AiCreateTaskService(
@@ -235,17 +239,37 @@ describe('AiCreateTaskService review disposition #440', () => {
     conversationId: null,
   }
 
-  it.each(['reject', 'cancel'] as const)(
-    'allows %s for an unsupported package without interpreting candidates',
-    async (operation) => {
-      const { service, tx } = createService(unsupportedPackage)
+  const corruptPackage = {
+    ...unsupportedPackage,
+    id: 'pkg-corrupt',
+    payloadSchema: 'departure.basic_info_draft@v1',
+    candidates: [
+      {
+        fieldKey: 'startDate',
+        proposedValue: 'not-a-date',
+        clarity: 'clear',
+        status: 'pending',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '日期内容损坏' }],
+      },
+    ],
+  }
+
+  it.each([
+    ['reject', unsupportedPackage],
+    ['cancel', unsupportedPackage],
+    ['reject', corruptPackage],
+    ['cancel', corruptPackage],
+  ] as const)(
+    'allows %s for an unsupported or corrupt package without interpreting candidates',
+    async (operation, pkg) => {
+      const { service, tx } = createService(pkg)
 
       await expect(
         operation === 'reject'
-          ? service.rejectReviewPackage('org-1', 'user-1', 'task-1', 'pkg-unsupported', {
+          ? service.rejectReviewPackage('org-1', 'user-1', 'task-1', String(pkg.id), {
               expectedPackageVersion: 1,
             })
-          : service.cancelReviewPackage('org-1', 'user-1', 'task-1', 'pkg-unsupported', {
+          : service.cancelReviewPackage('org-1', 'user-1', 'task-1', String(pkg.id), {
               expectedPackageVersion: 1,
             }),
       ).resolves.toMatchObject({ id: 'task-1' })
@@ -296,6 +320,53 @@ describe('AiCreateTaskService review disposition #440', () => {
       expect.objectContaining({ data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }) }),
     )
   })
+
+  it.each([
+    ['unknown', unsupportedPackage],
+    ['corrupt', corruptPackage],
+  ] as const)(
+    'keeps a valid confirm atomic when the sibling package is %s',
+    async (_kind, sibling) => {
+      const modelCandidate = {
+        fieldKey: 'name' as const,
+        proposedValue: '确认后的川西团',
+        clarity: 'clear' as const,
+        evidence: [
+          { kind: 'user_message' as const, sequence: 1, excerpt: '团名叫确认后的川西团' },
+        ],
+      }
+      const validPackage = {
+        ...unsupportedPackage,
+        id: 'pkg-valid-with-sibling',
+        payloadSchema: 'departure.basic_info_draft@v1',
+        proposalHash: departureReviewProposalHash({
+          objectVersion: 1,
+          confirmationUnit: 'basic_info_draft',
+          candidates: [modelCandidate],
+        }),
+        candidates: [{ ...modelCandidate, status: 'pending' }],
+      }
+      const { service, tx } = createService(validPackage, { siblings: [sibling] })
+
+      await expect(
+        service.confirmReviewPackage(
+          'org-1',
+          'user-1',
+          'task-1',
+          validPackage.id,
+          { expectedVersion: 1, expectedPackageVersion: 1 },
+          `decision-with-${_kind}-sibling`,
+        ),
+      ).resolves.toMatchObject({ id: 'task-1' })
+      expect(tx.departureCreationDraft.update).toHaveBeenCalledWith({
+        where: { id: 'draft-1' },
+        data: expect.objectContaining({
+          version: 2,
+          snapshot: expect.objectContaining({ name: '确认后的川西团' }),
+        }),
+      })
+    },
+  )
 })
 
 describe('AiCreateTaskService.saveDraft pendingReview', () => {

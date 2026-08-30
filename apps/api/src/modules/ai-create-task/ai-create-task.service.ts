@@ -1795,6 +1795,7 @@ export class AiCreateTaskService {
     })
     const events = []
     for (const pkg of stale) {
+      const candidates = this.dispositionCandidates(pkg)
       const baseline = this.parseSnapshot(pkg.baselineSnapshot)
       const changeSummary = reviewConflictChangeSummary({
         baseVersion: pkg.baseObjectVersion,
@@ -1808,11 +1809,14 @@ export class AiCreateTaskService {
           userId: params.userId,
           taskId: params.taskId,
           pkg,
-          candidates: this.parsePackageCandidates(pkg),
-          corrections: this.parseCorrections(
-            (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
-            pkg,
-          ),
+          candidates,
+          corrections:
+            candidates.length > 0
+              ? this.parseCorrections(
+                  (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+                  pkg,
+                )
+              : {},
           submissions: {},
           currentVersion: params.currentVersion,
           changeSummary,
