@@ -12,6 +12,10 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AI_REVIEW_CONFIRMATION_UNIT,
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+} from '@xiaotuanbao/ai-contracts'
+import {
   parseConversationStreamFrame,
   type AiConversationEventView,
   type AiConversationView,
@@ -306,7 +310,11 @@ function createReviewPackageActivityRenderer(
           }
         >
           <Typography.Paragraph className={chatStyles.activityDescription} type="secondary">
-            {formatReviewFieldList(content.fieldKeys) || '发团基础信息'}
+            {formatReviewFieldList(
+              content.fieldKeys,
+              DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+              AI_REVIEW_CONFIRMATION_UNIT,
+            ) || '发团基础信息'}
           </Typography.Paragraph>
           <div className={chatStyles.activityActions}>
             {content.taskId ? (

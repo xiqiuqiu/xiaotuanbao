@@ -207,6 +207,7 @@ export {
   type ReviewFieldDescriptor,
   type ReviewRiskLevel,
   type ReviewSchema,
+  type ReviewSchemaCandidate,
 } from './review/review-schema'
 export {
   AI_COLLABORATION_ERROR_CODES,

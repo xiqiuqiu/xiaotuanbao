@@ -8,6 +8,7 @@ import {
 import type { ConfirmAiCreateTaskDto } from './dto/ai-create-task.dto'
 import { AiCreateTaskService } from './ai-create-task.service'
 import type {
+  AgentTaskBusinessCommand,
   AgentTaskDomainAdapter,
   TaskBoundAiToolRequestUser,
 } from './agent-task-domain.adapter'
@@ -17,15 +18,6 @@ type ReviewCaller = Parameters<AiCreateTaskService['proposeReviewPackageForAgent
 type SubmitReviewOptions = Parameters<AiCreateTaskService['submitReviewPackageForAgent']>[2]
 type ReferenceCaller = Parameters<AiCreateTaskService['searchRouteTemplatesForAgent']>[0]
 type MaterialCaller = Parameters<AiCreateTaskService['getMaterialParseResultForAgent']>[0]
-
-export type DepartureBusinessCommand = {
-  kind: 'complete'
-  organizationId: string
-  userId: string
-  taskId: string
-  input: ConfirmAiCreateTaskDto
-  idempotencyKey?: string
-}
 
 /**
  * 发团写业务的平台注册适配边界。通用 Agent 入口只调用这里，不解释发团字段。
@@ -61,12 +53,15 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
     return this.tasks.submitReviewPackageForAgent(caller as ReviewCaller, input, options)
   }
 
-  executeBusinessCommand(command: DepartureBusinessCommand) {
+  executeBusinessCommand(command: AgentTaskBusinessCommand) {
+    if (command.kind !== 'complete') {
+      return Promise.reject(new Error(`不支持的发团业务命令: ${command.kind}`))
+    }
     return this.tasks.confirm(
       command.organizationId,
       command.userId,
       command.taskId,
-      command.input,
+      command.input as ConfirmAiCreateTaskDto,
       command.idempotencyKey,
     )
   }

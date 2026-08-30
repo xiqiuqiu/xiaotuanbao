@@ -144,8 +144,8 @@ function RouteSourceFields({
           <PendingCandidateOverlay
             fieldKey="templateId"
             candidate={templateIdCandidate}
-            payloadSchema={pendingReview?.payloadSchema}
-            confirmationUnit={pendingReview?.confirmationUnit}
+            payloadSchema={pendingReview?.payloadSchema ?? ''}
+            confirmationUnit={pendingReview?.confirmationUnit ?? ''}
             displayValue={templateQuery.data?.name}
             savedDisplay={route.templateId ? route.routeName : '未选择'}
             onCorrect={(value) => onCorrectCandidate('templateId', value)}
@@ -169,8 +169,8 @@ function RouteSourceFields({
             <PendingCandidateOverlay
               fieldKey="routeName"
               candidate={routeNameCandidate}
-              payloadSchema={pendingReview?.payloadSchema}
-              confirmationUnit={pendingReview?.confirmationUnit}
+              payloadSchema={pendingReview?.payloadSchema ?? ''}
+              confirmationUnit={pendingReview?.confirmationUnit ?? ''}
               savedDisplay={route.routeName}
               onCorrect={(value) => onCorrectCandidate('routeName', value)}
             />
@@ -234,8 +234,8 @@ function DepartureInfoForm({
       <PendingCandidateOverlay
         fieldKey={fieldKey}
         candidate={candidate}
-        payloadSchema={pendingReview?.payloadSchema}
-        confirmationUnit={pendingReview?.confirmationUnit}
+        payloadSchema={pendingReview?.payloadSchema ?? ''}
+        confirmationUnit={pendingReview?.confirmationUnit ?? ''}
         savedDisplay={savedDisplay}
         onCorrect={(value) => onCorrectCandidate(fieldKey, value)}
       />

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import type { AiReviewCandidateView, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
-import { DEPARTURE_REVIEW_PAYLOAD_SCHEMA, resolveReviewField } from '@xiaotuanbao/ai-contracts'
+import { resolveReviewField } from '@xiaotuanbao/ai-contracts'
 import styles from './PendingCandidateOverlay.module.css'
 
 export interface PendingCandidateOverlayProps {
@@ -11,8 +11,8 @@ export interface PendingCandidateOverlayProps {
   candidate: AiReviewCandidateView
   savedDisplay: string
   displayValue?: string
-  payloadSchema?: string
-  confirmationUnit?: string
+  payloadSchema: string
+  confirmationUnit: string
   onCorrect: (value: string | number | null) => void
 }
 
@@ -21,8 +21,8 @@ export function PendingCandidateOverlay({
   candidate,
   savedDisplay,
   displayValue,
-  payloadSchema: resolvedPayloadSchema = DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
-  confirmationUnit: resolvedConfirmationUnit = 'basic_info_draft',
+  payloadSchema,
+  confirmationUnit,
   onCorrect,
 }: PendingCandidateOverlayProps) {
   const { token } = theme.useToken()
@@ -31,8 +31,6 @@ export function PendingCandidateOverlay({
     candidate.userCorrectedValue !== undefined
       ? candidate.userCorrectedValue
       : candidate.proposedValue
-  const payloadSchema = String(resolvedPayloadSchema)
-  const confirmationUnit = String(resolvedConfirmationUnit)
   const field = resolveReviewField(payloadSchema, confirmationUnit, fieldKey)
   if (!field) return null
   const correct = (next: string | number | null) => {

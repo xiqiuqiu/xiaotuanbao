@@ -11,6 +11,8 @@ import {
 import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
+  AI_REVIEW_CONFIRMATION_UNIT,
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   aiCreateSharedLightStateSchema,
   type AiCreateSharedLightState,
   type RouteTemplateMatchReason,
@@ -147,7 +149,11 @@ function formatMatchReason(reason: Record<string, unknown> | RouteTemplateMatchR
 }
 
 function ReviewPackageNotice({ fieldKeys }: { fieldKeys: string[] }) {
-  const labels = formatReviewFieldList(fieldKeys)
+  const labels = formatReviewFieldList(
+    fieldKeys,
+    DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+    AI_REVIEW_CONFIRMATION_UNIT,
+  )
   return (
     <p className={styles.notice}>
       已建议修改{labels || '基础信息'}。请到中间表单确认，不会自动写入发团创建草稿。

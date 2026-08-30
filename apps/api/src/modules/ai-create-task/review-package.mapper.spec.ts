@@ -89,6 +89,8 @@ describe('toReviewPackageView user provenance', () => {
       id: 'pkg-1',
       status: 'pending',
       confirmationUnit: 'basic_info_draft',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      targetKind: 'departure_creation_draft',
       baseObjectVersion: 1,
       version: 1,
       runId: 'run-1',
@@ -119,6 +121,7 @@ describe('toReviewPackageView user provenance', () => {
       status: 'pending',
       confirmationUnit: 'basic_info_draft',
       payloadSchema: 'departure.basic_info_draft@v999',
+      targetKind: 'departure_creation_draft',
       baseObjectVersion: 1,
       version: 1,
       candidates: [candidate({ fieldKey: 'name', proposedValue: '不应投影' })],
@@ -130,12 +133,30 @@ describe('toReviewPackageView user provenance', () => {
     expect(view.candidates).toEqual([])
   })
 
+  it('does not infer schema coordinates for a legacy package #440', () => {
+    const view = toReviewPackageView({
+      id: 'pkg-legacy',
+      status: 'pending',
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      version: 1,
+      candidates: [candidate({ fieldKey: 'name', proposedValue: '不应投影' })],
+      baselineSnapshot: { name: '原团名' },
+    })
+
+    expect(view.payloadSchema).toBe('')
+    expect(view.targetKind).toBe('')
+    expect(view.schemaSupported).toBe(false)
+    expect(view.candidates).toEqual([])
+  })
+
   it('does not partially project a registered package containing an invalid field #440', () => {
     const view = toReviewPackageView({
       id: 'pkg-corrupt',
       status: 'pending',
       confirmationUnit: 'basic_info_draft',
       payloadSchema: 'departure.basic_info_draft@v1',
+      targetKind: 'departure_creation_draft',
       baseObjectVersion: 1,
       version: 1,
       candidates: [

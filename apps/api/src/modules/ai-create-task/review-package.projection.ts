@@ -84,10 +84,24 @@ export async function findReviewPackageByProposalIdentity(
     targetId: string
     proposalHash: string
   },
-): Promise<{ id: string; sourceActionId: string | null; candidates: Prisma.JsonValue } | null> {
+): Promise<{
+  id: string
+  sourceActionId: string | null
+  candidates: Prisma.JsonValue
+  payloadSchema: string
+  confirmationUnit: string
+  targetKind: string
+} | null> {
   return tx.aiReviewPackage.findFirst({
     where: identity,
-    select: { id: true, sourceActionId: true, candidates: true },
+    select: {
+      id: true,
+      sourceActionId: true,
+      candidates: true,
+      payloadSchema: true,
+      confirmationUnit: true,
+      targetKind: true,
+    },
   })
 }
 
@@ -99,5 +113,4 @@ function isUniqueViolation(error: unknown): boolean {
     (error as { code: string }).code === 'P2002'
   )
 }
-
 

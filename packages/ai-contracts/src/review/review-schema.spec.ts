@@ -7,7 +7,7 @@ import {
 
 describe('Review Schema Registry #440', () => {
   it('registers the versioned departure basic-info package and field catalog', () => {
-    const schema = registeredReviewSchemas.getByPayloadSchema(
+    const schema = registeredReviewSchemas.requireByPayloadSchema(
       'departure.basic_info_draft@v1',
     )
 

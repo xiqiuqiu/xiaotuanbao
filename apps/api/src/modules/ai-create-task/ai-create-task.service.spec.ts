@@ -94,6 +94,58 @@ describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
     ).rejects.toThrow(BadRequestException)
     expect(businessWrite).not.toHaveBeenCalled()
   })
+
+  it('rejects a correction that violates the package field schema before a review write', async () => {
+    const reviewWrite = jest.fn()
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      aiCreateTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          agentTask: { ownerUserId: 'user-1', status: AgentTaskStatus.active },
+        }),
+      },
+      aiReviewPackage: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'pkg-1',
+          status: AiReviewPackageStatus.pending,
+          version: 1,
+          payloadSchema: 'departure.basic_info_draft@v1',
+          confirmationUnit: 'basic_info_draft',
+          targetKind: 'departure_creation_draft',
+          candidates: [
+            {
+              fieldKey: 'startDate',
+              proposedValue: '2026-09-01',
+              clarity: 'clear',
+              status: 'pending',
+              evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9 月 1 日' }],
+            },
+          ],
+        }),
+        update: reviewWrite,
+      },
+    }
+    const service = new AiCreateTaskService(
+      { $transaction: (callback: (client: typeof tx) => Promise<unknown>) => callback(tx) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    await expect(
+      service.patchReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        'pkg-1',
+        { corrections: { startDate: 'not-a-date' } },
+      ),
+    ).rejects.toThrow('审核修正值无效：出团日期')
+    expect(reviewWrite).not.toHaveBeenCalled()
+  })
 })
 
 describe('AiCreateTaskService.saveDraft pendingReview', () => {

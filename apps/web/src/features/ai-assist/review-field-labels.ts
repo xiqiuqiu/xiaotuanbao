@@ -16,8 +16,8 @@ export const REVIEW_FIELD_LABELS = Object.fromEntries(
 
 export function formatReviewFieldList(
   fieldKeys: string[],
-  payloadSchema: string = DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
-  confirmationUnit: string = 'basic_info_draft',
+  payloadSchema: string,
+  confirmationUnit: string,
 ): string {
   return fieldKeys
     .map((key) => resolveReviewField(payloadSchema, confirmationUnit, key)?.label ?? key)
@@ -25,16 +25,21 @@ export function formatReviewFieldList(
 }
 
 export function findReviewCandidate(
-  pending: { candidates: AiReviewCandidateView[] } | null | undefined,
+  pending:
+    | {
+        candidates: AiReviewCandidateView[]
+        payloadSchema: string
+        confirmationUnit: string
+      }
+    | null
+    | undefined,
   fieldKey: AiReviewableBasicInfoField,
 ): AiReviewCandidateView | undefined {
-  if (!pending || !('payloadSchema' in pending) || !('confirmationUnit' in pending)) {
-    return pending?.candidates.find((candidate) => candidate.fieldKey === fieldKey)
-  }
+  if (!pending) return undefined
   if (!resolveReviewField(
-    String(pending.payloadSchema),
-    String(pending.confirmationUnit),
+    pending.payloadSchema,
+    pending.confirmationUnit,
     fieldKey,
   )) return undefined
-  return pending?.candidates.find((candidate) => candidate.fieldKey === fieldKey)
+  return pending.candidates.find((candidate) => candidate.fieldKey === fieldKey)
 }

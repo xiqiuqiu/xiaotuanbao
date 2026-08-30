@@ -31,10 +31,8 @@ import {
   searchRouteTemplatesOutputSchema,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
-  AI_REVIEWABLE_BASIC_INFO_FIELDS,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
   DEPARTURE_REVIEW_TARGET_KIND,
-  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   registeredReviewSchemas,
   isTargetVersionStale,
@@ -87,6 +85,7 @@ import {
   departureReviewProposalHash,
   reviewDecisionRequestHash,
   reviewPackageCreateData,
+  reviewProposalHash,
 } from './review-package.envelope'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
@@ -589,9 +588,10 @@ export class AiCreateTaskService {
     packageId: string,
     dto: PatchAiReviewPackageDto,
   ): Promise<AiCreateTaskSummary> {
-    const corrections = this.parseCorrections(dto.corrections)
     return this.prisma.$transaction(async (tx) => {
       const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+      this.parsePackageCandidates(pkg)
+      const corrections = this.parseCorrections(dto.corrections, pkg)
       await tx.aiReviewPackage.update({
         where: { id: pkg.id },
         data: { userCorrections: corrections as Prisma.InputJsonValue },
@@ -620,7 +620,7 @@ export class AiCreateTaskService {
         packageId,
         dto.expectedPackageVersion,
       )
-      const candidates = parseStoredCandidates(pkg.candidates).map((candidate) => ({
+      const candidates = this.parsePackageCandidates(pkg).map((candidate) => ({
         ...candidate,
         status: 'rejected' as const,
       }))
@@ -706,9 +706,10 @@ export class AiCreateTaskService {
         packageId: pkg.id,
         operatorUserId: userId,
         action: AiReviewRecordAction.cancel,
-        candidates: parseStoredCandidates(pkg.candidates),
+        candidates: this.parsePackageCandidates(pkg),
         corrections: this.parseCorrections(
           (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+          pkg,
         ),
         submittedValues: {},
         objectVersion: pkg.baseObjectVersion,
@@ -791,11 +792,10 @@ export class AiCreateTaskService {
       throw new BadRequestException('确认审核必须提供 decisionCommandId 或 Idempotency-Key')
     }
     const identity = parsedIdentity.data
-    const requestCorrections = this.parseCorrections(dto.corrections)
     const requestHash = reviewDecisionRequestHash({
       ...identity,
       expectedVersion: dto.expectedVersion,
-      corrections: requestCorrections,
+      corrections: dto.corrections ?? {},
     })
     const outcome = await this.prisma.$transaction(async (tx) => {
       await this.assertCurrentWritePermission(userId)
@@ -828,10 +828,12 @@ export class AiCreateTaskService {
         throw new NotFoundException('发团创建草稿不存在')
       }
 
+      const requestCorrections = this.parseCorrections(dto.corrections, pkg)
       const storedCorrections = this.parseCorrections(
         (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+        pkg,
       )
-      const originalCandidates = parseStoredCandidates(pkg.candidates)
+      const originalCandidates = this.parsePackageCandidates(pkg)
       this.assertStoredProposalIntegrity(pkg, originalCandidates)
       const candidates = this.applyCorrections(originalCandidates, {
         ...storedCorrections,
@@ -1468,23 +1470,45 @@ export class AiCreateTaskService {
     return this.normalizeSnapshot(raw as unknown as DepartureCreationDraftSnapshotDto)
   }
 
+  private requirePackageSchema(pkg: {
+    payloadSchema: string
+    confirmationUnit: string
+    targetKind: string
+  }) {
+    let registered
+    try {
+      registered = registeredReviewSchemas.requireConfirmationUnit(
+        pkg.payloadSchema,
+        pkg.confirmationUnit,
+      )
+    } catch {
+      throw new BadRequestException('审核包 Schema 版本不受支持，请重新生成')
+    }
+    if (pkg.targetKind !== registered.schema.targetKind) {
+      throw new BadRequestException('审核包目标类型与 Schema 不匹配，请重新生成')
+    }
+    return registered
+  }
+
+  private parsePackageCandidates(pkg: {
+    payloadSchema: string
+    confirmationUnit: string
+    targetKind: string
+    candidates: unknown
+  }): StoredReviewCandidate[] {
+    const { schema, unit } = this.requirePackageSchema(pkg)
+    const candidates = parseStoredCandidates(pkg.candidates, schema, unit.key)
+    if (!Array.isArray(pkg.candidates) || candidates.length !== pkg.candidates.length) {
+      throw new BadRequestException('审核包载荷与 Schema 不匹配，请重新生成')
+    }
+    return candidates
+  }
+
   private assertStoredProposalIntegrity(
     pkg: AiReviewPackage,
     candidates: StoredReviewCandidate[],
   ): void {
-    const payloadSchema = pkg.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA
-    let registeredSchema
-    try {
-      registeredSchema = registeredReviewSchemas.requireConfirmationUnit(
-        payloadSchema,
-        pkg.confirmationUnit,
-      ).schema
-    } catch {
-      throw new BadRequestException('审核包 Schema 版本不受支持，请重新生成')
-    }
-    if (pkg.targetKind && pkg.targetKind !== registeredSchema.targetKind) {
-      throw new BadRequestException('审核包目标类型与 Schema 不匹配，请重新生成')
-    }
+    const { schema: registeredSchema, unit } = this.requirePackageSchema(pkg)
     if (!Array.isArray(pkg.candidates) || pkg.candidates.length !== candidates.length) {
       throw new BadRequestException('审核包载荷与 Schema 不匹配，请重新生成')
     }
@@ -1500,15 +1524,14 @@ export class AiCreateTaskService {
         throw new BadRequestException('审核证据已失效，请基于最新状态重新生成')
       }
     }
-    const expectedHash = departureReviewProposalHash({
-      objectVersion: pkg.baseObjectVersion,
-      confirmationUnit: 'basic_info_draft',
+    const expectedHash = reviewProposalHash({
+      confirmationUnit: unit.key,
       candidates: candidates.map((candidate) => ({
         fieldKey: candidate.fieldKey,
         proposedValue: candidate.proposedValue,
         clarity: candidate.clarity,
         evidence: candidate.evidence,
-      })) as ReturnType<typeof submitReviewPackageInputSchema.parse>['candidates'],
+      })),
     })
     if (pkg.proposalHash && pkg.proposalHash !== expectedHash) {
       throw new ConflictException('审核提案内容与记录 Hash 不一致，请重新生成')
@@ -1537,14 +1560,21 @@ export class AiCreateTaskService {
   ): Promise<SubmitReviewPackageOutput | null> {
     const byAction = await tx.aiReviewPackage.findFirst({
       where: { sourceActionId: params.sourceActionId },
-      select: { id: true, candidates: true, baseObjectVersion: true },
+      select: {
+        id: true,
+        candidates: true,
+        baseObjectVersion: true,
+        payloadSchema: true,
+        confirmationUnit: true,
+        targetKind: true,
+      },
     })
     if (byAction) {
       return submitReviewPackageOutputSchema.parse({
         reviewPackageId: byAction.id,
         status: 'pending',
         objectVersion: byAction.baseObjectVersion,
-        fieldKeys: parseStoredCandidates(byAction.candidates).map((candidate) => candidate.fieldKey),
+        fieldKeys: this.parsePackageCandidates(byAction).map((candidate) => candidate.fieldKey),
       })
     }
     const byIdentity = await findReviewPackageByProposalIdentity(tx, {
@@ -1561,7 +1591,7 @@ export class AiCreateTaskService {
       reviewPackageId: byIdentity.id,
       status: 'pending',
       objectVersion: params.reviewPackage.objectVersion,
-      fieldKeys: parseStoredCandidates(byIdentity.candidates).map((candidate) => candidate.fieldKey),
+      fieldKeys: this.parsePackageCandidates(byIdentity).map((candidate) => candidate.fieldKey),
     })
   }
 
@@ -1757,9 +1787,10 @@ export class AiCreateTaskService {
           userId: params.userId,
           taskId: params.taskId,
           pkg,
-          candidates: parseStoredCandidates(pkg.candidates),
+          candidates: this.parsePackageCandidates(pkg),
           corrections: this.parseCorrections(
             (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+            pkg,
           ),
           submissions: {},
           currentVersion: params.currentVersion,
@@ -1832,13 +1863,18 @@ export class AiCreateTaskService {
 
   private parseCorrections(
     raw: Record<string, string | number | null> | undefined,
+    pkg: { payloadSchema: string; confirmationUnit: string; targetKind: string },
   ): Partial<Record<AiReviewableBasicInfoField, string | number | null>> {
     if (!raw) return {}
-    const allowed = new Set<string>(AI_REVIEWABLE_BASIC_INFO_FIELDS)
+    const { unit } = this.requirePackageSchema(pkg)
     const corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>> = {}
     for (const [key, value] of Object.entries(raw)) {
-      if (!allowed.has(key)) {
+      const field = unit.fields.find((candidate) => candidate.key === key)
+      if (!field) {
         throw new BadRequestException('不能修正负责人和发团类型等系统关联字段')
+      }
+      if (value !== null && !field.valueSchema.safeParse(value).success) {
+        throw new BadRequestException(`审核修正值无效：${field.label}`)
       }
       corrections[key as AiReviewableBasicInfoField] = value
     }
@@ -1850,10 +1886,11 @@ export class AiCreateTaskService {
     corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>,
   ): StoredReviewCandidate[] {
     return candidates.map((candidate) => {
-      if (!(candidate.fieldKey in corrections)) return candidate
+      const fieldKey = candidate.fieldKey as AiReviewableBasicInfoField
+      if (!(fieldKey in corrections)) return candidate
       return {
         ...candidate,
-        userCorrectedValue: corrections[candidate.fieldKey] ?? null,
+        userCorrectedValue: corrections[fieldKey] ?? null,
       }
     })
   }

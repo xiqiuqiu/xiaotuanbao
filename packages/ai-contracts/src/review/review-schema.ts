@@ -13,6 +13,12 @@ import {
 
 export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'reference'
 export type ReviewRiskLevel = 'standard' | 'sensitive' | 'high'
+export type ReviewSchemaCandidate = {
+  fieldKey: string
+  proposedValue: string | number
+  clarity: AiReviewCandidateInput['clarity']
+  evidence: AiReviewCandidateInput['evidence']
+}
 
 export type ReviewFieldDescriptor<FieldKey extends string = string> = {
   key: FieldKey
@@ -42,7 +48,7 @@ export type ReviewSchema<FieldKey extends string = string> = {
   payloadSchema: string
   targetKind: string
   confirmationUnits: readonly ReviewConfirmationUnitDescriptor<FieldKey>[]
-  parseCandidate: (candidate: unknown) => AiReviewCandidateInput
+  parseCandidate: (candidate: unknown) => ReviewSchemaCandidate
 }
 
 export class UnsupportedReviewSchemaError extends Error {
@@ -68,10 +74,6 @@ export class ReviewSchemaRegistry {
 
   findByPayloadSchema(payloadSchema: string): ReviewSchema | undefined {
     return this.byPayloadSchema.get(payloadSchema)
-  }
-
-  getByPayloadSchema(payloadSchema: string): ReviewSchema {
-    return this.requireByPayloadSchema(payloadSchema)
   }
 
   requireByPayloadSchema(payloadSchema: string): ReviewSchema {

@@ -63,10 +63,11 @@ function adoptingTemplateId(submissions: ReviewConfirmSubmission): string | null
 export function preservePendingCandidateBaseline(args: {
   draft: AiCreateDraftSnapshot
   baselineSnapshot: AiCreateDraftSnapshot
-  candidateFields: readonly AiReviewableBasicInfoField[]
+  candidateFields: readonly string[]
 }): AiCreateDraftSnapshot {
-  const submittedFields = args.candidateFields.filter((field) =>
-    (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
+  const submittedFields = args.candidateFields.filter(
+    (field): field is AiReviewableBasicInfoField =>
+      (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
   )
   const guarded = fieldsToGuard(submittedFields)
   if (guarded.size === 0) return args.draft
@@ -94,10 +95,11 @@ export function preservePendingCandidateBaseline(args: {
 export function pendingCandidateSnapshotDrift(args: {
   draft: AiCreateDraftSnapshot
   baselineSnapshot: AiCreateDraftSnapshot
-  candidateFields: readonly AiReviewableBasicInfoField[]
+  candidateFields: readonly string[]
 }): boolean {
-  const submittedFields = args.candidateFields.filter((field) =>
-    (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
+  const submittedFields = args.candidateFields.filter(
+    (field): field is AiReviewableBasicInfoField =>
+      (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
   )
   const guarded = fieldsToGuard(submittedFields)
   return [...guarded].some(
