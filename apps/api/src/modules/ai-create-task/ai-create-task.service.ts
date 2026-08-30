@@ -620,7 +620,7 @@ export class AiCreateTaskService {
         packageId,
         dto.expectedPackageVersion,
       )
-      const candidates = this.parsePackageCandidates(pkg).map((candidate) => ({
+      const candidates = this.dispositionCandidates(pkg).map((candidate) => ({
         ...candidate,
         status: 'rejected' as const,
       }))
@@ -633,7 +633,9 @@ export class AiCreateTaskService {
         data: {
           status: AiReviewPackageStatus.rejected,
           version: { increment: 1 },
-          candidates: candidates as unknown as Prisma.InputJsonValue,
+          ...(candidates.length > 0
+            ? { candidates: candidates as unknown as Prisma.InputJsonValue }
+            : {}),
         },
       })
       if (claimed.count !== 1) {
@@ -701,16 +703,20 @@ export class AiCreateTaskService {
       if (claimed.count !== 1) {
         await this.throwAlreadyHandled(tx, organizationId, taskId)
       }
+      const candidates = this.dispositionCandidates(pkg)
       await this.writeReviewRecord(tx, {
         organizationId,
         packageId: pkg.id,
         operatorUserId: userId,
         action: AiReviewRecordAction.cancel,
-        candidates: this.parsePackageCandidates(pkg),
-        corrections: this.parseCorrections(
-          (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
-          pkg,
-        ),
+        candidates,
+        corrections:
+          candidates.length > 0
+            ? this.parseCorrections(
+                (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+                pkg,
+              )
+            : {},
         submittedValues: {},
         objectVersion: pkg.baseObjectVersion,
         writeResult: AiReviewWriteResult.rejected,
@@ -1502,6 +1508,21 @@ export class AiCreateTaskService {
       throw new BadRequestException('审核包载荷与 Schema 不匹配，请重新生成')
     }
     return candidates
+  }
+
+  private dispositionCandidates(pkg: {
+    payloadSchema: string
+    confirmationUnit: string
+    targetKind: string
+    candidates: unknown
+  }): StoredReviewCandidate[] {
+    const schema = registeredReviewSchemas.findByPayloadSchema(pkg.payloadSchema)
+    if (!schema || pkg.targetKind !== schema.targetKind) return []
+    const unit = schema.confirmationUnits.find(
+      (candidate) => candidate.key === pkg.confirmationUnit,
+    )
+    if (!unit) return []
+    return parseStoredCandidates(pkg.candidates, schema, unit.key)
   }
 
   private assertStoredProposalIntegrity(

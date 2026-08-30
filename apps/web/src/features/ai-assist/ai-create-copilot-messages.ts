@@ -188,6 +188,8 @@ export type InteractionActivityContent = {
 export type ReviewPackageActivityContent = {
   reviewPackageId: string
   fieldKeys: string[]
+  payloadSchema?: string
+  confirmationUnit?: string
   taskId?: string
   taskType?: string
 }
@@ -373,9 +375,15 @@ function reviewPackageFromPayload(
       : typeof payload.taskType === 'string' && payload.taskType.length > 0
         ? payload.taskType
         : fallbackTaskType
+  const payloadSchema =
+    typeof payload.payloadSchema === 'string' ? payload.payloadSchema : undefined
+  const confirmationUnit =
+    typeof payload.confirmationUnit === 'string' ? payload.confirmationUnit : undefined
   return {
     reviewPackageId,
     fieldKeys,
+    ...(payloadSchema ? { payloadSchema } : {}),
+    ...(confirmationUnit ? { confirmationUnit } : {}),
     ...(taskId ? { taskId } : {}),
     ...(taskType ? { taskType } : {}),
   }

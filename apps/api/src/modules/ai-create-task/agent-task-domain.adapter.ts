@@ -25,6 +25,14 @@ export type AgentTaskBusinessCommand = {
   idempotencyKey?: string
 }
 
+export type AgentTaskReviewCommand = {
+  organizationId: string
+  userId: string
+  reviewPackageId: string
+  input: unknown
+  decisionCommandId?: string
+}
+
 export interface AgentTaskDomainAdapter {
   readonly descriptor: TaskDescriptor
   readonly reviewSchema: ReviewSchema
@@ -39,6 +47,7 @@ export interface AgentTaskDomainAdapter {
     options: { sourceActionId: string },
   ): Promise<SubmitReviewPackageOutput>
   executeBusinessCommand(command: AgentTaskBusinessCommand): Promise<unknown>
+  confirmReview(command: AgentTaskReviewCommand): Promise<unknown>
   workspaceNavigation(taskId: string): TaskWorkspaceHref
   completedNavigation(targetId: string): TaskCompletedHref
 }

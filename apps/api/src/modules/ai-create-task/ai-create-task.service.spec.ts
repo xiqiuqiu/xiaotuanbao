@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
+import { departureReviewProposalHash } from './review-package.envelope'
 
 describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
   it('rejects an unknown schema version before applying any business write', async () => {
@@ -145,6 +146,155 @@ describe('AiCreateTaskService.confirmReviewPackage schema safety #440', () => {
       ),
     ).rejects.toThrow('审核修正值无效：出团日期')
     expect(reviewWrite).not.toHaveBeenCalled()
+  })
+})
+
+describe('AiCreateTaskService review disposition #440', () => {
+  const now = new Date('2026-08-30T00:00:00.000Z')
+  const snapshot = {
+    mode: DepartureCreationDraftMode.MANUAL,
+    routeName: '川西',
+    name: '原团名',
+    startDate: '2026-09-01',
+    endDate: '2026-09-05',
+    ownerUserId: 'user-1',
+    departureType: DepartureType.COMBINED,
+  }
+  const task = {
+    id: 'task-1',
+    currentPhase: AiCreatePhase.BASIC_INFO,
+    departureId: null,
+    createdAt: now,
+    updatedAt: now,
+    draft: { id: 'draft-1', taskId: 'task-1', version: 1, snapshot, createdAt: now, updatedAt: now },
+    agentTask: {
+      id: 'task-1',
+      organizationId: 'org-1',
+      ownerUserId: 'user-1',
+      status: AgentTaskStatus.active,
+      statusVersion: 1,
+      createdAt: now,
+      updatedAt: now,
+      reviewPackages: [],
+    },
+  }
+
+  function createService(pkg: Record<string, unknown>) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      aiCreateTask: {
+        findFirst: jest.fn().mockResolvedValue(task),
+        findFirstOrThrow: jest.fn().mockResolvedValue(task),
+      },
+      aiReviewPackage: {
+        findFirst: jest.fn().mockResolvedValue(pkg),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      aiReviewRecord: { create: jest.fn().mockResolvedValue({}) },
+      departureCreationDraft: { update: jest.fn().mockResolvedValue({}) },
+      aiCreateIdempotencyRecord: {
+        upsert: jest.fn().mockImplementation(({ create }) =>
+          Promise.resolve({ ...create, completedAt: null }),
+        ),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    }
+    const conversationService = {
+      finalizeReviewDisposition: jest.fn().mockResolvedValue([]),
+      finalizeReviewCancel: jest.fn().mockResolvedValue([]),
+      publish: jest.fn(),
+    }
+    const service = new AiCreateTaskService(
+      { $transaction: (callback: (client: typeof tx) => Promise<unknown>) => callback(tx) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getPermissionKeysForUser: jest.fn().mockResolvedValue(['departure:write']) } as never,
+      conversationService as never,
+      {} as never,
+    )
+    return { service, tx }
+  }
+
+  const unsupportedPackage = {
+    id: 'pkg-unsupported',
+    organizationId: 'org-1',
+    taskId: 'task-1',
+    status: AiReviewPackageStatus.pending,
+    version: 1,
+    confirmationUnit: 'basic_info_draft',
+    payloadSchema: 'departure.basic_info_draft@v999',
+    targetKind: 'departure_creation_draft',
+    targetId: 'draft-1',
+    baseObjectVersion: 1,
+    baselineSnapshot: snapshot,
+    candidates: [{ fieldKey: 'futureField', proposedValue: { opaque: true } }],
+    userCorrections: null,
+    inputBatchId: null,
+    conversationId: null,
+  }
+
+  it.each(['reject', 'cancel'] as const)(
+    'allows %s for an unsupported package without interpreting candidates',
+    async (operation) => {
+      const { service, tx } = createService(unsupportedPackage)
+
+      await expect(
+        operation === 'reject'
+          ? service.rejectReviewPackage('org-1', 'user-1', 'task-1', 'pkg-unsupported', {
+              expectedPackageVersion: 1,
+            })
+          : service.cancelReviewPackage('org-1', 'user-1', 'task-1', 'pkg-unsupported', {
+              expectedPackageVersion: 1,
+            }),
+      ).resolves.toMatchObject({ id: 'task-1' })
+      expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ originalCandidates: [], evidence: [] }),
+      })
+    },
+  )
+
+  it('applies a valid registered proposal to the draft on confirm', async () => {
+    const modelCandidate = {
+      fieldKey: 'name' as const,
+      proposedValue: '确认后的川西团',
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名叫确认后的川西团' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-valid',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.confirmReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        'pkg-valid',
+        { expectedVersion: 1, expectedPackageVersion: 1 },
+        'decision-happy-path',
+      ),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.departureCreationDraft.update).toHaveBeenCalledWith({
+      where: { id: 'draft-1' },
+      data: expect.objectContaining({
+        version: 2,
+        snapshot: expect.objectContaining({ name: '确认后的川西团' }),
+      }),
+    })
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }) }),
+    )
   })
 })
 

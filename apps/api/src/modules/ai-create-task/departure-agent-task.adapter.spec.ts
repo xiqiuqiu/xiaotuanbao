@@ -10,6 +10,8 @@ describe('DepartureAgentTaskAdapter #440', () => {
       getTaskContextForAgent: jest.fn().mockResolvedValue({ snapshot: { routeName: '川西' } }),
       proposeReviewPackageForAgent: jest.fn().mockResolvedValue({ status: 'accepted' }),
       submitReviewPackageForAgent: jest.fn().mockResolvedValue({ reviewPackageId: 'pkg-1' }),
+      resolveOwnedReviewTaskId: jest.fn().mockResolvedValue('task-1'),
+      confirmReviewPackage: jest.fn().mockResolvedValue({ id: 'task-1' }),
       confirm: jest.fn().mockResolvedValue({ id: 'departure-1' }),
     }
     const adapter = new DepartureAgentTaskAdapter(tasks as never)
@@ -40,10 +42,25 @@ describe('DepartureAgentTaskAdapter #440', () => {
       input: { expectedVersion: 1 },
       idempotencyKey: 'command-1',
     })
+    await adapter.confirmReview({
+      organizationId: 'org-1',
+      userId: 'user-1',
+      reviewPackageId: 'pkg-1',
+      input: { expectedVersion: 1, expectedPackageVersion: 1 },
+      decisionCommandId: 'decision-1',
+    })
 
     expect(tasks.proposeReviewPackageForAgent).toHaveBeenCalled()
     expect(tasks.submitReviewPackageForAgent).toHaveBeenCalled()
     expect(tasks.confirm).toHaveBeenCalled()
+    expect(tasks.confirmReviewPackage).toHaveBeenCalledWith(
+      'org-1',
+      'user-1',
+      'task-1',
+      'pkg-1',
+      { expectedVersion: 1, expectedPackageVersion: 1 },
+      'decision-1',
+    )
     expect(adapter.workspaceNavigation('task-1')).toEqual({
       pathname: '/departure/new',
       search: { taskId: 'task-1' },

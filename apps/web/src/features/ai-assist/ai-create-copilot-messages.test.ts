@@ -533,6 +533,8 @@ describe('AI create chat status projection', () => {
             text: '已提交待审核建议，请在中间表单确认。',
             reviewPackageId: 'pkg-1',
             fieldKeys: ['name', 'routeName'],
+            payloadSchema: 'departure.basic_info_draft@v1',
+            confirmationUnit: 'basic_info_draft',
           },
           createdAt: '2026-08-20T00:00:01.000Z',
         },
@@ -551,7 +553,12 @@ describe('AI create chat status projection', () => {
         }),
         expect.objectContaining({
           activityType: 'ai-create-review-package',
-          content: { reviewPackageId: 'pkg-1', fieldKeys: ['name', 'routeName'] },
+          content: {
+            reviewPackageId: 'pkg-1',
+            fieldKeys: ['name', 'routeName'],
+            payloadSchema: 'departure.basic_info_draft@v1',
+            confirmationUnit: 'basic_info_draft',
+          },
         }),
       ]),
     )

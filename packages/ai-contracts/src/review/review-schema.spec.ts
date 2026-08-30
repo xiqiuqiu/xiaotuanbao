@@ -31,7 +31,11 @@ describe('Review Schema Registry #440', () => {
               risk: { level: 'standard', label: '普通业务变更' },
             }),
             expect.objectContaining({ key: 'startDate', control: 'date' }),
-            expect.objectContaining({ key: 'expectedGuestCountHint', control: 'integer' }),
+            expect.objectContaining({
+              key: 'expectedGuestCountHint',
+              control: 'integer',
+              number: { min: 0, max: 9999, precision: 0 },
+            }),
           ]),
         }),
       ],

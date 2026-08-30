@@ -48,9 +48,9 @@ export function PendingCandidateOverlay({
       {field.control === 'integer' ? (
         <InputNumber
           aria-label={`${field.label}候选`}
-          min={0}
-          max={9999}
-          precision={0}
+          min={field.number?.min}
+          max={field.number?.max}
+          precision={field.number?.precision}
           style={{ width: '100%' }}
           value={value == null ? null : Number(value)}
           onChange={(next) => correct(next)}

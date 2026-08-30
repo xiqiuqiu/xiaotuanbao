@@ -95,6 +95,8 @@ describe('PendingCandidateOverlay', () => {
     )
 
     expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveAttribute('aria-valuemin', '0')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveAttribute('aria-valuemax', '9999')
   })
 
   it('reports clearing a date and guest-count candidate as null', () => {

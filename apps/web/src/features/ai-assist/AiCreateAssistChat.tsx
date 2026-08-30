@@ -11,8 +11,6 @@ import {
 import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
-  AI_REVIEW_CONFIRMATION_UNIT,
-  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   aiCreateSharedLightStateSchema,
   type AiCreateSharedLightState,
   type RouteTemplateMatchReason,
@@ -148,11 +146,11 @@ function formatMatchReason(reason: Record<string, unknown> | RouteTemplateMatchR
   return '常用路线'
 }
 
-function ReviewPackageNotice({ fieldKeys }: { fieldKeys: string[] }) {
+function ReviewPackageNotice({ content }: { content: ReviewPackageActivityContent }) {
   const labels = formatReviewFieldList(
-    fieldKeys,
-    DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
-    AI_REVIEW_CONFIRMATION_UNIT,
+    content.fieldKeys,
+    content.payloadSchema ?? '',
+    content.confirmationUnit ?? '',
   )
   return (
     <p className={styles.notice}>
@@ -432,7 +430,7 @@ function createReviewPackageActivityRenderer(): ReactActivityMessageRenderer<Rev
         },
       },
     },
-    render: ({ content }) => <ReviewPackageNotice fieldKeys={content.fieldKeys} />,
+    render: ({ content }) => <ReviewPackageNotice content={content} />,
   }
 }
 

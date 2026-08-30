@@ -4,6 +4,7 @@ import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AiCreateTaskService } from './ai-create-task.service'
+import { DepartureAgentTaskAdapter } from './departure-agent-task.adapter'
 import {
   CancelAiReviewPackageDto,
   ConfirmAiReviewPackageDto,
@@ -14,7 +15,10 @@ import {
 @Controller('agent/review-packages')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class AgentReviewController {
-  constructor(private readonly aiCreateTaskService: AiCreateTaskService) {}
+  constructor(
+    private readonly aiCreateTaskService: AiCreateTaskService,
+    private readonly departureAdapter: DepartureAgentTaskAdapter,
+  ) {}
 
   @Patch(':packageId')
   @RequireMenu('departure:write')
@@ -46,19 +50,13 @@ export class AgentReviewController {
     @Body() dto: ConfirmAiReviewPackageDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<AiCreateTaskSummary> {
-    const taskId = await this.aiCreateTaskService.resolveOwnedReviewTaskId(
-      request.user.organizationId,
-      request.user.userId,
-      packageId,
-    )
-    return this.aiCreateTaskService.confirmReviewPackage(
-      request.user.organizationId,
-      request.user.userId,
-      taskId,
-      packageId,
-      dto,
-      dto.decisionCommandId ?? idempotencyKey,
-    )
+    return this.departureAdapter.confirmReview({
+      organizationId: request.user.organizationId,
+      userId: request.user.userId,
+      reviewPackageId: packageId,
+      input: dto,
+      decisionCommandId: dto.decisionCommandId ?? idempotencyKey,
+    })
   }
 
   @Post(':packageId/reject')

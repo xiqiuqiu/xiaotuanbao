@@ -26,6 +26,7 @@ export type ReviewFieldDescriptor<FieldKey extends string = string> = {
   control: ReviewFieldControl
   editable: boolean
   valueSchema: ZodType
+  number?: { min?: number; max?: number; precision?: number }
   format: (value: unknown) => string
   evidence: {
     presentation: 'expandable'
@@ -115,6 +116,7 @@ function departureField(
   key: AiReviewableBasicInfoField,
   label: string,
   control: ReviewFieldControl,
+  number?: ReviewFieldDescriptor['number'],
 ): ReviewFieldDescriptor<AiReviewableBasicInfoField> {
   const option = aiReviewCandidateInputSchema.options.find(
     (candidate) => candidate.shape.fieldKey.value === key,
@@ -125,6 +127,7 @@ function departureField(
     label,
     control,
     valueSchema: option.shape.proposedValue,
+    ...(number ? { number } : {}),
     format: formatReviewValue,
     ...commonPresentation,
     editable: control !== 'reference',
@@ -137,7 +140,11 @@ const DEPARTURE_BASIC_INFO_FIELDS = [
   departureField('templateId', '常用路线', 'reference'),
   departureField('startDate', '出团日期', 'date'),
   departureField('endDate', '结束日期', 'date'),
-  departureField('expectedGuestCountHint', '预计人数提示', 'integer'),
+  departureField('expectedGuestCountHint', '预计人数提示', 'integer', {
+    min: 0,
+    max: 9999,
+    precision: 0,
+  }),
 ] as const
 
 if (DEPARTURE_BASIC_INFO_FIELDS.length !== AI_REVIEWABLE_BASIC_INFO_FIELDS.length) {

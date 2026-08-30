@@ -5,11 +5,12 @@ import {
   buildTaskCompletedHref,
   buildTaskWorkspaceHref,
 } from '@xiaotuanbao/ai-contracts'
-import type { ConfirmAiCreateTaskDto } from './dto/ai-create-task.dto'
+import type { ConfirmAiCreateTaskDto, ConfirmAiReviewPackageDto } from './dto/ai-create-task.dto'
 import { AiCreateTaskService } from './ai-create-task.service'
 import type {
   AgentTaskBusinessCommand,
   AgentTaskDomainAdapter,
+  AgentTaskReviewCommand,
   TaskBoundAiToolRequestUser,
 } from './agent-task-domain.adapter'
 
@@ -63,6 +64,22 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
       command.taskId,
       command.input as ConfirmAiCreateTaskDto,
       command.idempotencyKey,
+    )
+  }
+
+  async confirmReview(command: AgentTaskReviewCommand) {
+    const taskId = await this.tasks.resolveOwnedReviewTaskId(
+      command.organizationId,
+      command.userId,
+      command.reviewPackageId,
+    )
+    return this.tasks.confirmReviewPackage(
+      command.organizationId,
+      command.userId,
+      taskId,
+      command.reviewPackageId,
+      command.input as ConfirmAiReviewPackageDto,
+      command.decisionCommandId,
     )
   }
 
