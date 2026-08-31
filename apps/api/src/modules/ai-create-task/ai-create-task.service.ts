@@ -332,7 +332,7 @@ export class AiCreateTaskService {
         creatorUserId: summary.creatorUserId,
       },
       snapshot,
-      objectVersion: task.departure?.updatedAt.getTime() ?? summary.draft.version,
+      objectVersion: summary.draft.version,
       pending: {
         hasPendingReview: Boolean(conversationPending),
         reviewPackageId: conversationPending?.id ?? null,

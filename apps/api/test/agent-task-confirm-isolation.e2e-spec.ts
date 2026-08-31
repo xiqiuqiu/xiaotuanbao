@@ -152,6 +152,11 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
       prisma.taskActivity.findFirst({ where: { taskId: opened.taskId, kind: 'completed' } }),
     ).resolves.toBeNull()
 
+    await authRequest(app, token)
+      .patch(`/api/departures/${confirmed.body.data.id}`)
+      .send({ name: `${name}-正式`, notes: '正式事实已更新' })
+      .expect(200)
+
     const resumed = await authRequest(app, token)
       .post(`/api/agent/tasks/departure-creation/sessions`)
       .send({ taskId: opened.taskId, conversationId: opened.conversationId })
@@ -160,7 +165,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
       id: opened.taskId,
       status: 'in_progress',
       departureId: confirmed.body.data.id,
-      draft: { snapshot: { name } },
+      draft: { snapshot: { name: `${name}-正式`, notes: '正式事实已更新' } },
     })
   })
 

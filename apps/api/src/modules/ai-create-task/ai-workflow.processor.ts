@@ -880,9 +880,7 @@ export class AiWorkflowProcessor {
       const businessSnapshot = task.departure
         ? toFormalDepartureSnapshot(task.departure, expectedGuestCountHint)
         : draft.snapshot
-      const businessObjectVersion = task.departure
-        ? task.departure.updatedAt.getTime()
-        : draft.version
+      const businessObjectVersion = draft.version
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,

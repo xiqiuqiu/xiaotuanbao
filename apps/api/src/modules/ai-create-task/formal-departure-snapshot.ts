@@ -7,12 +7,12 @@ export function toFormalDepartureSnapshot(
   expectedGuestCountHint: number | null | undefined,
 ): DepartureCreationDraftSnapshot {
   return {
+    // Formal Departure does not retain its copy source id. Once created, it is
+    // a standalone business object and must not be projected as an invalid COPY draft.
     mode:
       departure.routeSource === 'template'
         ? DepartureCreationDraftMode.TEMPLATE
-        : departure.routeSource === 'copy'
-          ? DepartureCreationDraftMode.COPY
-          : DepartureCreationDraftMode.MANUAL,
+        : DepartureCreationDraftMode.MANUAL,
     routeName: departure.routeName,
     templateId: departure.sourceTemplateId,
     copyFromDepartureId: null,
