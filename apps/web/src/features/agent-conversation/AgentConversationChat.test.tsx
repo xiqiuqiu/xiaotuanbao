@@ -286,6 +286,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
         reasoningMessage?:
           | ComponentType<{
               message?: { id?: string; role?: string; content?: unknown }
+              messages?: Array<{ id?: string; role?: string; content?: unknown }>
               isRunning?: boolean
             }>
           | { header?: ComponentType<{ isStreaming?: boolean; label?: string }> }
@@ -311,6 +312,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
                 <Reasoning
                   key={message.id}
                   message={message}
+                  messages={messages}
                   isRunning={isRunning}
                 />
               )
@@ -1068,9 +1070,9 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
   })
 
-  it('shows collapsible 思考过程 from the first reasoning token and keeps it after agent_message', async () => {
+  it('shows a transient working mascot from the first reasoning token and hides it after durable agent_message', async () => {
     renderChat()
-    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1087,9 +1089,15 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
         }),
       )
     })
-    expect(await screen.findByText('先核对出团日期')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '正在思考' })).toBeInTheDocument()
-    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
+    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
+      'data-mascot-preset',
+      'working',
+    )
+    expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
+    ).toHaveTextContent('先核对出团日期')
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1107,9 +1115,11 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByText('已记下路线。')).toBeInTheDocument()
-    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
-    expect(screen.getByText('再核人数')).toBeInTheDocument()
-    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
+    // live-assistant-* is not durable — keep working indicator while streaming
+    expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
+    ).toHaveTextContent('再核人数')
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1132,13 +1142,12 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByText('已记下路线。可继续问。')).toBeInTheDocument()
-    expect(screen.getByText('再核人数')).toBeInTheDocument()
-    // batch 仍为 agent_running：isRunning 为真，thinking mascot 继续显示
-    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '正在思考' })).toBeInTheDocument()
+    // Durable event-* assistant ends the turn indicator even while batch is still agent_running
+    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
   })
 
-  it('shows thinking mascot while isRunning and removes it when the run ends', async () => {
+  it('shows working mascot while isRunning and keeps it gone after completed batch', async () => {
     renderChat()
 
     await act(async () => {
@@ -1157,11 +1166,12 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
 
-    expect(await screen.findByTestId('agent-thinking-mascot')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '正在思考' })).toHaveAttribute(
+    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
       'data-mascot-preset',
-      'thinking',
+      'working',
     )
+    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute('width', '56')
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1184,7 +1194,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByText('完成。')).toBeInTheDocument()
-    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
+    // Gone immediately after durable agent_message — do not wait for batch_status completed
+    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1208,8 +1219,9 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
 
-    expect(screen.queryByTestId('agent-thinking-mascot')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '思考过程' })).toBeInTheDocument()
+    // Second guarantee: completed batch also leaves no working indicator
+    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
   })
 })
 

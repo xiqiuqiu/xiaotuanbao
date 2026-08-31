@@ -28,6 +28,7 @@ import {
   type MascotPreset,
   type MascotStateId,
 } from './mascot-presets'
+import { resolveArcStrokeWidth } from './mascot-stroke'
 import styles from './Mascot.module.css'
 
 const CHAT_PAPER = '#f9f9f9'
@@ -336,7 +337,7 @@ export function Mascot({
             key={`b${arc.id}`}
             d={arc.back}
             stroke={`url(#${uid}-${arc.id})`}
-            strokeWidth={arc.width}
+            strokeWidth={resolveArcStrokeWidth(arc.width, size)}
             opacity={arc.opacity}
           />
         ))}
@@ -367,7 +368,7 @@ export function Mascot({
             key={`f${arc.id}`}
             d={arc.front}
             stroke={`url(#${uid}-${arc.id})`}
-            strokeWidth={arc.width}
+            strokeWidth={resolveArcStrokeWidth(arc.width, size)}
             opacity={arc.opacity}
           />
         ))}

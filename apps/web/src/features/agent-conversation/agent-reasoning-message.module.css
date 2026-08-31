@@ -1,13 +1,42 @@
-.headerRow {
-  display: inline-flex;
+.root {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  min-height: 56px;
+  padding: 4px 0;
 }
 
-.mascotSlot {
+.indicator {
+  position: relative;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
   line-height: 0;
+  outline: none;
+}
+
+.description {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: min(280px, 50vw);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+}
+
+.indicator:hover .description,
+.indicator:focus-visible .description {
+  opacity: 1;
+  visibility: visible;
 }
