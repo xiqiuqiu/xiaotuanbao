@@ -8,6 +8,7 @@ How this repo keeps `main` stable. Summary for agents also lives in root `AGENTS
 | ----- | ---- | ---- | ------ |
 | Local L2 | Before push (hook `pnpm hooks:install`); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related; permission-matrix guard if API routes changed | Dirty push / Agent handoff |
 | CI C1 | Every PR and every push to `main` | `pnpm typecheck` + unit tests + API e2e (E2) | Merge into `main` (required checks) |
+| Release R1 | Version tag or manual home-image build | `pnpm test:unit:ci` | Build and push release images |
 
 There is **no** hard pre-commit gate. Full API e2e is **not** required on every local commit.
 
@@ -54,6 +55,8 @@ Jobs / checks (names must match branch protection):
 3. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
+
+`deploy-home.yml` 对标签发布和手动镜像构建复用同一 `test:unit:ci` 入口；测试失败时不构建、不推送镜像。
 
 `typecheck` must run `prisma generate` on a fresh checkout; committed tree does not include generated `@prisma/client` types.
 
