@@ -168,8 +168,8 @@ describe('IncomeRecordsPanel settlement UX', () => {
     await waitFor(() => {
       expect(screen.getByText('玉器返利')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: '标记已收' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '标记已付' })).toBeInTheDocument()
+    expect(screen.getByText('标记已收').closest('button')).toBeInTheDocument()
+    expect(screen.getByText('标记已付').closest('button')).toBeInTheDocument()
     expect(screen.getByText('待结算')).toBeInTheDocument()
   })
 
@@ -191,8 +191,8 @@ describe('IncomeRecordsPanel settlement UX', () => {
     await waitFor(() => {
       expect(screen.getByText('玉器返利')).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: '标记已收' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '标记已付' })).not.toBeInTheDocument()
+    expect(screen.getByText('标记已收').closest('button')).toBeInTheDocument()
+    expect(screen.queryByText('标记已付')).not.toBeInTheDocument()
   })
 
   it('marks collected via update and keeps filter totals aligned with list', async () => {
@@ -208,7 +208,7 @@ describe('IncomeRecordsPanel settlement UX', () => {
     expect(within(summaryRow()).getByText('¥150.00')).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: '增收结算汇总' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '标记已收' }))
+    await user.click(screen.getByText('标记已收').closest('button')!)
     await waitFor(() => {
       expect(updateIncomeRecord).toHaveBeenCalledWith('dep-1', 'ir-1', {
         incomeStatus: DepartureIncomeCollectionStatus.COLLECTED,

@@ -15,7 +15,7 @@
     "typecheck:api": "pnpm --filter api typecheck",
     "lint:web": "pnpm typecheck:web",
     "lint:api": "pnpm typecheck:api",
-    "test:unit:ci": "pnpm --filter @xiaotuanbao/shared test && pnpm --filter @xiaotuanbao/ai-contracts test && pnpm --filter agent test && pnpm --filter api test",
+    "test:unit:ci": "pnpm --filter @xiaotuanbao/shared test && pnpm --filter @xiaotuanbao/ai-contracts test && pnpm --filter agent test && pnpm --filter api test && pnpm --filter web test",
     "test:e2e:ci": "pnpm --filter api test:e2e:ci",
     "test:e2e:web": "pnpm --filter web-e2e test",
     "test:e2e:web:ui": "pnpm --filter web-e2e test:ui",

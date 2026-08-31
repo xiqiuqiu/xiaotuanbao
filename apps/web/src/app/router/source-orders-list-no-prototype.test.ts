@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotKit: () => null,
   CopilotChatConfigurationProvider: ({ children }: { children?: unknown }) => children,
+  CopilotChatInput: Object.assign(() => null, { SendButton: () => null }),
   CopilotChatView: () => null,
 }))
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))

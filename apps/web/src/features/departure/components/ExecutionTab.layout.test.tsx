@@ -208,7 +208,11 @@ describe('ExecutionTab layout', () => {
 
     const resourceCard = resourceTitle.closest('.ant-card')
     expect(resourceCard).toBeTruthy()
-    expect(within(resourceCard as HTMLElement).getByText('批量提交应付')).toBeInTheDocument()
+    expect(
+      await within(resourceCard as HTMLElement).findByRole('button', {
+        name: '批量提交应付',
+      }),
+    ).toBeInTheDocument()
     expect(
       await within(resourceCard as HTMLElement).findByText('添加资源'),
     ).toBeInTheDocument()

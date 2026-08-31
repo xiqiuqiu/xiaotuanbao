@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from 'react'
-import { act, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cancelSchedule } from '@/services/finance.service'
 import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
 
@@ -22,6 +22,14 @@ describe('usePaymentScheduleMutations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(cancelSchedule).mockResolvedValue({} as never)
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: { error: vi.fn(), success: vi.fn() },
+    } as never)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
   })
 
   it('关闭收付款节点后刷新所属发团详情', async () => {

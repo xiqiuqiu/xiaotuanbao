@@ -54,7 +54,7 @@ describe('SegmentDrawer ticket type headcount #203', () => {
       </ConfigProvider>,
     )
 
-    expect(await screen.findByLabelText('行程段名称')).toBeInTheDocument()
+    expect(await screen.findByLabelText('行程名称')).toBeInTheDocument()
     expect(screen.queryByText('票型人数与客源人数不一致')).not.toBeInTheDocument()
     expect(screen.queryByText(/票型人数合计/)).not.toBeInTheDocument()
     expect(screen.queryByText('票型人数')).not.toBeInTheDocument()

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { ConfigProvider, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DepartureOperationsSheetSnapshot } from '@xiaotuanbao/shared'
@@ -77,10 +77,12 @@ describe('DepartureOperationsSheetDrawer', () => {
     downloadDepartureOperationsSheet.mockReset()
     getDepartureOperationsSheet.mockResolvedValue(snapshot)
     downloadDepartureOperationsSheet.mockResolvedValue(undefined)
+    vi.spyOn(message, 'success').mockImplementation(() => undefined as never)
   })
 
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
   })
 
   it('loads preview and triggers excel download (#99)', async () => {

@@ -6,7 +6,7 @@ import { EMPTY_SOURCE_ORDER_FILTERS } from '../utils/source-order-filter-state'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
 
 describe('SourceOrdersFilters discount filter copy', () => {
-  it('defaults to watermark 优惠状态 and offers 全部 instead of 全部优惠', async () => {
+  it('defaults to watermark 全部优惠状态 and offers 全部 instead of 全部优惠', async () => {
     const user = userEvent.setup()
 
     render(
@@ -25,7 +25,9 @@ describe('SourceOrdersFilters discount filter copy', () => {
     expect(screen.queryByText('全部优惠')).not.toBeInTheDocument()
 
     // 默认未选具体优惠条件时展示水印，表示全部数据
-    expect(within(discountSelect.closest('.ant-select')!).getByText('优惠状态')).toBeInTheDocument()
+    expect(
+      within(discountSelect.closest('.ant-select')!).getByText('全部优惠状态'),
+    ).toBeInTheDocument()
 
     await user.click(discountSelect)
 

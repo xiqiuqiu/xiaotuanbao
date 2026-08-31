@@ -51,7 +51,7 @@ Workflow: [`.github/workflows/verify.yml`](../../.github/workflows/verify.yml)
 Jobs / checks (names must match branch protection):
 
 1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
-2. **`unit-tests`** — shared、AI contracts、Agent、API 单元/回归测试 → `pnpm test:unit:ci`
+2. **`unit-tests`** — shared、AI contracts、Agent、API、Web 单元/回归测试 → `pnpm test:unit:ci`
 3. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
@@ -166,5 +166,5 @@ See `apps/web-e2e/README.md` and `docs/superpowers/specs/2026-08-04-web-browser-
 
 - [ ] Branch protection: require ≥1 approving review (V1)
 - [ ] Extend pre-push hook with typecheck (+ Doctor) if the team wants full L2 enforced locally
-- [ ] Web 单元测试现有基线清零后，将 `pnpm --filter web test` 纳入 `test:unit:ci`
+- [x] Web 单元测试基线已清零并纳入 `test:unit:ci`
 - [ ] Optional: promote browser E2E smoke to a non-blocking or required CI job after the suite is stable
