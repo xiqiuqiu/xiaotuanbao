@@ -7,6 +7,7 @@ import { shouldReplaceLiveOutput } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
   LIVE_OUTPUT_NOTIFY_CHANNEL,
+  LIVE_OUTPUT_TRANSACTION_TIMEOUT_MS,
   LIVE_OUTPUT_TTL_MS,
   type AgentLiveOutput,
   type LiveOutputSnapshot,
@@ -92,6 +93,9 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
       })
       await tx.$executeRaw`SELECT pg_notify(${LIVE_OUTPUT_NOTIFY_CHANNEL}, ${snapshot.attemptId})`
       return true
+    }, {
+      maxWait: LIVE_OUTPUT_TRANSACTION_TIMEOUT_MS,
+      timeout: LIVE_OUTPUT_TRANSACTION_TIMEOUT_MS,
     })
     if (published) {
       this.emitter.emit(snapshot.conversationId, snapshot)

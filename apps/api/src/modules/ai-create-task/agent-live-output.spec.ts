@@ -1,4 +1,5 @@
 import { InMemoryAgentLiveOutput } from './agent-live-output.memory'
+import type { AgentLiveOutput } from './agent-live-output'
 import { LiveOutputFlusher } from './live-output-flusher'
 import { LIVE_OUTPUT_FLUSH_MS, LIVE_OUTPUT_TTL_MS } from './agent-live-output'
 
@@ -158,6 +159,32 @@ describe('InMemoryAgentLiveOutput', () => {
 })
 
 describe('LiveOutputFlusher', () => {
+  it('does not reject the worker when live output publishing fails', async () => {
+    let attempts = 0
+    const live: AgentLiveOutput = {
+      publish: async () => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('Transaction already closed')
+        }
+      },
+      observe: () => {
+        throw new Error('not used')
+      },
+      getCurrent: async () => null,
+      clear: async () => undefined,
+      supersede: async () => undefined,
+    }
+    const flusher = new LiveOutputFlusher(live, identity)
+
+    flusher.push({ text: '首个 token' })
+    await expect(flusher.flush()).resolves.toBeUndefined()
+
+    flusher.push({ text: '完整回复' })
+    await expect(flusher.flush()).resolves.toBeUndefined()
+    expect(attempts).toBe(3)
+  })
+
   it('flushes the first 思考过程 token immediately and overwrites the previous step', async () => {
     const live = new InMemoryAgentLiveOutput()
     const seen: Array<{ reasoningText: string; text: string }> = []

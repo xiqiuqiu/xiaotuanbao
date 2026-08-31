@@ -25,6 +25,7 @@ export class LiveOutputFlusher {
   constructor(
     private readonly liveOutput: AgentLiveOutput,
     private readonly identity: LiveOutputIdentity,
+    private readonly onPublishError?: (error: unknown) => void,
   ) {}
 
   push(update: LiveOutputUpdate): void {
@@ -101,14 +102,18 @@ export class LiveOutputFlusher {
         return
       }
       this.revision += 1
-      this.lastFlushedText = text
-      this.lastFlushedReasoning = reasoningText
-      await this.liveOutput.publish({
-        ...this.identity,
-        revision: this.revision,
-        reasoningText,
-        text,
-      })
+      try {
+        await this.liveOutput.publish({
+          ...this.identity,
+          revision: this.revision,
+          reasoningText,
+          text,
+        })
+        this.lastFlushedText = text
+        this.lastFlushedReasoning = reasoningText
+      } catch (error: unknown) {
+        this.onPublishError?.(error)
+      }
     })
   }
 }

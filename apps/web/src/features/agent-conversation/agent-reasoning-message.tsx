@@ -95,6 +95,7 @@ export function AgentReasoningMessage({
           paper="#f9f9f9"
           color="gris"
           shape="capsule"
+          data-testid="agent-thinking-mascot"
           aria-label="Agent 正在工作"
         />
         <span className={styles.description} role="status">

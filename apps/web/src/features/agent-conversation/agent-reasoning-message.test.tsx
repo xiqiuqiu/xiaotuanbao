@@ -37,7 +37,7 @@ function renderIndicator(
 }
 
 describe('AgentReasoningMessage working indicator', () => {
-  it('shows working mascot (56px, play+orbit cycle) for the latest running turn', () => {
+  it('shows working mascot and hover summary for the latest running turn', () => {
     renderIndicator()
 
     const indicator = screen.getByTestId('agent-working-indicator')
@@ -45,6 +45,7 @@ describe('AgentReasoningMessage working indicator', () => {
     expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
 
     const mascot = screen.getByRole('img', { name: 'Agent 正在工作' })
+    expect(mascot).toHaveAttribute('data-testid', 'agent-thinking-mascot')
     expect(mascot).toHaveAttribute('data-mascot-preset', 'working')
     expect(mascot).toHaveAttribute('width', '56')
     expect(mascot).toHaveAttribute('height', '56')

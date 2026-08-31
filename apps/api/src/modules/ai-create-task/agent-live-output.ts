@@ -6,6 +6,8 @@ export const LIVE_OUTPUT_TTL_MS = 30 * 60 * 1000
 export const LIVE_OUTPUT_FLUSH_MS = 100
 export const LIVE_OUTPUT_EARLY_FLUSH_CHARS = 128
 export const LIVE_OUTPUT_NOTIFY_CHANNEL = 'ai_agent_live_output'
+/** 即时输出只承载可丢失的投影；慢盘上的单次 upsert 不得用默认 5s 杀掉 Worker。 */
+export const LIVE_OUTPUT_TRANSACTION_TIMEOUT_MS = 20_000
 
 export type LiveOutputSnapshot = {
   attemptId: string

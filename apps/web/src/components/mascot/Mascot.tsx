@@ -61,6 +61,7 @@ export interface MascotProps {
   onStateChange?: (state: MascotStateId) => void
   className?: string
   style?: CSSProperties
+  'data-testid'?: string
   'aria-label'?: string
 }
 
@@ -105,6 +106,7 @@ export function Mascot({
   onStateChange,
   className,
   style,
+  'data-testid': testId,
   'aria-label': ariaLabel = '助手形象',
 }: MascotProps) {
   const reducedMotion = usePrefersReducedMotion()
@@ -276,6 +278,7 @@ export function Mascot({
 
   return (
     <svg
+      data-testid={testId}
       ref={svgRef}
       className={rootClass}
       width={size}

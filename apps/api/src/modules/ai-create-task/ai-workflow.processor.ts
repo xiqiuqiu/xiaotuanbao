@@ -486,6 +486,8 @@ export class AiWorkflowProcessor {
         conversationId: job.conversationId,
         batchId: job.inputBatchId,
         generation: job.generation,
+      }, (error) => {
+        this.logger.warn(`即时输出刷新失败，继续 Agent 执行 job=${job.id}: ${String(error)}`)
       })
       try {
         const renewed = await this.renewLease(job.id)

@@ -101,8 +101,6 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
   } = useContext(QueuedMessagesContext)
   const draftValue = String(props.value ?? '')
   const hasDraft = draftValue.trim().length > 0
-  const draftEpoch = useAgentConversationRuntimeStore((state) => state.draftEpoch)
-  const draftRevision = useAgentConversationRuntimeStore((state) => state.revision)
   return (
     <div className={chatStyles.composerStack}>
       {queuedMessages.length > 0 ? (
@@ -144,7 +142,6 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
       ) : null}
       <CopilotChatInput
         {...props}
-        key={`${draftEpoch}-${draftRevision}`}
         isRunning={stoppable && !hasDraft}
         onStop={onStop}
         textArea={{ 'aria-label': '询问小团宝业务' }}
@@ -417,7 +414,7 @@ function InteractionCard({
 }
 
 function createInteractionActivityRenderer(handlers: {
-  pendingInteractionId: string | null
+  pendingInteractionId: () => string | null
   onReply: (content: InteractionActivityContent, text: string, selectedOptionId?: string) => void
   onCancel: (content: InteractionActivityContent) => void
 }): ReactActivityMessageRenderer<InteractionActivityContent> {
@@ -443,7 +440,7 @@ function createInteractionActivityRenderer(handlers: {
     render: ({ content }) => (
       <InteractionCard
         content={content}
-        pending={handlers.pendingInteractionId === content.interactionId}
+        pending={handlers.pendingInteractionId() === content.interactionId}
         onReply={handlers.onReply}
         onCancel={handlers.onCancel}
       />
@@ -874,6 +871,14 @@ function useAgentConversationChatController() {
     [runInteractionCommand],
   )
 
+  const pendingInteractionIdRef = useRef(pendingInteractionId)
+  const replyToInteractionRef = useRef(replyToInteraction)
+  const cancelInteractionRef = useRef(cancelInteraction)
+  const openAgentTaskRef = useRef<(taskId: string, taskType?: string) => void>(() => undefined)
+  pendingInteractionIdRef.current = pendingInteractionId
+  replyToInteractionRef.current = replyToInteraction
+  cancelInteractionRef.current = cancelInteraction
+
   const queueProjection = useMemo(
     () => projectQueuedConversationMessages(events, liveAssistant),
     [events, liveAssistant],
@@ -917,18 +922,19 @@ function useAgentConversationChatController() {
     },
     [closeGlobalForBusinessNavigation, location.pathname, location.searchStr, navigate, queryClient],
   )
+  openAgentTaskRef.current = openAgentTask
   const activityRenderers = useMemo(
     () => [
       createBatchStatusActivityRenderer(),
       createInteractionActivityRenderer({
-        pendingInteractionId,
-        onReply: replyToInteraction,
-        onCancel: cancelInteraction,
+        pendingInteractionId: () => pendingInteractionIdRef.current,
+        onReply: (...args) => replyToInteractionRef.current(...args),
+        onCancel: (...args) => cancelInteractionRef.current(...args),
       }),
-      createAgentTaskActivityRenderer(openAgentTask),
-      createReviewPackageActivityRenderer(openAgentTask),
+      createAgentTaskActivityRenderer((...args) => openAgentTaskRef.current(...args)),
+      createReviewPackageActivityRenderer((...args) => openAgentTaskRef.current(...args)),
     ],
-    [cancelInteraction, openAgentTask, pendingInteractionId, replyToInteraction],
+    [],
   )
 
   return {

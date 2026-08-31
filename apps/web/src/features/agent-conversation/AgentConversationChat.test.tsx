@@ -393,6 +393,52 @@ describe('AgentConversationChat page locator #371', () => {
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
   })
 
+  it('同步草稿版本时不重建输入框，保留选区并继续接收输入', async () => {
+    const user = userEvent.setup()
+    renderChat()
+
+    const composer = await screen.findByRole('textbox', { name: '询问小团宝业务' })
+    await user.type(composer, '正在编辑的内容')
+    composer.setSelectionRange(2, 6)
+
+    await act(async () => {
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: 'c-1',
+        draft: '正在编辑的内容',
+        draftEpoch: 1,
+        revision: 1,
+      })
+    })
+
+    const syncedComposer = screen.getByRole('textbox', { name: '询问小团宝业务' })
+    expect(syncedComposer).toBe(composer)
+    expect(syncedComposer).toHaveValue('正在编辑的内容')
+    expect(syncedComposer).toHaveProperty('selectionStart', 2)
+    expect(syncedComposer).toHaveProperty('selectionEnd', 6)
+
+    await user.type(syncedComposer, '继续')
+    expect(syncedComposer).toHaveValue('正在编辑的内容继续')
+  })
+
+  it('保持 CopilotKit activity renderer 数组引用稳定', () => {
+    const view = renderChat()
+    const first = capturedActivityRenderers
+
+    routerState.location = {
+      ...routerState.location,
+      searchStr: '?tab=overview',
+    }
+    view.rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <AgentConversationChat />
+      </QueryClientProvider>,
+    )
+
+    expect(capturedActivityRenderers).toBe(first)
+  })
+
   it('does not auto-attach when opening a historical conversation', () => {
     useAgentConversationStore.getState().openHistoricalConversation({
       id: 'c-1',
@@ -1095,6 +1141,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       'working',
     )
     expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
+    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
     ).toHaveTextContent('先核对出团日期')
