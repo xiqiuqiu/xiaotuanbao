@@ -41,7 +41,11 @@ import {
   type QueuedConversationMessage,
   type ReviewPackageActivityContent,
 } from '@/features/ai-assist/ai-create-copilot-messages'
-import { AgentReasoningMessage } from './agent-reasoning-message'
+import {
+  AgentReasoningMessage,
+  AgentWorkingCursor,
+  ensureAgentWorkingReasoningSlot,
+} from './agent-reasoning-message'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
@@ -879,7 +883,7 @@ function useAgentConversationChatController() {
     [events, liveAssistant],
   )
   const visibleEvents = queueProjection.visibleEvents
-  const messages = useMemo(
+  const projectedMessages = useMemo(
     () =>
       projectConversationFrame({
         events: visibleEvents,
@@ -891,9 +895,17 @@ function useAgentConversationChatController() {
     [liveAssistant, pendingText, pendingUploadCount, sessionReasoning, visibleEvents],
   )
   const isRunning = isCopilotChatRunning(visibleEvents, null, pendingText, liveAssistant)
+  const messages = useMemo(
+    () => ensureAgentWorkingReasoningSlot(projectedMessages, isRunning),
+    [isRunning, projectedMessages],
+  )
   const stoppableBatchId = currentStoppableBatchId(visibleEvents)
   const messageView = useMemo(
-    () => ({ reasoningMessage: AgentReasoningMessage }),
+    () => ({
+      reasoningMessage: AgentReasoningMessage,
+      /** Kill CopilotKit's black typing-cursor dot; recording mascot owns the slot. */
+      cursor: AgentWorkingCursor,
+    }),
     [],
   )
   const openAgentTask = useCallback(
