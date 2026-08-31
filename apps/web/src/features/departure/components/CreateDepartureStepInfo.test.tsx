@@ -6,9 +6,11 @@ import type { FormInstance } from 'antd/es/form'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
+import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { listEmployeeOptions } from '@/services/employee.service'
+import { getSupplier } from '@/services/supplier.service'
 
 vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: 'user-1', name: '阿财' }]),
@@ -16,6 +18,14 @@ vi.mock('@/services/employee.service', () => ({
 
 vi.mock('@/services/supplier.service', () => ({
   listSuppliers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  getSupplier: vi.fn().mockImplementation((id: string) =>
+    Promise.resolve({
+      id,
+      name: id === 'driver-101' ? '第 101 位司机' : '第 101 位导游',
+      categories: [],
+      status: 'active',
+    }),
+  ),
 }))
 
 const route: RouteStepValues = {
@@ -36,7 +46,11 @@ const initialValues: InfoFormValues = {
   dayCount: 10,
 }
 
-function renderStep(values: InfoFormValues = initialValues, routeValues: RouteStepValues = route) {
+function renderStep(
+  values: InfoFormValues = initialValues,
+  routeValues: RouteStepValues = route,
+  review?: { pendingReview: AiReviewPackageView; onCorrectCandidate: ReturnType<typeof vi.fn> },
+) {
   let formRef: FormInstance<InfoFormValues> | undefined
 
   function Harness() {
@@ -47,7 +61,7 @@ function renderStep(values: InfoFormValues = initialValues, routeValues: RouteSt
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ConfigProvider locale={zhCN}>
-          <CreateDepartureStepInfo form={form} route={routeValues} />
+          <CreateDepartureStepInfo form={form} route={routeValues} {...review} />
         </ConfigProvider>
       </QueryClientProvider>
     )
@@ -83,6 +97,110 @@ describe('CreateDepartureStepInfo', () => {
       screen.getByText('选择执行班组（司机、导游）不会自动提交应付'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('联系电话')).toHaveAttribute('type', 'tel')
+  })
+
+  it('在同一表单审核全部非关联创建字段候选', () => {
+    const onCorrectCandidate = vi.fn()
+    const pendingReview: AiReviewPackageView = {
+      id: 'pkg-1',
+      status: 'pending',
+      confirmationUnit: 'basic_info_draft',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      schemaSupported: true,
+      baseObjectVersion: 1,
+      version: 1,
+      runId: 'run-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      attemptId: 'attempt-1',
+      capabilityKey: 'departure.review-package.propose',
+      capabilityVersion: 1,
+      targetKind: 'departure_creation_draft',
+      targetId: 'draft-1',
+      proposalHash: 'a'.repeat(64),
+      baselineSnapshot: initialValues,
+      candidates: [
+        {
+          fieldKey: 'departureType',
+          proposedValue: 'independent',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '独立团' }],
+        },
+        {
+          fieldKey: 'notes',
+          proposedValue: '客人需要轮椅',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客人需要轮椅' }],
+        },
+        {
+          fieldKey: 'vehiclePlate',
+          proposedValue: '新A·12345',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '车牌新A·12345' }],
+        },
+        {
+          fieldKey: 'contactPhone',
+          proposedValue: '13800138000',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '电话13800138000' }],
+        },
+      ],
+    }
+
+    renderStep(initialValues, route, { pendingReview, onCorrectCandidate })
+
+    expect(screen.getByLabelText('发团类型候选')).toBeInTheDocument()
+    expect(screen.getByLabelText('备注候选')).toHaveValue('客人需要轮椅')
+    expect(screen.getByLabelText('车牌候选')).toHaveValue('新A·12345')
+    expect(screen.getByLabelText('联系电话候选')).toHaveValue('13800138000')
+  })
+
+  it('创建前摘要同步显示团期、负责人、类型、路线和执行班组', async () => {
+    renderStep()
+
+    expect(
+      await screen.findByText('2026-07-24 至 2026-08-02（10 天）'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('负责人：阿财')).toBeInTheDocument()
+    expect(screen.getByText('发团类型：拼团')).toBeInTheDocument()
+    expect(screen.getByText('路线：A线：天吐喀伊10日')).toBeInTheDocument()
+    expect(screen.getByText('执行班组：司机未选择；导游未选择')).toBeInTheDocument()
+  })
+
+  it('已选班组不在当前搜索结果时，摘要仍按 ID 查询并显示名称', async () => {
+    renderStep({
+      ...initialValues,
+      driverSupplierId: 'driver-101',
+      guideSupplierId: 'guide-101',
+    })
+
+    expect(
+      await screen.findByText('执行班组：司机第 101 位司机；导游第 101 位导游'),
+    ).toBeInTheDocument()
+  })
+
+  it('已选班组详情加载期间，摘要不误报未选择', async () => {
+    vi.mocked(getSupplier).mockImplementationOnce(() => new Promise(() => undefined))
+
+    renderStep({ ...initialValues, driverSupplierId: 'driver-loading' })
+
+    expect(
+      await screen.findByText('执行班组：司机加载中；导游未选择'),
+    ).toBeInTheDocument()
+  })
+
+  it('已选班组详情加载失败时提供重试入口', async () => {
+    vi.mocked(getSupplier).mockRejectedValueOnce(new Error('network error'))
+
+    renderStep({ ...initialValues, driverSupplierId: 'driver-error' })
+
+    expect(await screen.findByText('执行班组供应商加载失败')).toBeInTheDocument()
+    expect(screen.getByText('执行班组：司机加载失败；导游未选择')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /重\s*试/ })).toBeInTheDocument()
   })
 
   it('选用常用路线且天数大于或小于团期时均给出字段级错误', async () => {

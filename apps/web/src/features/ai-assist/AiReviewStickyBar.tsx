@@ -72,7 +72,7 @@ export function AiReviewStickyBar({
           <Alert type="error" showIcon title="审核包版本不受支持，请拒绝本次建议" />
         )}
       </div>
-      <Space>
+      <Space className={styles.actions}>
         <Button onClick={onReject} loading={rejecting} disabled={confirming}>
           拒绝建议
         </Button>

@@ -1094,6 +1094,10 @@ export type AiReviewableBasicInfoField =
   | 'templateId'
   | 'startDate'
   | 'endDate'
+  | 'departureType'
+  | 'notes'
+  | 'vehiclePlate'
+  | 'contactPhone'
   | 'expectedGuestCountHint'
 
 export type AiCandidateClarity = 'clear' | 'needs_confirmation' | 'undetermined'

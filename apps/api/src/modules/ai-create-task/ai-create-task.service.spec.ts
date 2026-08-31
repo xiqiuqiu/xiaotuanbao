@@ -188,13 +188,19 @@ describe('AiCreateTaskService review disposition #440', () => {
 
   function createService(
     pkg: Record<string, unknown>,
-    options?: { siblings?: Record<string, unknown>[] },
+    options?: {
+      siblings?: Record<string, unknown>[]
+      taskSnapshot?: Record<string, unknown>
+    },
   ) {
+    const currentTask = options?.taskSnapshot
+      ? { ...task, draft: { ...task.draft, snapshot: options.taskSnapshot } }
+      : task
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
       aiCreateTask: {
-        findFirst: jest.fn().mockResolvedValue(task),
-        findFirstOrThrow: jest.fn().mockResolvedValue(task),
+        findFirst: jest.fn().mockResolvedValue(currentTask),
+        findFirstOrThrow: jest.fn().mockResolvedValue(currentTask),
       },
       aiReviewPackage: {
         findFirst: jest.fn().mockResolvedValue(pkg),
@@ -326,6 +332,107 @@ describe('AiCreateTaskService review disposition #440', () => {
     expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }) }),
     )
+  })
+
+  it('rejects a null departureType correction before writing the draft', async () => {
+    const modelCandidate = {
+      fieldKey: 'departureType' as const,
+      proposedValue: 'independent' as const,
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '独立团' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-departure-type-null',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        {
+          expectedVersion: 1,
+          expectedPackageVersion: 1,
+          corrections: { departureType: null },
+        },
+        'decision-departure-type-null',
+      ),
+    ).rejects.toThrow('审核修正值无效：发团类型')
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
+  })
+
+  it('confirms non-route fields while a conversation-first manual draft still has no route', async () => {
+    const emptySnapshot = {
+      mode: DepartureCreationDraftMode.MANUAL,
+      routeName: '',
+      ownerUserId: 'user-1',
+      departureType: DepartureType.COMBINED,
+    }
+    const candidates = [
+      {
+        fieldKey: 'vehiclePlate' as const,
+        proposedValue: '新A·12345',
+        clarity: 'clear' as const,
+        evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '车牌新A·12345' }],
+      },
+      {
+        fieldKey: 'notes' as const,
+        proposedValue: '客人需要轮椅',
+        clarity: 'clear' as const,
+        evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '客人需要轮椅' }],
+      },
+      {
+        fieldKey: 'departureType' as const,
+        proposedValue: 'independent' as const,
+        clarity: 'clear' as const,
+        evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '独立团' }],
+      },
+    ]
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-empty-route-fields',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      baselineSnapshot: emptySnapshot,
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates,
+      }),
+      candidates: candidates.map((candidate) => ({ ...candidate, status: 'pending' })),
+    }
+    const { service, tx } = createService(pkg, { taskSnapshot: emptySnapshot })
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        { expectedVersion: 1, expectedPackageVersion: 1 },
+        'decision-empty-route-fields',
+      ),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.departureCreationDraft.update).toHaveBeenCalledWith({
+      where: { id: 'draft-1' },
+      data: expect.objectContaining({
+        snapshot: expect.objectContaining({
+          routeName: '',
+          vehiclePlate: '新A·12345',
+          notes: '客人需要轮椅',
+          departureType: DepartureType.INDEPENDENT,
+        }),
+      }),
+    })
   })
 
   it('does not confirm an empty package as a successful no-op', async () => {
@@ -585,8 +692,16 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
     }
   }
 
-  function createService(options?: { draftVersion?: number; updateCount?: number }) {
-    const currentDraft = { ...draft, version: options?.draftVersion ?? 1 }
+  function createService(options?: {
+    draftVersion?: number
+    updateCount?: number
+    snapshot?: typeof snapshot
+  }) {
+    const currentDraft = {
+      ...draft,
+      version: options?.draftVersion ?? 1,
+      snapshot: options?.snapshot ?? snapshot,
+    }
     const findFirst = jest.fn().mockImplementation(({ include }: { include: { draft?: boolean; agentTask?: unknown } }) =>
       Promise.resolve({
         ...loadTask(include),
@@ -672,6 +787,99 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       }
       expect(body.data.pendingReview).toMatchObject({ id: packageId })
     }
+  })
+
+  it.each([
+    ['omitted', {}],
+    ['null', { ownerUserId: null, departureType: null }],
+    ['blank owner', { ownerUserId: '', departureType: null }],
+  ] as const)(
+    'preserves an existing owner and independent type when a later save sends %s defaults',
+    async (_label, overrides) => {
+      const selectedSnapshot = {
+        ...snapshot,
+        ownerUserId: 'user-b',
+        departureType: DepartureType.INDEPENDENT,
+      }
+      const { service, tx } = createService({ snapshot: selectedSnapshot })
+      const { ownerUserId: _ownerUserId, departureType: _departureType, ...omitted } = snapshot
+
+      await service.saveDraft(organizationId, userId, {
+        taskId,
+        expectedVersion: 1,
+        draft: { ...omitted, ...overrides },
+      })
+
+      expect(tx.departureCreationDraft.updateMany).toHaveBeenCalledWith({
+        where: { id: draftId, version: 1 },
+        data: expect.objectContaining({
+          snapshot: expect.objectContaining({
+            ownerUserId: 'user-b',
+            departureType: DepartureType.INDEPENDENT,
+          }),
+        }),
+      })
+    },
+  )
+})
+
+describe('AiCreateTaskService.saveDraft defaults #442', () => {
+  it('persists the current user and combined type when a new draft omits both', async () => {
+    const now = new Date('2026-08-30T00:00:00.000Z')
+    const agentTaskCreate = jest.fn().mockResolvedValue({ id: 'task-1' })
+    const tx = {
+      agentTask: { create: agentTaskCreate },
+      aiCreateTask: {
+        findUniqueOrThrow: jest.fn().mockImplementation(() => {
+          const snapshot =
+            agentTaskCreate.mock.calls[0]?.[0].data.departureCreationTask.create.draft.create
+              .snapshot
+          return Promise.resolve({
+            id: 'task-1',
+            currentPhase: AiCreatePhase.BASIC_INFO,
+            departureId: null,
+            draft: {
+              id: 'draft-1',
+              taskId: 'task-1',
+              version: 1,
+              snapshot,
+              createdAt: now,
+              updatedAt: now,
+            },
+            agentTask: {
+              id: 'task-1',
+              organizationId: 'org-1',
+              ownerUserId: 'user-1',
+              status: AgentTaskStatus.active,
+              statusVersion: 1,
+              createdAt: now,
+              updatedAt: now,
+              reviewPackages: [],
+            },
+          })
+        }),
+      },
+    }
+    const service = new AiCreateTaskService(
+      {
+        $transaction: (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.saveDraft('org-1', 'user-1', {
+      draft: { mode: DepartureCreationDraftMode.MANUAL, routeName: '川西' },
+    })
+
+    expect(result.draft.snapshot).toMatchObject({
+      ownerUserId: 'user-1',
+      departureType: DepartureType.COMBINED,
+    })
   })
 })
 

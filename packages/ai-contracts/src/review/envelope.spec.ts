@@ -64,7 +64,7 @@ describe('generic Review Package envelope', () => {
     ).toEqual({
       baseVersion: 1,
       currentVersion: 2,
-      changedFieldKeys: ['name'],
+      changedFieldKeys: ['name', 'notes'],
     })
   })
 

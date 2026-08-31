@@ -156,10 +156,9 @@ export class AiCreateTaskService {
     userId: string,
     dto: SaveDepartureCreationDraftDto,
   ): Promise<AiCreateTaskSummary> {
-    const snapshot = this.normalizeSnapshot(dto.draft)
-    this.assertValidDraft(snapshot)
-
     if (!dto.taskId) {
+      const snapshot = this.normalizeSnapshot(dto.draft, userId)
+      this.assertValidDraft(snapshot)
       return this.createTaskWithDraft(organizationId, userId, snapshot)
     }
 
@@ -172,7 +171,7 @@ export class AiCreateTaskService {
       userId,
       dto.taskId,
       dto.expectedVersion,
-      snapshot,
+      dto.draft,
     )
   }
 
@@ -256,7 +255,10 @@ export class AiCreateTaskService {
       : await this.createTaskWithDraft(
           organizationId,
           userId,
-          this.normalizeSnapshot(dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' }),
+          this.normalizeSnapshot(
+            dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' },
+            userId,
+          ),
         ).then((summary) => this.findOwnedTaskOrThrow(organizationId, userId, summary.id))
 
     const conversation = await this.conversationService.openOrResume(
@@ -907,6 +909,9 @@ export class AiCreateTaskService {
       if (merge.status === 'conflict') {
         throw new BadRequestException('审核提案无法应用到当前草稿')
       }
+      if (merge.status === 'invalid') {
+        throw new BadRequestException('审核修正值无效：发团类型')
+      }
 
       const adoptedTemplateId =
         typeof submissions.templateId === 'string' ? submissions.templateId.trim() : ''
@@ -957,7 +962,7 @@ export class AiCreateTaskService {
         merge.nextSnapshot.defaultDayCount = template.defaultDayCount
       }
 
-      this.assertValidDraft(merge.nextSnapshot)
+      this.assertValidDraft(merge.nextSnapshot, { allowIncompleteManualRoute: true })
 
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
@@ -1312,7 +1317,7 @@ export class AiCreateTaskService {
     userId: string,
     taskId: string,
     expectedVersion: number,
-    snapshot: DepartureCreationDraftSnapshot,
+    incomingDraft: DepartureCreationDraftSnapshotDto,
   ): Promise<AiCreateTaskSummary> {
     return this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, taskId)
@@ -1342,6 +1347,14 @@ export class AiCreateTaskService {
           data: this.toSummary(task),
         })
       }
+
+      const currentSnapshot = this.parseSnapshot(task.draft.snapshot)
+      const snapshot = this.normalizeSnapshot(
+        incomingDraft,
+        currentSnapshot.ownerUserId ?? userId,
+        currentSnapshot.departureType ?? DepartureType.COMBINED,
+      )
+      this.assertValidDraft(snapshot)
 
       const updated = await tx.departureCreationDraft.updateMany({
         where: { id: task.draft.id, version: expectedVersion },
@@ -1416,6 +1429,8 @@ export class AiCreateTaskService {
 
   private normalizeSnapshot(
     draft: DepartureCreationDraftSnapshotDto,
+    ownerUserIdFallback?: string,
+    departureTypeFallback: string = DepartureType.COMBINED,
   ): DepartureCreationDraftSnapshot {
     const mode = draft.mode
     return {
@@ -1430,8 +1445,8 @@ export class AiCreateTaskService {
       name: emptyToNull(draft.name),
       startDate: emptyToNull(draft.startDate),
       endDate: emptyToNull(draft.endDate),
-      ownerUserId: emptyToNull(draft.ownerUserId),
-      departureType: draft.departureType ?? DepartureType.COMBINED,
+      ownerUserId: emptyToNull(draft.ownerUserId) ?? ownerUserIdFallback ?? null,
+      departureType: draft.departureType ?? departureTypeFallback,
       notes: emptyToNull(draft.notes),
       driverSupplierId: emptyToNull(draft.driverSupplierId),
       guideSupplierId: emptyToNull(draft.guideSupplierId),
@@ -1444,7 +1459,10 @@ export class AiCreateTaskService {
     }
   }
 
-  private assertValidDraft(snapshot: DepartureCreationDraftSnapshot): void {
+  private assertValidDraft(
+    snapshot: DepartureCreationDraftSnapshot,
+    options: { allowIncompleteManualRoute?: boolean } = {},
+  ): void {
     if (snapshot.mode === DepartureCreationDraftMode.TEMPLATE) {
       if (!snapshot.templateId) {
         throw new BadRequestException('选择路线模板时须提供 templateId')
@@ -1457,7 +1475,7 @@ export class AiCreateTaskService {
       }
       return
     }
-    if (!snapshot.routeName.trim()) {
+    if (!snapshot.routeName.trim() && !options.allowIncompleteManualRoute) {
       throw new BadRequestException('手动路线须填写路线名称')
     }
   }
@@ -1967,7 +1985,10 @@ export class AiCreateTaskService {
       if (!field) {
         throw new BadRequestException('不能修正负责人和发团类型等系统关联字段')
       }
-      if (value !== null && !field.valueSchema.safeParse(value).success) {
+      if (
+        (value !== null || key === 'departureType') &&
+        !field.valueSchema.safeParse(value).success
+      ) {
         throw new BadRequestException(`审核修正值无效：${field.label}`)
       }
       corrections[key as AiReviewableBasicInfoField] = value

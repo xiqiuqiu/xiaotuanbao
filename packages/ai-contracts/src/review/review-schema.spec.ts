@@ -32,6 +32,18 @@ describe('Review Schema Registry #440', () => {
             }),
             expect.objectContaining({ key: 'startDate', control: 'date' }),
             expect.objectContaining({
+              key: 'departureType',
+              label: '发团类型',
+              control: 'choice',
+              options: [
+                { label: '拼团', value: 'combined' },
+                { label: '独立团', value: 'independent' },
+              ],
+            }),
+            expect.objectContaining({ key: 'notes', label: '备注' }),
+            expect.objectContaining({ key: 'vehiclePlate', label: '车牌' }),
+            expect.objectContaining({ key: 'contactPhone', label: '联系电话' }),
+            expect.objectContaining({
               key: 'expectedGuestCountHint',
               control: 'integer',
               number: { min: 0, max: 9999, precision: 0 },

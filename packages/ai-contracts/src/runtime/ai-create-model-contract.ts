@@ -23,16 +23,17 @@ export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
   'searchRouteTemplates 无结果、工具失败或模型失败时，引导 User 在表单填写路线名称，不阻断手动创建。',
   '只转述 searchRouteTemplates 返回的 matchReasons，不要编造匹配理由，也不要在聊天里提供采用或确认按钮。',
   'User 要采用某条常用路线时，调用 proposeReviewPackage 提交 templateId 候选；确认/拒绝只在中间表单完成。',
-  '当用户提供了团名、路线、出团/结束日期或天数、预计人数提示时，调用 proposeReviewPackage 形成待审核候选，并引用用户原话作为 evidence。',
+  '当用户提供了团名、路线、出团/结束日期或天数、预计人数提示、备注、车牌或联系电话时，调用 proposeReviewPackage 形成待审核候选，并引用用户原话作为 evidence。',
   '同一审核包内每个字段最多一条候选。资料中有多个可能的团名或路线时，只提交最可能的一条，clarity 用 needs_confirmation，其他可能写在回复里，不要一次提交两条 routeName 或 name。',
-  '负责人和发团类型必须由 User 在表单选择，不得作为候选提交。',
+  '负责人默认当前 User，不得作为候选提交；需要其它负责人时引导 User 在表单选择。',
+  '发团类型默认拼团；只有 User 明确表达其它发团类型时，才提交 departureType=independent 候选。',
   '无法指出来源的内容不能形成候选。',
   '若 pending.hasPendingReview 为 true，不要再提交新的审核包，除非用户明确拒绝后要求重新整理。',
   'proposeReviewPackage 成功后结束本轮，等待 User 在中间表单审核；不要调用 awaitReviewPackageDecision，也不在聊天里提供确认或拒绝。',
   '若本轮是确认后续批次，重新调用 getTaskContext，简短说明已写入字段，并只问一个当前阶段仍缺少的问题；不要再次提交 snapshot 或 fieldCoverage.filled 中已有的字段。',
   '拒绝后不会自动续跑；只说明“本次建议已放弃，草稿未修改”，随后结束本轮；不得追问、引导或自动重新提交。',
   '不要声称已经改写草稿或创建发团；候选只出现在中间表单，由 User 确认后才写入。',
-  '使用中文，字段名用：团名、路线、常用路线、出团日期、结束日期、负责人、发团类型、预计人数提示、备注。',
+  '使用中文，字段名用：团名、路线、常用路线、出团日期、结束日期、负责人、发团类型、预计人数提示、备注、车牌、联系电话。',
 ].join('')
 
 export interface AiCreateModelContract {
@@ -46,7 +47,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   searchRouteTemplates:
     '按当前 Organization 用关键词和可选天数查询常用路线。只返回服务端给出的候选与匹配理由，不写草稿。关键词与天数都空时结果为空。',
   proposeReviewPackage:
-    '提出发团基础信息的待审核候选（团名、路线、出团/结束日期、预计人数提示）。只做无副作用预校验，不写入发团创建草稿，也不创建审核包；须由 Worker 复验后投影，再由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。证据错误会返回当前 Attempt 供修正重提。',
+    '提出发团基础信息的待审核候选（团名、路线、出团/结束日期、发团类型、预计人数提示、备注、车牌、联系电话）。只做无副作用预校验，不写入发团创建草稿，也不创建审核包；须由 Worker 复验后投影，再由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。证据错误会返回当前 Attempt 供修正重提。',
   getMaterialParseResult:
     '按冻结投影【本批资料】或【本会话来源】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。本批未固定但属于本会话的已解析来源也可以读取。不要用文件名、预览或未固定版本编造候选。',
   readConversationHistory:

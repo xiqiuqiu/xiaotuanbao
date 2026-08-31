@@ -36,6 +36,7 @@ import {
   AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
+  DepartureType,
   InputBatchTaskRole,
   OrganizationStatus,
   TaskActivityKind,
@@ -1689,7 +1690,12 @@ export class AiWorkflowProcessor {
               draft: {
                 create: {
                   version: 1,
-                  snapshot: { mode: 'manual', routeName: '' },
+                  snapshot: {
+                    mode: 'manual',
+                    routeName: '',
+                    ownerUserId: job.inputBatch.creatorUserId,
+                    departureType: DepartureType.combined,
+                  },
                 },
               },
             },

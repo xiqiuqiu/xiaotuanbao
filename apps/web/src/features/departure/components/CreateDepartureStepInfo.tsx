@@ -23,7 +23,7 @@ import dayjs from 'dayjs'
 import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import type { AiReviewPackageView, AiReviewableBasicInfoField, SupplierSummary } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
-import { listSuppliers } from '@/services/supplier.service'
+import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import { getRouteTemplate } from '@/services/route-template.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
@@ -70,10 +70,12 @@ interface DepartureInfoFormProps {
   hasSupplierError: boolean
   onRetrySuppliers: () => void
   driverSuppliers: SupplierSummary[]
+  driverPinnedOption: Pick<SupplierSummary, 'id' | 'name'> | null
   driverSearch: string
   onDriverSearch: (value: string) => void
   isDriverSuppliersLoading: boolean
   guideSuppliers: SupplierSummary[]
+  guidePinnedOption: Pick<SupplierSummary, 'id' | 'name'> | null
   guideSearch: string
   onGuideSearch: (value: string) => void
   isGuideSuppliersLoading: boolean
@@ -202,10 +204,12 @@ function DepartureInfoForm({
   hasSupplierError,
   onRetrySuppliers,
   driverSuppliers,
+  driverPinnedOption,
   driverSearch,
   onDriverSearch,
   isDriverSuppliersLoading,
   guideSuppliers,
+  guidePinnedOption,
   guideSearch,
   onGuideSearch,
   isGuideSuppliersLoading,
@@ -309,7 +313,11 @@ function DepartureInfoForm({
               label="发团类型"
               rules={[{ required: true, message: '请选择发团类型' }]}
             >
-              <Select options={[...DEPARTURE_TYPE_OPTIONS]} />
+              {renderPending(
+                'departureType',
+                String(form.getFieldValue('departureType') ?? ''),
+                <Select options={[...DEPARTURE_TYPE_OPTIONS]} />,
+              )}
             </Form.Item>
           </Col>
 
@@ -392,6 +400,7 @@ function DepartureInfoForm({
               <SupplierQuickCreateSelect
                 category={ResourceKind.TRANSPORT}
                 suppliers={driverSuppliers}
+                pinnedOption={driverPinnedOption}
                 searchValue={driverSearch}
                 onSearch={onDriverSearch}
                 loading={isDriverSuppliersLoading}
@@ -406,6 +415,7 @@ function DepartureInfoForm({
               <SupplierQuickCreateSelect
                 category={ResourceKind.GUIDE}
                 suppliers={guideSuppliers}
+                pinnedOption={guidePinnedOption}
                 searchValue={guideSearch}
                 onSearch={onGuideSearch}
                 loading={isGuideSuppliersLoading}
@@ -417,13 +427,21 @@ function DepartureInfoForm({
 
           <Col xs={24} md={12}>
             <Form.Item name="vehiclePlate" label="车牌">
-              <Input placeholder="如：新A·12345" maxLength={32} />
+              {renderPending(
+                'vehiclePlate',
+                String(form.getFieldValue('vehiclePlate') ?? ''),
+                <Input placeholder="如：新A·12345" maxLength={32} />,
+              )}
             </Form.Item>
           </Col>
 
           <Col xs={24} md={12}>
             <Form.Item name="contactPhone" label="联系电话">
-              <Input type="tel" inputMode="tel" placeholder="如：13800138000" maxLength={32} />
+              {renderPending(
+                'contactPhone',
+                String(form.getFieldValue('contactPhone') ?? ''),
+                <Input type="tel" inputMode="tel" placeholder="如：13800138000" maxLength={32} />,
+              )}
             </Form.Item>
           </Col>
 
@@ -443,7 +461,11 @@ function DepartureInfoForm({
 
           <Col span={24}>
             <Form.Item name="notes" label="备注">
-              <Input.TextArea rows={3} placeholder="如：客人集合时间、特殊接待要求" />
+              {renderPending(
+                'notes',
+                String(form.getFieldValue('notes') ?? ''),
+                <Input.TextArea rows={3} placeholder="如：客人集合时间、特殊接待要求" />,
+              )}
             </Form.Item>
           </Col>
         </Row>
@@ -453,28 +475,91 @@ function DepartureInfoForm({
 }
 
 interface DepartureSummaryProps {
+  form: FormInstance<InfoFormValues>
   route: RouteStepValues
   copySummary: string | null
   helperTextStyle: CSSProperties
+  employeeOptions: Array<{ value: string; label: string }>
+  driverSupplier?: Pick<SupplierSummary, 'id' | 'name'>
+  guideSupplier?: Pick<SupplierSummary, 'id' | 'name'>
+  driverSupplierLoading: boolean
+  guideSupplierLoading: boolean
+  driverSupplierError: boolean
+  guideSupplierError: boolean
 }
 
-function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSummaryProps) {
+function DepartureSummary({
+  form,
+  route,
+  copySummary,
+  helperTextStyle,
+  employeeOptions,
+  driverSupplier,
+  guideSupplier,
+  driverSupplierLoading,
+  guideSupplierLoading,
+  driverSupplierError,
+  guideSupplierError,
+}: DepartureSummaryProps) {
+  const values = Form.useWatch([], form) as Partial<InfoFormValues> | undefined
+  const startDate = values?.startDate
+  const endDate = values?.endDate
+  const dayCount = startDate && endDate ? computeDayCount(startDate, endDate) : null
+  const ownerName =
+    employeeOptions.find((option) => option.value === values?.ownerUserId)?.label ?? '-'
+  const departureType = DEPARTURE_TYPE_OPTIONS.find(
+    (option) => option.value === values?.departureType,
+  )?.label ?? '-'
+  const driverName =
+    driverSupplier && driverSupplier.id === values?.driverSupplierId
+      ? driverSupplier.name
+      : undefined
+  const guideName =
+    guideSupplier && guideSupplier.id === values?.guideSupplierId
+      ? guideSupplier.name
+      : undefined
+  const driverDisplay = driverName
+    ?? (values?.driverSupplierId
+      ? driverSupplierLoading
+        ? '加载中'
+        : driverSupplierError
+          ? '加载失败'
+          : '未找到'
+      : '未选择')
+  const guideDisplay = guideName
+    ?? (values?.guideSupplierId
+      ? guideSupplierLoading
+        ? '加载中'
+        : guideSupplierError
+          ? '加载失败'
+          : '未找到'
+      : '未选择')
+
   return (
     <Card size="small" title="本次发团摘要" className={styles.summaryCard}>
       <Space orientation="vertical" size={16} className={styles.summaryContent}>
         <div>
-          <Typography.Text style={helperTextStyle}>
-            {route.mode === 'template' ? '已选路线' : '所选路线'}
-          </Typography.Text>
+          <Typography.Text style={helperTextStyle}>待创建发团</Typography.Text>
           <Typography.Title level={5} className={styles.routeName}>
-            {route.routeName || '-'}
+            {values?.name || '-'}
           </Typography.Title>
         </div>
 
         <Space orientation="vertical" size={12}>
           <Typography.Text>
             <CalendarOutlined className={styles.summaryIcon} aria-hidden />
-            默认 {route.defaultDayCount ? `${route.defaultDayCount} 天` : '未设置天数'}
+            {startDate && endDate
+              ? `${startDate} 至 ${endDate}（${dayCount} 天）`
+              : '团期：待填写'}
+          </Typography.Text>
+          {route.defaultDayCount ? (
+            <Typography.Text>默认 {route.defaultDayCount} 天</Typography.Text>
+          ) : null}
+          <Typography.Text>负责人：{ownerName}</Typography.Text>
+          <Typography.Text>发团类型：{departureType}</Typography.Text>
+          <Typography.Text>路线：{route.routeName || '-'}</Typography.Text>
+          <Typography.Text>
+            执行班组：司机{driverDisplay}；导游{guideDisplay}
           </Typography.Text>
           {route.mode === 'template' ? (
             <Typography.Text>
@@ -524,6 +609,8 @@ export function CreateDepartureStepInfo({
   const helperTextStyle = { color: token.colorTextSecondary }
   const committedStartDateRef = useRef<string | undefined>(undefined)
   const watchedStartDate = Form.useWatch('startDate', form)
+  const selectedDriverSupplierId = Form.useWatch('driverSupplierId', form)
+  const selectedGuideSupplierId = Form.useWatch('guideSupplierId', form)
   useEffect(() => {
     if (typeof watchedStartDate === 'string' && watchedStartDate) {
       committedStartDateRef.current = watchedStartDate
@@ -573,6 +660,24 @@ export function CreateDepartureStepInfo({
         pageSize: 100,
       }),
   })
+  const driverSupplierFromList = driverSuppliersResult?.items.find(
+    (supplier) => supplier.id === selectedDriverSupplierId,
+  )
+  const guideSupplierFromList = guideSuppliersResult?.items.find(
+    (supplier) => supplier.id === selectedGuideSupplierId,
+  )
+  const selectedDriverSupplierQuery = useQuery({
+    queryKey: ['suppliers', selectedDriverSupplierId],
+    queryFn: () => getSupplier(selectedDriverSupplierId!),
+    enabled: Boolean(selectedDriverSupplierId && !driverSupplierFromList),
+  })
+  const selectedGuideSupplierQuery = useQuery({
+    queryKey: ['suppliers', selectedGuideSupplierId],
+    queryFn: () => getSupplier(selectedGuideSupplierId!),
+    enabled: Boolean(selectedGuideSupplierId && !guideSupplierFromList),
+  })
+  const selectedDriverSupplier = driverSupplierFromList ?? selectedDriverSupplierQuery.data
+  const selectedGuideSupplier = guideSupplierFromList ?? selectedGuideSupplierQuery.data
 
   const employeeOptions =
     employeeOptionsResult?.map((employee) => ({
@@ -648,15 +753,27 @@ export function CreateDepartureStepInfo({
               void refetchEmployeeOptions()
             }}
             isEmployeeOptionsFetching={isEmployeeOptionsFetching}
-            hasSupplierError={isDriverSuppliersError || isGuideSuppliersError}
+            hasSupplierError={
+              isDriverSuppliersError
+              || isGuideSuppliersError
+              || selectedDriverSupplierQuery.isError
+              || selectedGuideSupplierQuery.isError
+            }
             onRetrySuppliers={() => {
-              void Promise.all([refetchDriverSuppliers(), refetchGuideSuppliers()])
+              void Promise.all([
+                refetchDriverSuppliers(),
+                refetchGuideSuppliers(),
+                ...(selectedDriverSupplierId ? [selectedDriverSupplierQuery.refetch()] : []),
+                ...(selectedGuideSupplierId ? [selectedGuideSupplierQuery.refetch()] : []),
+              ])
             }}
             driverSuppliers={driverSuppliersResult?.items ?? []}
+            driverPinnedOption={selectedDriverSupplier ?? null}
             driverSearch={driverSearch}
             onDriverSearch={setDriverSearch}
             isDriverSuppliersLoading={isDriverSuppliersLoading}
             guideSuppliers={guideSuppliersResult?.items ?? []}
+            guidePinnedOption={selectedGuideSupplier ?? null}
             guideSearch={guideSearch}
             onGuideSearch={setGuideSearch}
             isGuideSuppliersLoading={isGuideSuppliersLoading}
@@ -673,9 +790,17 @@ export function CreateDepartureStepInfo({
 
         <Col xs={24} xl={8}>
           <DepartureSummary
+            form={form}
             route={route}
             copySummary={copySummary}
             helperTextStyle={helperTextStyle}
+            employeeOptions={employeeOptions}
+            driverSupplier={selectedDriverSupplier}
+            guideSupplier={selectedGuideSupplier}
+            driverSupplierLoading={selectedDriverSupplierQuery.isFetching}
+            guideSupplierLoading={selectedGuideSupplierQuery.isFetching}
+            driverSupplierError={selectedDriverSupplierQuery.isError}
+            guideSupplierError={selectedGuideSupplierQuery.isError}
           />
         </Col>
       </Row>

@@ -29,12 +29,18 @@ export const AI_REVIEWABLE_BASIC_INFO_FIELDS = [
   'templateId',
   'startDate',
   'endDate',
+  'departureType',
+  'notes',
+  'vehiclePlate',
+  'contactPhone',
   'expectedGuestCountHint',
 ] as const
 
 export type AiReviewableBasicInfoField = (typeof AI_REVIEWABLE_BASIC_INFO_FIELDS)[number]
 
-export const AI_USER_ONLY_BASIC_INFO_FIELDS = ['ownerUserId', 'departureType'] as const
+export const AI_USER_ONLY_BASIC_INFO_FIELDS = ['ownerUserId'] as const
+
+export const AI_REVIEWABLE_DEPARTURE_TYPES = ['combined', 'independent'] as const
 
 export const AI_CANDIDATE_CLARITY = ['clear', 'needs_confirmation', 'undetermined'] as const
 export type AiCandidateClarity = (typeof AI_CANDIDATE_CLARITY)[number]
@@ -122,6 +128,34 @@ export const aiReviewCandidateInputSchema = z.discriminatedUnion('fieldKey', [
     .object({
       fieldKey: z.literal('endDate'),
       proposedValue: z.string().regex(ISO_DATE),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('departureType'),
+      proposedValue: z.enum(AI_REVIEWABLE_DEPARTURE_TYPES),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('notes'),
+      proposedValue: z.string().trim().min(1).max(5000),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('vehiclePlate'),
+      proposedValue: z.string().trim().min(1).max(32),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('contactPhone'),
+      proposedValue: z.string().trim().min(1).max(32),
       ...candidateBase,
     })
     .strip(),

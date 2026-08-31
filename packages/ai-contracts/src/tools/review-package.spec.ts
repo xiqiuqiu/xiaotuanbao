@@ -94,7 +94,48 @@ describe('submitReviewPackage contract v1', () => {
     ])
   })
 
-  it('rejects owner, departure type, missing evidence, duplicate fields and inverted dates', () => {
+  it('accepts explicitly expressed non-reference create fields', () => {
+    const parsed = submitReviewPackageInputSchema.parse({
+      taskId: 'task-1',
+      runId: 'run-1',
+      objectVersion: 1,
+      candidates: [
+        {
+          fieldKey: 'departureType',
+          proposedValue: 'independent',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '这是独立团' }],
+        },
+        {
+          fieldKey: 'notes',
+          proposedValue: '客人需要轮椅',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客人需要轮椅' }],
+        },
+        {
+          fieldKey: 'vehiclePlate',
+          proposedValue: '新A·12345',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '车牌新A·12345' }],
+        },
+        {
+          fieldKey: 'contactPhone',
+          proposedValue: '13800138000',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '联系电话13800138000' }],
+        },
+      ],
+    })
+
+    expect(parsed.candidates.map((candidate) => candidate.fieldKey)).toEqual([
+      'departureType',
+      'notes',
+      'vehiclePlate',
+      'contactPhone',
+    ])
+  })
+
+  it('rejects owner, missing evidence, duplicate fields and inverted dates', () => {
     expect(() =>
       submitReviewPackageInputSchema.parse({
         taskId: 'task-1',
@@ -106,22 +147,6 @@ describe('submitReviewPackage contract v1', () => {
             proposedValue: 'user-1',
             clarity: 'clear',
             evidence: [{ kind: 'user_message', sequence: 1, excerpt: '负责人王杰' }],
-          },
-        ],
-      }),
-    ).toThrow()
-
-    expect(() =>
-      submitReviewPackageInputSchema.parse({
-        taskId: 'task-1',
-        runId: 'run-1',
-        objectVersion: 1,
-        candidates: [
-          {
-            fieldKey: 'departureType',
-            proposedValue: 'combined',
-            clarity: 'clear',
-            evidence: [{ kind: 'user_message', sequence: 1, excerpt: '散拼' }],
           },
         ],
       }),

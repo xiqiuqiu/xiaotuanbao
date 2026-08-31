@@ -74,6 +74,26 @@ const candidateInputSchema = z.discriminatedUnion('fieldKey', [
     ...candidateBase,
   }),
   z.object({
+    fieldKey: z.literal('departureType'),
+    proposedValue: z.enum(['combined', 'independent']),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('notes'),
+    proposedValue: z.string().trim().min(1).max(5000),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('vehiclePlate'),
+    proposedValue: z.string().trim().min(1).max(32),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('contactPhone'),
+    proposedValue: z.string().trim().min(1).max(32),
+    ...candidateBase,
+  }),
+  z.object({
     fieldKey: z.literal('expectedGuestCountHint'),
     proposedValue: z
       .number()
