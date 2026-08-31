@@ -66,13 +66,14 @@ describe('工作台指标卡 hover outline 不被壳层滚动裁切', () => {
     expect(content).toMatch(/overflow(?:-y)?:\s*(auto|scroll)/)
 
     const appContent = blockFor(globalCss, '.app-content')
-    expect(appContent).toMatch(/padding:\s*16px/)
+    expect(appContent).toMatch(/padding-block:\s*16px/)
+    expect(appContent).toMatch(/padding-inline:\s*16px/)
     expect(appContent).not.toMatch(/margin:\s*16px/)
     // explicit zero margin — must not put gutter outside clip
     expect(appContent).toMatch(/margin:\s*0/)
 
     expect(globalCss).toMatch(
-      /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-content\s*\{[^}]*padding:\s*12px/,
+      /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.app-content\s*\{[^}]*padding-block:\s*12px[^}]*padding-inline:\s*12px/,
     )
   })
 })
