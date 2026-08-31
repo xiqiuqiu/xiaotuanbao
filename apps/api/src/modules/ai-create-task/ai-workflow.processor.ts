@@ -115,6 +115,7 @@ import {
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage } from './review-package.projection'
+import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -862,12 +863,26 @@ export class AiWorkflowProcessor {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       const task = await tx.aiCreateTask.findUniqueOrThrow({
         where: { id: taskId },
-        include: { draft: true, agentTask: true },
+        include: { draft: true, departure: true, agentTask: true },
       })
       if (!task.draft) {
         throw new Error('发团创建草稿不存在')
       }
       const draft = task.draft
+      const draftSnapshot =
+        draft.snapshot && typeof draft.snapshot === 'object' && !Array.isArray(draft.snapshot)
+          ? (draft.snapshot as Record<string, unknown>)
+          : {}
+      const expectedGuestCountHint =
+        typeof draftSnapshot.expectedGuestCountHint === 'number'
+          ? draftSnapshot.expectedGuestCountHint
+          : null
+      const businessSnapshot = task.departure
+        ? toFormalDepartureSnapshot(task.departure, expectedGuestCountHint)
+        : draft.snapshot
+      const businessObjectVersion = task.departure
+        ? task.departure.updatedAt.getTime()
+        : draft.version
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,
@@ -876,7 +891,10 @@ export class AiWorkflowProcessor {
         },
         select: { id: true },
       })
-      const availableToolNames = capabilitiesForPendingReview(pendingReview != null)
+      const availableToolNames = capabilitiesForPendingReview(
+        pendingReview != null,
+        task.departure != null,
+      )
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -892,8 +910,8 @@ export class AiWorkflowProcessor {
           taskId: task.id,
           status: task.agentTask.status,
           currentPhase: task.currentPhase,
-          objectVersion: draft.version,
-          snapshot: draft.snapshot,
+          objectVersion: businessObjectVersion,
+          snapshot: businessSnapshot,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,
@@ -918,8 +936,8 @@ export class AiWorkflowProcessor {
           taskId: task.id,
           status: task.agentTask.status,
           currentPhase: task.currentPhase,
-          objectVersion: draft.version,
-          snapshot: draft.snapshot,
+          objectVersion: businessObjectVersion,
+          snapshot: businessSnapshot,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,

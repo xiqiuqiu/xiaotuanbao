@@ -310,7 +310,13 @@ export const reviewPackageDecisionSchema = z.discriminatedUnion('status', [
 
 export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
-export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreateToolName[] {
+export function capabilitiesForPendingReview(
+  hasPendingReview: boolean,
+  hasFormalDeparture = false,
+): AiCreateToolName[] {
+  if (hasFormalDeparture) {
+    return ['getTaskContext', 'readConversationHistory', 'readConversationSource']
+  }
   if (hasPendingReview) {
     return [
       'getTaskContext',

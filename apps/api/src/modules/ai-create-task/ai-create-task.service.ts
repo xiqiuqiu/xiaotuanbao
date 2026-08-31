@@ -55,7 +55,7 @@ import {
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
-import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
+import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, Departure, DepartureCreationDraft, Prisma } from '@prisma/client'
 import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
@@ -97,6 +97,7 @@ import {
   ReviewProposalRejectedError,
 } from './review-proposal.commit'
 import { validateReviewProposal } from './review-proposal.validator'
+import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 import {
   departureReviewProposalHash,
   reviewDecisionRequestHash,
@@ -109,11 +110,13 @@ const REVIEW_CONFIRM_OPERATION = 'ai-review-package.confirm'
 
 type TaskWithDraft = AiCreateTask & {
   draft: DepartureCreationDraft | null
+  departure: Departure | null
   agentTask: AgentTask & { reviewPackages?: AiReviewPackage[] }
 }
 
 const TASK_WITH_PENDING_INCLUDE = {
   draft: true,
+  departure: true,
   agentTask: {
     include: {
       reviewPackages: {
@@ -318,6 +321,9 @@ export class AiCreateTaskService {
     const conversationPending = caller.conversationId
       ? (summary.pendingReviews ?? []).find((pkg) => pkg.conversationId === caller.conversationId)
       : undefined
+    const snapshot = task.departure
+      ? toFormalDepartureSnapshot(task.departure, summary.draft.snapshot.expectedGuestCountHint)
+      : summary.draft.snapshot
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -325,14 +331,17 @@ export class AiCreateTaskService {
         currentPhase: summary.currentPhase,
         creatorUserId: summary.creatorUserId,
       },
-      snapshot: summary.draft.snapshot,
-      objectVersion: summary.draft.version,
+      snapshot,
+      objectVersion: task.departure?.updatedAt.getTime() ?? summary.draft.version,
       pending: {
         hasPendingReview: Boolean(conversationPending),
         reviewPackageId: conversationPending?.id ?? null,
       },
-      availableCapabilities: capabilitiesForPendingReview(Boolean(conversationPending)),
-      fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+      availableCapabilities: capabilitiesForPendingReview(
+        Boolean(conversationPending),
+        task.departure != null,
+      ),
+      fieldCoverage: classifyDraftFields(snapshot),
     })
   }
 
@@ -1271,12 +1280,11 @@ export class AiCreateTaskService {
         })
         await isolateOpenTaskRuntime(tx, {
           taskId,
-          errorCode: 'TASK_COMPLETED',
+          errorCode: 'DEPARTURE_CREATED',
         })
         await tx.agentTask.update({
           where: { id: taskId },
           data: {
-            status: AgentTaskStatus.completed,
             statusVersion: { increment: 1 },
             activities: {
               create: [
@@ -1286,12 +1294,6 @@ export class AiCreateTaskService {
                   kind: TaskActivityKind.business_object,
                   summary: '已创建发团',
                   payload: { targetKind: 'departure', targetId: created.id },
-                },
-                {
-                  organizationId,
-                  actorUserId: userId,
-                  kind: TaskActivityKind.completed,
-                  summary: '建团任务已完成',
                 },
               ],
             },
@@ -1525,9 +1527,6 @@ export class AiCreateTaskService {
       task.agentTask.status !== AgentTaskStatus.waiting
     ) {
       throw new BadRequestException('仅进行中的 AI 建团任务可启动 AI 辅助')
-    }
-    if (task.departureId) {
-      throw new BadRequestException('已创建正式发团的任务不可再启动 AI 辅助')
     }
     return task
   }
@@ -2166,7 +2165,10 @@ export class AiCreateTaskService {
     if (!task.draft) {
       throw new BadRequestException('发团创建草稿不存在')
     }
-    const snapshot = this.parseSnapshot(task.draft.snapshot)
+    const draftSnapshot = this.parseSnapshot(task.draft.snapshot)
+    const snapshot = task.departure
+      ? toFormalDepartureSnapshot(task.departure, draftSnapshot.expectedGuestCountHint)
+      : draftSnapshot
     const pendingReviews = (task.agentTask.reviewPackages ?? []).map((pending) =>
       toReviewPackageView({
         ...pending,
@@ -2191,7 +2193,7 @@ export class AiCreateTaskService {
       draft: {
         version: task.draft.version,
         snapshot,
-        updatedAt: task.draft.updatedAt.toISOString(),
+        updatedAt: (task.departure?.updatedAt ?? task.draft.updatedAt).toISOString(),
       },
       pendingReview: pendingReviews.length === 1 ? pendingReviews[0] : null,
       pendingReviews,

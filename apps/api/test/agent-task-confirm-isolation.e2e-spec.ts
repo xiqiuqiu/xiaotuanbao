@@ -8,7 +8,7 @@ import { startDeterministicHeadlessAgent } from './support/deterministic-headles
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
 
-describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
+describe('AgentTask confirm isolates the current run and keeps the task open (e2e) #445', () => {
   let app: INestApplication
   let prisma: PrismaClient
   let processor: AiWorkflowProcessor
@@ -125,14 +125,14 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
       },
     })
 
-    await authRequest(app, token)
+    const confirmed = await authRequest(app, token)
       .post(`/api/ai-create-tasks/${opened.taskId}/confirm`)
       .set('Idempotency-Key', `${testPrefix}-isolate-confirm`)
       .send({ expectedVersion: opened.draftVersion })
       .expect(201)
 
     expect(await prisma.agentTask.findUniqueOrThrow({ where: { id: opened.taskId } })).toMatchObject({
-      status: 'completed',
+      status: 'active',
     })
     expect(
       await prisma.aiConversation.findUniqueOrThrow({ where: { id: opened.conversationId } }),
@@ -144,13 +144,24 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
       await prisma.aiWorkflowJob.findFirstOrThrow({
         where: { inputBatchId: batchId, type: 'agent_batch' },
       }),
-    ).toMatchObject({ status: 'failed', generation: 1, lastErrorCode: 'TASK_COMPLETED' })
+    ).toMatchObject({ status: 'failed', generation: 1, lastErrorCode: 'DEPARTURE_CREATED' })
     expect(await prisma.aiAction.findUniqueOrThrow({ where: { id: action.id } })).toMatchObject({
       executionStatus: 'skipped',
     })
     await expect(
-      prisma.taskActivity.findFirstOrThrow({ where: { taskId: opened.taskId, kind: 'completed' } }),
-    ).resolves.toMatchObject({ summary: '建团任务已完成' })
+      prisma.taskActivity.findFirst({ where: { taskId: opened.taskId, kind: 'completed' } }),
+    ).resolves.toBeNull()
+
+    const resumed = await authRequest(app, token)
+      .post(`/api/agent/tasks/departure-creation/sessions`)
+      .send({ taskId: opened.taskId, conversationId: opened.conversationId })
+      .expect(201)
+    expect(resumed.body.data.task).toMatchObject({
+      id: opened.taskId,
+      status: 'in_progress',
+      departureId: confirmed.body.data.id,
+      draft: { snapshot: { name } },
+    })
   })
 
   it('does not let a still-claimed worker succeed the job or append progress after confirm', async () => {
@@ -184,7 +195,7 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
         await prisma.aiWorkflowJob.findFirstOrThrow({
           where: { inputBatchId: batchId, type: 'agent_batch' },
         }),
-      ).toMatchObject({ status: 'failed', lastErrorCode: 'TASK_COMPLETED' })
+      ).toMatchObject({ status: 'failed', lastErrorCode: 'DEPARTURE_CREATED' })
     } finally {
       agent.release()
       await running
@@ -193,7 +204,7 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
     const job = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { inputBatchId: batchId, type: 'agent_batch' },
     })
-    expect(job).toMatchObject({ status: 'failed', lastErrorCode: 'TASK_COMPLETED' })
+    expect(job).toMatchObject({ status: 'failed', lastErrorCode: 'DEPARTURE_CREATED' })
     expect(job.status).not.toBe('succeeded')
 
     const activities = await prisma.taskActivity.findMany({
@@ -201,14 +212,15 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
       orderBy: { createdAt: 'asc' },
     })
     expect(activities.map((activity) => activity.kind)).toEqual(
-      expect.arrayContaining(['business_object', 'completed']),
+      expect.arrayContaining(['business_object']),
     )
     expect(activities.some((activity) => activity.kind === 'progress' && activity.summary === 'Agent 已完成一轮推进')).toBe(
       false,
     )
     expect(activities.some((activity) => activity.kind === 'waiting')).toBe(false)
+    expect(activities.some((activity) => activity.kind === 'completed')).toBe(false)
     expect((await prisma.agentTask.findUniqueOrThrow({ where: { id: opened.taskId } })).status).toBe(
-      'completed',
+      'active',
     )
   })
 })
