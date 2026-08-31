@@ -24,6 +24,7 @@ import {
 import {
   confirmAiCreateTask,
   confirmAiReviewPackage,
+  cancelAiReviewPackage,
   getAiCreateAssistAvailability,
   getAiCreateAssistTaskState,
   getAiCreateTask,
@@ -83,9 +84,13 @@ function newConfirmIdempotencyKey(taskId: string): string {
     : `confirm-${taskId}-${Date.now()}`
 }
 
+function hasPendingReview(summary: AiCreateTaskSummary): boolean {
+  return Boolean(summary.pendingReview) || (summary.pendingReviews?.length ?? 0) > 0
+}
+
 function useCreateDepartureWizardController() {
   const { token } = theme.useToken()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
@@ -589,6 +594,7 @@ function useCreateDepartureWizardController() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const pending = pendingReviewRef.current
       const runConfirm = async () => {
         await flushDraft()
         const currentTaskId = taskIdRef.current
@@ -605,6 +611,35 @@ function useCreateDepartureWizardController() {
           confirmIdempotencyKeyRef.current,
           { silentError: true },
         )
+      }
+
+      if (pending) {
+        const currentTaskId = taskIdRef.current
+        if (!currentTaskId) {
+          throw new Error('发团创建任务尚未准备好，请稍后再试')
+        }
+        await flushDraft()
+        try {
+          const summary = await cancelAiReviewPackage(currentTaskId, pending.id, {
+            expectedPackageVersion: pending.version,
+          }, { silentError: true })
+          queryClient.setQueryData(['ai-create-task', summary.id], summary)
+          applySavedDraft(summary)
+          pendingReviewRef.current = null
+        } catch (error) {
+          const conflict = readAiCreateTaskConflict(error)
+          if (conflict) {
+            queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
+            applySavedDraft(conflict, { keepDirty: true })
+            if (!hasPendingReview(conflict)) {
+              pendingReviewRef.current = null
+            } else {
+              throw error
+            }
+          } else {
+            throw error
+          }
+        }
       }
 
       try {
@@ -649,6 +684,26 @@ function useCreateDepartureWizardController() {
 
     try {
       await infoForm.validateFields()
+      if (pendingReviewRef.current) {
+        const pending = pendingReviewRef.current
+        const candidateSummary = pending.candidates
+          .map((candidate) => {
+            const label =
+              REVIEW_FIELD_LABELS[candidate.fieldKey as AiReviewableBasicInfoField] ??
+              candidate.fieldKey
+            const value = candidate.userCorrectedValue ?? candidate.proposedValue
+            return `${label}：${value == null ? '未填写' : String(value)}`
+          })
+          .join('；')
+        modal.confirm({
+          title: '取消 AI 建议并创建发团？',
+          content: `当前有待审核建议（${candidateSummary || '未标注字段'}）。确认后将取消这份建议，并按当前已保存草稿创建发团。`,
+          okText: '确认取消并创建',
+          cancelText: '返回修改',
+          onOk: () => createMutation.mutateAsync().catch(() => undefined),
+        })
+        return
+      }
       createMutation.mutate()
     } catch {
       // validation errors are shown by antd Form
