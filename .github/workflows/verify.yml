@@ -18,6 +18,29 @@ env:
   POSTGRES_DB: xiaotuanbao
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Web-related changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'packages/shared/**'
+              - 'packages/ai-contracts/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/verify.yml'
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
@@ -52,8 +75,8 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-  unit-tests:
-    name: unit-tests
+  unit-tests-core:
+    name: unit-tests-core
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -82,8 +105,54 @@ jobs:
       - name: Prisma generate
         run: pnpm --filter api prisma:generate
 
-      - name: Unit tests
-        run: pnpm test:unit:ci
+      - name: Core unit tests
+        run: pnpm test:unit:core:ci
+
+  web-unit-tests:
+    name: web-unit-tests (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Web unit tests
+        run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
+
+  unit-tests:
+    name: unit-tests
+    if: always()
+    needs: [changes, unit-tests-core, web-unit-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check unit-test gates
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CORE_RESULT: ${{ needs.unit-tests-core.result }}
+          WEB_RESULT: ${{ needs.web-unit-tests.result }}
+        run: |
+          test "$CHANGES_RESULT" = "success"
+          test "$CORE_RESULT" = "success"
+          test "$WEB_RESULT" = "success" -o "$WEB_RESULT" = "skipped"
 
   api-e2e:
     name: api-e2e

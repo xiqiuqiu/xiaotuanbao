@@ -2,7 +2,6 @@ import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import {
   DepartureStatus,
   isResourcePayableSourceType,
@@ -24,6 +23,7 @@ import {
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { formatBusinessDateTime } from '@/utils/formatBusinessDateTime'
 
 const DASH = '-'
 
@@ -219,8 +219,7 @@ export function buildPaymentScheduleColumns({
       {
         title: '作废时间',
         dataIndex: 'voidedAt',
-        render: (value: string | null) =>
-          value ? dayjs(value).format('YYYY-MM-DD HH:mm') : DASH,
+        render: (value: string | null) => formatBusinessDateTime(value),
       },
       {
         title: '作废原因',
