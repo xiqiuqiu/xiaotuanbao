@@ -156,10 +156,9 @@ export class AiCreateTaskService {
     userId: string,
     dto: SaveDepartureCreationDraftDto,
   ): Promise<AiCreateTaskSummary> {
-    const snapshot = this.normalizeSnapshot(dto.draft, userId)
-    this.assertValidDraft(snapshot)
-
     if (!dto.taskId) {
+      const snapshot = this.normalizeSnapshot(dto.draft, userId)
+      this.assertValidDraft(snapshot)
       return this.createTaskWithDraft(organizationId, userId, snapshot)
     }
 
@@ -172,7 +171,7 @@ export class AiCreateTaskService {
       userId,
       dto.taskId,
       dto.expectedVersion,
-      snapshot,
+      dto.draft,
     )
   }
 
@@ -963,7 +962,7 @@ export class AiCreateTaskService {
         merge.nextSnapshot.defaultDayCount = template.defaultDayCount
       }
 
-      this.assertValidDraft(merge.nextSnapshot)
+      this.assertValidDraft(merge.nextSnapshot, { allowIncompleteManualRoute: true })
 
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
@@ -1318,7 +1317,7 @@ export class AiCreateTaskService {
     userId: string,
     taskId: string,
     expectedVersion: number,
-    snapshot: DepartureCreationDraftSnapshot,
+    incomingDraft: DepartureCreationDraftSnapshotDto,
   ): Promise<AiCreateTaskSummary> {
     return this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, taskId)
@@ -1348,6 +1347,14 @@ export class AiCreateTaskService {
           data: this.toSummary(task),
         })
       }
+
+      const currentSnapshot = this.parseSnapshot(task.draft.snapshot)
+      const snapshot = this.normalizeSnapshot(
+        incomingDraft,
+        currentSnapshot.ownerUserId ?? userId,
+        currentSnapshot.departureType ?? DepartureType.COMBINED,
+      )
+      this.assertValidDraft(snapshot)
 
       const updated = await tx.departureCreationDraft.updateMany({
         where: { id: task.draft.id, version: expectedVersion },
@@ -1423,6 +1430,7 @@ export class AiCreateTaskService {
   private normalizeSnapshot(
     draft: DepartureCreationDraftSnapshotDto,
     ownerUserIdFallback?: string,
+    departureTypeFallback: string = DepartureType.COMBINED,
   ): DepartureCreationDraftSnapshot {
     const mode = draft.mode
     return {
@@ -1438,7 +1446,7 @@ export class AiCreateTaskService {
       startDate: emptyToNull(draft.startDate),
       endDate: emptyToNull(draft.endDate),
       ownerUserId: emptyToNull(draft.ownerUserId) ?? ownerUserIdFallback ?? null,
-      departureType: draft.departureType ?? DepartureType.COMBINED,
+      departureType: draft.departureType ?? departureTypeFallback,
       notes: emptyToNull(draft.notes),
       driverSupplierId: emptyToNull(draft.driverSupplierId),
       guideSupplierId: emptyToNull(draft.guideSupplierId),
@@ -1451,7 +1459,10 @@ export class AiCreateTaskService {
     }
   }
 
-  private assertValidDraft(snapshot: DepartureCreationDraftSnapshot): void {
+  private assertValidDraft(
+    snapshot: DepartureCreationDraftSnapshot,
+    options: { allowIncompleteManualRoute?: boolean } = {},
+  ): void {
     if (snapshot.mode === DepartureCreationDraftMode.TEMPLATE) {
       if (!snapshot.templateId) {
         throw new BadRequestException('选择路线模板时须提供 templateId')
@@ -1464,7 +1475,7 @@ export class AiCreateTaskService {
       }
       return
     }
-    if (!snapshot.routeName.trim()) {
+    if (!snapshot.routeName.trim() && !options.allowIncompleteManualRoute) {
       throw new BadRequestException('手动路线须填写路线名称')
     }
   }
