@@ -16,6 +16,8 @@ permissions:
   packages: write
 
 env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.15.1"
   REGISTRY: ghcr.io
   IMAGE_API: ghcr.io/xiqiuqiu/xiaotuanbao-api
   IMAGE_AGENT: ghcr.io/xiqiuqiu/xiaotuanbao-agent
@@ -47,8 +49,43 @@ jobs:
             echo "push_latest=true" >> "$GITHUB_OUTPUT"
           fi
 
-  build-push:
+  unit-tests:
     needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.git_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @xiaotuanbao/shared build && pnpm --filter @xiaotuanbao/ai-contracts build
+
+      - name: Write CI .env
+        run: cp .env.example .env
+
+      - name: Prisma generate
+        run: pnpm --filter api prisma:generate
+
+      - name: Unit tests
+        run: pnpm test:unit:ci
+
+  build-push:
+    needs: [resolve, unit-tests]
     # Native arm64 — avoids QEMU. Emulated linux/arm64 previously SIGILL'd
     # during `pnpm deploy` (exit 132) and hung on a second prod install.
     runs-on: ubuntu-24.04-arm
