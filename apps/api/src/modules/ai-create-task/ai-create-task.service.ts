@@ -1254,6 +1254,9 @@ export class AiCreateTaskService {
           })
           return summary
         }
+        if (task.departureCreationCommittedAt) {
+          throw new ConflictException('该 AI 建团任务已完成正式发团绑定，不能再次创建')
+        }
         if (task.agentTask.status !== AgentTaskStatus.active) {
           throw new BadRequestException('仅进行中的 AI 建团任务可确认创建')
         }
@@ -1276,7 +1279,10 @@ export class AiCreateTaskService {
 
         await tx.aiCreateTask.update({
           where: { id: taskId },
-          data: { departureId: created.id },
+          data: {
+            departureId: created.id,
+            departureCreationCommittedAt: new Date(),
+          },
         })
         await isolateOpenTaskRuntime(tx, {
           taskId,

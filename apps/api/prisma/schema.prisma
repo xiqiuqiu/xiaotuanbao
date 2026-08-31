@@ -1234,6 +1234,7 @@ model AiCreateTask {
   currentPhase       AiCreatePhase           @default(basic_info) @map("current_phase")
   departureId        String?                 @unique @map("departure_id")
   departure          Departure?              @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  departureCreationCommittedAt DateTime?     @map("departure_creation_committed_at")
   draft              DepartureCreationDraft?
 
   @@map("ai_create_tasks")

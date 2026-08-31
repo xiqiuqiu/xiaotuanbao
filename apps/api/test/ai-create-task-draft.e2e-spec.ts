@@ -214,7 +214,11 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
       include: { agentTask: true },
     })
     expect(task?.departureId).toBe(confirmed.body.data.id)
+    expect(task?.departureCreationCommittedAt).toEqual(expect.any(Date))
     expect(task?.agentTask.status).toBe('active')
+    await expect(
+      prisma.taskActivity.findFirst({ where: { taskId, kind: 'completed' } }),
+    ).resolves.toBeNull()
 
     const retry = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${taskId}/confirm`)
@@ -228,6 +232,36 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
       where: { organizationId, name: `${testPrefix}-confirm` },
     })
     expect(count).toBe(1)
+  })
+
+  it('does not recreate a Departure when the formal target is purged', async () => {
+    const created = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({ draft: draftBody({ name: `${testPrefix}-purge-bound` }) })
+      .expect(201)
+    const taskId = created.body.data.id as string
+
+    const confirmed = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/confirm`)
+      .set('Idempotency-Key', `${testPrefix}-purge-bound-first`)
+      .send({ expectedVersion: 1 })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .delete(`/api/departures/${confirmed.body.data.id}`)
+      .expect(200)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/confirm`)
+      .set('Idempotency-Key', `${testPrefix}-purge-bound-second`)
+      .send({ expectedVersion: 1 })
+      .expect(409)
+
+    await expect(
+      prisma.departure.count({
+        where: { organizationId, name: `${testPrefix}-purge-bound` },
+      }),
+    ).resolves.toBe(0)
   })
 
   it('keeps draft retryable when confirm validation fails without creating Departure', async () => {

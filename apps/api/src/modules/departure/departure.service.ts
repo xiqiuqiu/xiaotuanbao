@@ -33,7 +33,9 @@ import {
   DepartureStatus,
   DepartureType,
   DirectoryProfileStatus,
+  AgentTaskStatus,
   ResourceKind,
+  TaskActivityKind,
   type Departure,
   type DepartureArchiveHistory,
   type DepartureSettlementHistory,
@@ -934,7 +936,30 @@ export class DepartureService {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
     await this.assertPurgeAllowed(organizationId, departure)
 
-    await this.prisma.departure.delete({ where: { id: departure.id } })
+    await this.prisma.$transaction(async (tx) => {
+      const linkedTask = await tx.aiCreateTask.findUnique({
+        where: { departureId: departure.id },
+        select: { id: true },
+      })
+      if (linkedTask) {
+        await tx.agentTask.update({
+          where: { id: linkedTask.id },
+          data: {
+            status: AgentTaskStatus.closed,
+            statusVersion: { increment: 1 },
+            activities: {
+              create: {
+                organizationId,
+                kind: TaskActivityKind.completed,
+                summary: '正式发团已删除，建团任务已关闭',
+                payload: { targetKind: 'departure', targetId: departure.id },
+              },
+            },
+          },
+        })
+      }
+      await tx.departure.delete({ where: { id: departure.id } })
+    })
   }
 
   async transition(
