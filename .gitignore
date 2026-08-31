@@ -12,7 +12,16 @@ dist/
 # Environment
 .env
 .env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Secrets / keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+*.p12
+.npmrc
 
 # Logs
 logs/
