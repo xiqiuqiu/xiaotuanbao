@@ -235,6 +235,16 @@ describe('submitReviewPackage contract v1', () => {
       'readConversationHistory',
       'readConversationSource',
     ])
+    expect(capabilitiesForPendingReview(false, true)).toEqual([
+      'getTaskContext',
+      'readConversationHistory',
+      'readConversationSource',
+    ])
+    expect(capabilitiesForPendingReview(true, true)).toEqual([
+      'getTaskContext',
+      'readConversationHistory',
+      'readConversationSource',
+    ])
   })
 
   it('accepts templateId in the same basic_info_draft unit as name and dates', () => {

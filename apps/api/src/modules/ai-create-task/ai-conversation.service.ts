@@ -2634,7 +2634,6 @@ export class AiConversationService {
           task.ownerUserId === userId &&
           (task.status === AgentTaskStatus.active || task.status === AgentTaskStatus.waiting) &&
           extension != null &&
-          extension.departureId == null &&
           extension.draft != null
         )
       })
