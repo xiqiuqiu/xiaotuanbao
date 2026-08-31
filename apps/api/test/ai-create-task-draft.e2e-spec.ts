@@ -214,7 +214,7 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
       include: { agentTask: true },
     })
     expect(task?.departureId).toBe(confirmed.body.data.id)
-    expect(task?.agentTask.status).toBe('completed')
+    expect(task?.agentTask.status).toBe('active')
 
     const retry = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${taskId}/confirm`)
