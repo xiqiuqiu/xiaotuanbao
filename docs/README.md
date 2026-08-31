@@ -18,6 +18,7 @@
 | 整体架构与技术选型 | [架构概览](./architecture/overview.md) |
 | 开发规范与 AI 约束 | [开发规范](./architecture/development-guidelines.md) |
 | 供应商功能规格（Epic 1） | [供应商 PRD](./prd/supplier.zh-CN.md) |
+| 准备软件著作权登记材料 | [软著材料准备](./software-copyright/README.md) |
 
 ## 目录结构
 
@@ -41,6 +42,11 @@ docs/
     overview.md                      API 约定与接口
   prd/
     supplier.zh-CN.md                供应商管理 Epic 1
+  software-copyright/
+    README.md                        软著材料准备总览
+    材料清单.md / 申请表填写稿.md / 使用说明书.md
+    scripts/                         生成说明书与源码 docx
+    output/                          可打印鉴别材料
 ```
 
 ## 根目录关键文件
