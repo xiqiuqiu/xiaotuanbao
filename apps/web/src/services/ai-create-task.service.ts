@@ -304,8 +304,9 @@ export async function cancelAiReviewPackage(
   _taskId: string,
   packageId: string,
   payload: CancelAiReviewPackageDto,
+  config?: RequestConfig,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/cancel`, payload)
+  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/cancel`, payload, config)
 }
 
 export async function regenerateAiReviewPackage(

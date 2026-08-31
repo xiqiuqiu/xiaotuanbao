@@ -1948,7 +1948,7 @@ describe('CreateDepartureWizard', () => {
     await waitFor(() => {
       expect(cancelAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
         expectedPackageVersion: 1,
-      })
+      }, { silentError: true })
       expect(confirmAiCreateTask).toHaveBeenCalled()
     })
     expect(cancelAiReviewPackage.mock.invocationCallOrder[0]).toBeLessThan(
@@ -2004,6 +2004,97 @@ describe('CreateDepartureWizard', () => {
       expect(cancelAiReviewPackage).toHaveBeenCalled()
     })
     expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
+  it('does not create when cancelling the package has a version conflict without a task summary', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(cancelAiReviewPackage).mockRejectedValue(
+      new ApiError('审核包版本已变化，请刷新后重试', 409),
+    )
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: '创建发团' }))
+    await user.click((await screen.findAllByRole('button', { name: '确认取消并创建' }))[0]!)
+
+    await waitFor(() => {
+      expect(cancelAiReviewPackage).toHaveBeenCalled()
+    })
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
+  it('does not cancel again when creation fails after the package was cancelled', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    const cancelled = { ...restored, pendingReview: null }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(cancelAiReviewPackage).mockResolvedValue(cancelled)
+    vi.mocked(confirmAiCreateTask)
+      .mockRejectedValueOnce(new Error('创建暂时失败'))
+      .mockResolvedValueOnce(mockDeparture)
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: '创建发团' }))
+    await user.click((await screen.findAllByRole('button', { name: '确认取消并创建' }))[0]!)
+
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalledTimes(1)
+    })
+    expect(cancelAiReviewPackage).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '确认取消并创建' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '创建发团' }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalledTimes(2)
+    })
+    expect(cancelAiReviewPackage).toHaveBeenCalledTimes(1)
   })
 
   it('clears the pending review overlay when another device already handled the package', async () => {

@@ -622,7 +622,7 @@ function useCreateDepartureWizardController() {
         try {
           const summary = await cancelAiReviewPackage(currentTaskId, pending.id, {
             expectedPackageVersion: pending.version,
-          })
+          }, { silentError: true })
           queryClient.setQueryData(['ai-create-task', summary.id], summary)
           applySavedDraft(summary)
           pendingReviewRef.current = null
@@ -700,9 +700,7 @@ function useCreateDepartureWizardController() {
           content: `当前有待审核建议（${candidateSummary || '未标注字段'}）。确认后将取消这份建议，并按当前已保存草稿创建发团。`,
           okText: '确认取消并创建',
           cancelText: '返回修改',
-          onOk: () => {
-            createMutation.mutate()
-          },
+          onOk: () => createMutation.mutateAsync().catch(() => undefined),
         })
         return
       }
