@@ -86,6 +86,19 @@ describe('evaluateReviewConfirmMerge', () => {
     }
   })
 
+  it.each([null, '', 'foobar', 1])(
+    'rejects an invalid departureType correction: %p',
+    (departureType) => {
+      expect(
+        evaluateReviewConfirmMerge({
+          baselineSnapshot: baseline,
+          currentSnapshot: baseline,
+          submissions: { departureType } as never,
+        }),
+      ).toEqual({ status: 'invalid', invalidFields: ['departureType'] })
+    },
+  )
+
   it('treats templateId and routeName as one consistency group', () => {
     const withTemplate: AiCreateDraftSnapshot = {
       ...baseline,

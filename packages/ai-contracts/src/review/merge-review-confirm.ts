@@ -1,5 +1,6 @@
 import type { AiCreateDraftSnapshot } from '../context/classify-draft-fields'
 import {
+  AI_REVIEWABLE_DEPARTURE_TYPES,
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   type AiReviewableBasicInfoField,
 } from '../tools/review-package'
@@ -21,6 +22,14 @@ export type ReviewConfirmSubmission = Partial<
 export type ReviewConfirmMergeResult =
   | { status: 'ok'; nextSnapshot: AiCreateDraftSnapshot }
   | { status: 'conflict'; conflictFields: AiReviewableBasicInfoField[] }
+  | { status: 'invalid'; invalidFields: AiReviewableBasicInfoField[] }
+
+function isReviewableDepartureType(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (AI_REVIEWABLE_DEPARTURE_TYPES as readonly string[]).includes(value)
+  )
+}
 
 function snapshotValue(
   snapshot: AiCreateDraftSnapshot,
@@ -116,6 +125,12 @@ export function evaluateReviewConfirmMerge(args: {
   const submittedFields = AI_REVIEWABLE_BASIC_INFO_FIELDS.filter(
     (field) => args.submissions[field] !== undefined,
   )
+  if (
+    submittedFields.includes('departureType') &&
+    !isReviewableDepartureType(args.submissions.departureType)
+  ) {
+    return { status: 'invalid', invalidFields: ['departureType'] }
+  }
   const guarded = fieldsToGuard(submittedFields)
   const conflictFields = [...guarded].filter(
     (field) => !sameValue(snapshotValue(args.baselineSnapshot, field), snapshotValue(args.currentSnapshot, field)),
@@ -166,7 +181,7 @@ export function evaluateReviewConfirmMerge(args: {
       continue
     }
     if (field === 'departureType') {
-      nextSnapshot.departureType = text.length > 0 ? text : null
+      nextSnapshot.departureType = text
       continue
     }
     if (field === 'notes') {

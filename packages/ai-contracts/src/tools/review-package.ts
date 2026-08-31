@@ -40,6 +40,8 @@ export type AiReviewableBasicInfoField = (typeof AI_REVIEWABLE_BASIC_INFO_FIELDS
 
 export const AI_USER_ONLY_BASIC_INFO_FIELDS = ['ownerUserId'] as const
 
+export const AI_REVIEWABLE_DEPARTURE_TYPES = ['combined', 'independent'] as const
+
 export const AI_CANDIDATE_CLARITY = ['clear', 'needs_confirmation', 'undetermined'] as const
 export type AiCandidateClarity = (typeof AI_CANDIDATE_CLARITY)[number]
 
@@ -132,7 +134,7 @@ export const aiReviewCandidateInputSchema = z.discriminatedUnion('fieldKey', [
   z
     .object({
       fieldKey: z.literal('departureType'),
-      proposedValue: z.enum(['combined', 'independent']),
+      proposedValue: z.enum(AI_REVIEWABLE_DEPARTURE_TYPES),
       ...candidateBase,
     })
     .strip(),

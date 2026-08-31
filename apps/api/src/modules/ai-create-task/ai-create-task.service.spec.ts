@@ -328,6 +328,43 @@ describe('AiCreateTaskService review disposition #440', () => {
     )
   })
 
+  it('rejects a null departureType correction before writing the draft', async () => {
+    const modelCandidate = {
+      fieldKey: 'departureType' as const,
+      proposedValue: 'independent' as const,
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '独立团' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-departure-type-null',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        {
+          expectedVersion: 1,
+          expectedPackageVersion: 1,
+          corrections: { departureType: null },
+        },
+        'decision-departure-type-null',
+      ),
+    ).rejects.toThrow('审核修正值无效：发团类型')
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
+  })
+
   it('does not confirm an empty package as a successful no-op', async () => {
     const pkg = {
       ...unsupportedPackage,

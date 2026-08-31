@@ -910,6 +910,9 @@ export class AiCreateTaskService {
       if (merge.status === 'conflict') {
         throw new BadRequestException('审核提案无法应用到当前草稿')
       }
+      if (merge.status === 'invalid') {
+        throw new BadRequestException('审核修正值无效：发团类型')
+      }
 
       const adoptedTemplateId =
         typeof submissions.templateId === 'string' ? submissions.templateId.trim() : ''
@@ -1971,7 +1974,10 @@ export class AiCreateTaskService {
       if (!field) {
         throw new BadRequestException('不能修正负责人和发团类型等系统关联字段')
       }
-      if (value !== null && !field.valueSchema.safeParse(value).success) {
+      if (
+        (value !== null || key === 'departureType') &&
+        !field.valueSchema.safeParse(value).success
+      ) {
         throw new BadRequestException(`审核修正值无效：${field.label}`)
       }
       corrections[key as AiReviewableBasicInfoField] = value
