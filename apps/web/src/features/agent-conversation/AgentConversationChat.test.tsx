@@ -1070,9 +1070,15 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
   })
 
-  it('shows a transient working mascot from the first reasoning token and hides it after durable agent_message', async () => {
+  it('shows a transient working mascot while agent_running and hides it after durable agent_message', async () => {
     renderChat()
-    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
+    // beforeEach already has agent_running — show recording mascot before the first reasoning token
+    // (replaces CopilotKit typing-cursor; do not wait for reasoningText).
+    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
+      'data-mascot-visual',
+      'chat-working',
+    )
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1090,10 +1096,10 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
-      'data-mascot-preset',
-      'working',
-    )
+    const workingMascot = screen.getByRole('img', { name: 'Agent 正在工作' })
+    expect(workingMascot).toHaveAttribute('data-mascot-preset', 'working')
+    expect(workingMascot).toHaveAttribute('data-mascot-visual', 'chat-working')
+    expect(workingMascot).toHaveAttribute('data-mascot-state', 'chat-working')
     expect(screen.queryByRole('button', { name: /正在思考|思考过程/ })).not.toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
@@ -1167,11 +1173,10 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     })
 
     expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
-      'data-mascot-preset',
-      'working',
-    )
-    expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute('width', '56')
+    const runningMascot = screen.getByRole('img', { name: 'Agent 正在工作' })
+    expect(runningMascot).toHaveAttribute('data-mascot-preset', 'working')
+    expect(runningMascot).toHaveAttribute('data-mascot-visual', 'chat-working')
+    expect(runningMascot).toHaveAttribute('width', '56')
 
     await act(async () => {
       lastEventSource?.onmessage?.(

@@ -1,0 +1,30 @@
+.root {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+  vertical-align: middle;
+}
+
+.halo,
+.trails {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.halo {
+  opacity: 0;
+}
+
+.trails {
+  opacity: 0;
+}
+
+.body {
+  transform-origin: 50px 50px;
+}
+
+.eyes {
+  transform-origin: 37.6px 49px;
+}

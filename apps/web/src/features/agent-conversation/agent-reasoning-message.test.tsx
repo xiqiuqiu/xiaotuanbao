@@ -1,6 +1,12 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentReasoningMessage } from './agent-reasoning-message'
+import {
+  AgentReasoningMessage,
+  AgentWorkingCursor,
+  ensureAgentWorkingReasoningSlot,
+  hasDurableAssistantAfter,
+  WORKING_REASONING_SLOT_ID,
+} from './agent-reasoning-message'
 
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotChatReasoningMessage: {
@@ -37,7 +43,7 @@ function renderIndicator(
 }
 
 describe('AgentReasoningMessage working indicator', () => {
-  it('shows working mascot (56px, play+orbit cycle) for the latest running turn', () => {
+  it('shows chat-working capsule mascot (56px) for the latest running turn', () => {
     renderIndicator()
 
     const indicator = screen.getByTestId('agent-working-indicator')
@@ -46,9 +52,14 @@ describe('AgentReasoningMessage working indicator', () => {
 
     const mascot = screen.getByRole('img', { name: 'Agent 正在工作' })
     expect(mascot).toHaveAttribute('data-mascot-preset', 'working')
+    expect(mascot).toHaveAttribute('data-mascot-visual', 'chat-working')
+    expect(mascot).toHaveAttribute('data-mascot-state', 'chat-working')
     expect(mascot).toHaveAttribute('width', '56')
     expect(mascot).toHaveAttribute('height', '56')
-    expect(mascot).toHaveAttribute('data-mascot-state', 'play')
+    // Must not use bloub catalog working cycle (triangle / faceless).
+    expect(mascot.getAttribute('data-mascot-state')).not.toMatch(
+      /^(play|orbit|burst|comet|thinking)$/,
+    )
 
     expect(screen.getByRole('status')).toHaveTextContent('正在核对出团日期与人数')
   })
@@ -112,5 +123,46 @@ describe('AgentReasoningMessage working indicator', () => {
     })
 
     expect(screen.getByRole('status')).toHaveTextContent(`${'甲'.repeat(36)}…`)
+  })
+})
+
+describe('ensureAgentWorkingReasoningSlot', () => {
+  it('injects a working reasoning slot when running without reasoning', () => {
+    const messages = [
+      { id: 'event-1', role: 'user' as const, content: '你好' },
+    ]
+    const next = ensureAgentWorkingReasoningSlot(messages, true)
+    expect(next.at(-1)).toMatchObject({
+      id: WORKING_REASONING_SLOT_ID,
+      role: 'reasoning',
+    })
+  })
+
+  it('does not inject when an active reasoning row already exists', () => {
+    const messages = [liveReasoning]
+    expect(ensureAgentWorkingReasoningSlot(messages, true)).toBe(messages)
+  })
+
+  it('does not inject after durable assistant closed the turn', () => {
+    const messages = [
+      liveReasoning,
+      { id: 'event-3', role: 'assistant' as const, content: '完成。' },
+    ]
+    expect(ensureAgentWorkingReasoningSlot(messages, true)).toEqual(messages)
+    expect(hasDurableAssistantAfter(messages, liveReasoning.id)).toBe(true)
+  })
+
+  it('does not inject when not running', () => {
+    const messages = [{ id: 'event-1', role: 'user' as const, content: '你好' }]
+    expect(ensureAgentWorkingReasoningSlot(messages, false)).toEqual(messages)
+  })
+})
+
+describe('AgentWorkingCursor', () => {
+  it('renders a hidden slot so CopilotKit typing dot is not the character', () => {
+    render(<AgentWorkingCursor />)
+    const slot = screen.getByTestId('agent-working-cursor-slot')
+    expect(slot).toBeInTheDocument()
+    expect(slot).toHaveAttribute('hidden')
   })
 })

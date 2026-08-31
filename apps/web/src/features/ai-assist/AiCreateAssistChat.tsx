@@ -23,7 +23,11 @@ import {
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
-import { AgentReasoningMessage } from '@/features/agent-conversation/agent-reasoning-message'
+import {
+  AgentReasoningMessage,
+  AgentWorkingCursor,
+  ensureAgentWorkingReasoningSlot,
+} from '@/features/agent-conversation/agent-reasoning-message'
 import {
   abandonConversationBatch,
   cancelAiConversationInteraction,
@@ -536,7 +540,10 @@ function ChatComposer({
         className={styles.chat}
         messages={messages}
         isRunning={isRunning}
-        messageView={{ reasoningMessage: AgentReasoningMessage }}
+        messageView={{
+          reasoningMessage: AgentReasoningMessage,
+          cursor: AgentWorkingCursor,
+        }}
         inputValue={pendingText ? '' : draft}
         onInputChange={setDraft}
         onSubmitMessage={(value) => {
@@ -1207,11 +1214,15 @@ function useAiCreateAssistChatController({
     [],
   )
 
-  const messages = useMemo(
+  const projectedMessages = useMemo(
     () => toCopilotChatMessages(events, pendingText, activeBatch, pendingUploadCount),
     [activeBatch, events, pendingText, pendingUploadCount],
   )
   const isRunning = isCopilotChatRunning(events, activeBatch, pendingText)
+  const messages = useMemo(
+    () => ensureAgentWorkingReasoningSlot(projectedMessages, isRunning),
+    [isRunning, projectedMessages],
+  )
   const stoppableBatchId = currentStoppableBatchId(events, activeBatch)
   const stop = useCallback(() => {
     const batchId = currentStoppableBatchId(events, activeBatch)

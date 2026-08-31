@@ -368,6 +368,15 @@ const systemUsersRoute = createRoute({
   ),
 })
 
+const mascotAuditRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/dev/mascot-audit',
+  component: lazyRouteComponent(
+    () => import('@/pages/MascotAuditPage'),
+    'MascotAuditPage',
+  ),
+})
+
 const routeLedgerModePrototypeRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/prototype/route-ledger-mode',
@@ -420,6 +429,7 @@ const routeTree = rootRoute.addChildren([
     productDetailRoute,
     systemOrganizationRoute,
     systemUsersRoute,
+    mascotAuditRoute,
     routeLedgerModePrototypeRoute,
     executionLayerSwitchPrototypeRoute,
   ]),
