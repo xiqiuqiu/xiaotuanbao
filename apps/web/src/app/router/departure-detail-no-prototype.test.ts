@@ -12,6 +12,14 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotChatConfigurationProvider: ({ children }: { children?: unknown }) => children,
   CopilotChatInput: Object.assign(() => null, { SendButton: () => null }),
   CopilotChatView: () => null,
+  CopilotChatReasoningMessage: Object.assign(
+    () => null,
+    {
+      Header: () => null,
+      Content: () => null,
+      Toggle: () => null,
+    },
+  ),
 }))
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
 
