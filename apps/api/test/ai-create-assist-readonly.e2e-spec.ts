@@ -155,6 +155,9 @@ describe('AI create readonly tool chain (e2e) #297', () => {
           availableCapabilities: [
             'getTaskContext',
             'searchRouteTemplates',
+            'searchUsers',
+            'searchSuppliers',
+            'searchPartners',
             'proposeReviewPackage',
             'getMaterialParseResult',
             'readConversationHistory',

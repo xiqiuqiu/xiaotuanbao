@@ -41,6 +41,18 @@ describe('Review Schema Registry #440', () => {
               ],
             }),
             expect.objectContaining({ key: 'notes', label: '备注' }),
+            expect.objectContaining({
+              key: 'driverSupplierId',
+              label: '司机',
+              control: 'reference',
+              editable: false,
+            }),
+            expect.objectContaining({
+              key: 'guideSupplierId',
+              label: '导游',
+              control: 'reference',
+              editable: false,
+            }),
             expect.objectContaining({ key: 'vehiclePlate', label: '车牌' }),
             expect.objectContaining({ key: 'contactPhone', label: '联系电话' }),
             expect.objectContaining({

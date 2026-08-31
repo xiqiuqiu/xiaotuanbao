@@ -6,6 +6,11 @@ import { createGetTaskContextTool } from '../src/get-task-context.tool'
 import { createReadConversationHistoryTool } from '../src/read-conversation-history.tool'
 import { createReadConversationSourceTool } from '../src/read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from '../src/search-route-templates.tool'
+import {
+  createSearchPartnersTool,
+  createSearchSuppliersTool,
+  createSearchUsersTool,
+} from '../src/search-related-objects.tool'
 import { createSubmitReviewPackageTool } from '../src/submit-review-package.tool'
 import { createConversationRoutingTool } from '../src/conversation-routing.tool'
 
@@ -17,6 +22,9 @@ const config = {
 const tools = {
   getTaskContext: createGetTaskContextTool(config),
   searchRouteTemplates: createSearchRouteTemplatesTool(config),
+  searchUsers: createSearchUsersTool(config),
+  searchSuppliers: createSearchSuppliersTool(config),
+  searchPartners: createSearchPartnersTool(config),
   proposeReviewPackage: createSubmitReviewPackageTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
   readConversationHistory: createReadConversationHistoryTool(config),

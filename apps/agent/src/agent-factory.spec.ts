@@ -12,6 +12,11 @@ jest.mock('@mastra/core/agent', () => ({
 }))
 jest.mock('./get-task-context.tool', () => ({ createGetTaskContextTool: () => 'task-tool' }))
 jest.mock('./search-route-templates.tool', () => ({ createSearchRouteTemplatesTool: () => 'route-tool' }))
+jest.mock('./search-related-objects.tool', () => ({
+  createSearchUsersTool: () => 'user-tool',
+  createSearchSuppliersTool: () => 'supplier-tool',
+  createSearchPartnersTool: () => 'partner-tool',
+}))
 jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool: () => 'review-tool' }))
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
 jest.mock('./read-conversation-history.tool', () => ({ createReadConversationHistoryTool: () => 'history-tool' }))
@@ -41,6 +46,9 @@ const context = requestContextSchema.parse({
   grantedCapabilities: [
     { key: 'departure.task-context.read', version: 2 },
     { key: 'departure.route-template.search', version: 1 },
+    { key: 'departure.user.search', version: 1 },
+    { key: 'departure.supplier.search', version: 1 },
+    { key: 'departure.partner.search', version: 1 },
     { key: 'departure.review-package.propose', version: 1 },
     { key: 'departure.material-parse-result.read', version: 1 },
   ],

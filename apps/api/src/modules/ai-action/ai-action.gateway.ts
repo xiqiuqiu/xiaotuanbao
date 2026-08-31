@@ -168,7 +168,12 @@ function targetRefFor(
 }
 
 function fallbackTargetId(targetKind: string, proposal: AiActionProposal): string | null {
-  if (targetKind === 'route_template_catalog') {
+  if (
+    targetKind === 'route_template_catalog' ||
+    targetKind === 'user_catalog' ||
+    targetKind === 'supplier_catalog' ||
+    targetKind === 'partner_catalog'
+  ) {
     return proposal.actor.organizationId
   }
   if (targetKind === 'agent_conversation') {

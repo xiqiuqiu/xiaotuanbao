@@ -24,6 +24,48 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
     },
     "additionalProperties": false
   },
+  "searchUsers": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "keyword": {
+        "description": "空白切词后按 AND 匹配已启用 User 显示名称",
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "additionalProperties": false
+  },
+  "searchSuppliers": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "keyword": {
+        "description": "空白切词后按 AND 匹配已启用 Supplier 名称",
+        "type": "string",
+        "maxLength": 200
+      },
+      "category": {
+        "description": "可选类别过滤；司机用 transport，导游用 guide",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      }
+    },
+    "additionalProperties": false
+  },
+  "searchPartners": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "keyword": {
+        "description": "空白切词后按 AND 匹配已启用 Partner 名称",
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "additionalProperties": false
+  },
   "proposeReviewPackage": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",

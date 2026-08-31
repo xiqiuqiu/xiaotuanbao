@@ -226,11 +226,28 @@ function DepartureInfoForm({
   const savedStartDate = Form.useWatch('startDate', form) as string | undefined
   const savedEndDate = Form.useWatch('endDate', form) as string | undefined
   const savedGuestHint = Form.useWatch('expectedGuestCountHint', form) as number | undefined
+  const driverCandidate = findReviewCandidate(pendingReview, 'driverSupplierId')
+  const guideCandidate = findReviewCandidate(pendingReview, 'guideSupplierId')
+  const driverCandidateId =
+    typeof driverCandidate?.proposedValue === 'string' ? driverCandidate.proposedValue : ''
+  const guideCandidateId =
+    typeof guideCandidate?.proposedValue === 'string' ? guideCandidate.proposedValue : ''
+  const driverCandidateQuery = useQuery({
+    queryKey: ['suppliers', 'review-candidate', driverCandidateId],
+    queryFn: () => getSupplier(driverCandidateId),
+    enabled: Boolean(driverCandidateId),
+  })
+  const guideCandidateQuery = useQuery({
+    queryKey: ['suppliers', 'review-candidate', guideCandidateId],
+    queryFn: () => getSupplier(guideCandidateId),
+    enabled: Boolean(guideCandidateId),
+  })
 
   const renderPending = (
     fieldKey: AiReviewableBasicInfoField,
     savedDisplay: string,
     control: ReactNode,
+    displayValue?: string,
   ) => {
     const candidate = findReviewCandidate(pendingReview, fieldKey)
     if (!candidate || !onCorrectCandidate) return control
@@ -241,6 +258,7 @@ function DepartureInfoForm({
         payloadSchema={pendingReview?.payloadSchema ?? ''}
         confirmationUnit={pendingReview?.confirmationUnit ?? ''}
         savedDisplay={savedDisplay}
+        displayValue={displayValue}
         onCorrect={(value) => onCorrectCandidate(fieldKey, value)}
       />
     )
@@ -397,31 +415,41 @@ function DepartureInfoForm({
 
           <Col xs={24} md={12}>
             <Form.Item name="driverSupplierId" label="司机">
-              <SupplierQuickCreateSelect
-                category={ResourceKind.TRANSPORT}
-                suppliers={driverSuppliers}
-                pinnedOption={driverPinnedOption}
-                searchValue={driverSearch}
-                onSearch={onDriverSearch}
-                loading={isDriverSuppliersLoading}
-                placeholder="选择含「用车」类别的供应商"
-                emptyHint="暂无匹配供应商，请先到供应商名录维护「用车」类别"
-              />
+              {renderPending(
+                'driverSupplierId',
+                driverPinnedOption?.name ?? '',
+                <SupplierQuickCreateSelect
+                  category={ResourceKind.TRANSPORT}
+                  suppliers={driverSuppliers}
+                  pinnedOption={driverPinnedOption}
+                  searchValue={driverSearch}
+                  onSearch={onDriverSearch}
+                  loading={isDriverSuppliersLoading}
+                  placeholder="选择含「用车」类别的供应商"
+                  emptyHint="暂无匹配供应商，请先到供应商名录维护「用车」类别"
+                />,
+                driverCandidateQuery.data?.name ?? driverPinnedOption?.name,
+              )}
             </Form.Item>
           </Col>
 
           <Col xs={24} md={12}>
             <Form.Item name="guideSupplierId" label="导游">
-              <SupplierQuickCreateSelect
-                category={ResourceKind.GUIDE}
-                suppliers={guideSuppliers}
-                pinnedOption={guidePinnedOption}
-                searchValue={guideSearch}
-                onSearch={onGuideSearch}
-                loading={isGuideSuppliersLoading}
-                placeholder="选择含「导游」类别的供应商"
-                emptyHint="暂无匹配供应商，请先到供应商名录维护「导游」类别"
-              />
+              {renderPending(
+                'guideSupplierId',
+                guidePinnedOption?.name ?? '',
+                <SupplierQuickCreateSelect
+                  category={ResourceKind.GUIDE}
+                  suppliers={guideSuppliers}
+                  pinnedOption={guidePinnedOption}
+                  searchValue={guideSearch}
+                  onSearch={onGuideSearch}
+                  loading={isGuideSuppliersLoading}
+                  placeholder="选择含「导游」类别的供应商"
+                  emptyHint="暂无匹配供应商，请先到供应商名录维护「导游」类别"
+                />,
+                guideCandidateQuery.data?.name ?? guidePinnedOption?.name,
+              )}
             </Form.Item>
           </Col>
 

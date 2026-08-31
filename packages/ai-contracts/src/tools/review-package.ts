@@ -16,6 +16,9 @@ export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
 export const AI_CREATE_TOOL_NAMES = [
   'getTaskContext',
   'searchRouteTemplates',
+  'searchUsers',
+  'searchSuppliers',
+  'searchPartners',
   'proposeReviewPackage',
   'getMaterialParseResult',
   'readConversationHistory',
@@ -31,6 +34,8 @@ export const AI_REVIEWABLE_BASIC_INFO_FIELDS = [
   'endDate',
   'departureType',
   'notes',
+  'driverSupplierId',
+  'guideSupplierId',
   'vehiclePlate',
   'contactPhone',
   'expectedGuestCountHint',
@@ -142,6 +147,20 @@ export const aiReviewCandidateInputSchema = z.discriminatedUnion('fieldKey', [
     .object({
       fieldKey: z.literal('notes'),
       proposedValue: z.string().trim().min(1).max(5000),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('driverSupplierId'),
+      proposedValue: z.string().trim().min(1).max(200),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('guideSupplierId'),
+      proposedValue: z.string().trim().min(1).max(200),
       ...candidateBase,
     })
     .strip(),
@@ -296,6 +315,9 @@ export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreat
     return [
       'getTaskContext',
       'searchRouteTemplates',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
@@ -304,6 +326,9 @@ export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreat
   return [
     'getTaskContext',
     'searchRouteTemplates',
+    'searchUsers',
+    'searchSuppliers',
+    'searchPartners',
     'proposeReviewPackage',
     'getMaterialParseResult',
     'readConversationHistory',

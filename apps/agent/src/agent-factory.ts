@@ -16,6 +16,11 @@ import { createGetTaskContextTool, type GetTaskContextToolConfig } from './get-t
 import { createReadConversationHistoryTool } from './read-conversation-history.tool'
 import { createReadConversationSourceTool } from './read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
+import {
+  createSearchPartnersTool,
+  createSearchSuppliersTool,
+  createSearchUsersTool,
+} from './search-related-objects.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 import { createConversationRoutingTool } from './conversation-routing.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
@@ -53,6 +58,9 @@ function createMastra(
   const registeredTools = {
     getTaskContext: createGetTaskContextTool(config),
     searchRouteTemplates: createSearchRouteTemplatesTool(config),
+    searchUsers: createSearchUsersTool(config),
+    searchSuppliers: createSearchSuppliersTool(config),
+    searchPartners: createSearchPartnersTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),

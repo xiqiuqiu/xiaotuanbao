@@ -282,6 +282,9 @@ describe('headless Agent runtime contract', () => {
       expect(listAgentTools()).toEqual([
         'getTaskContext',
         'searchRouteTemplates',
+        'searchUsers',
+        'searchSuppliers',
+        'searchPartners',
         'proposeReviewPackage',
         'getMaterialParseResult',
         'readConversationHistory',

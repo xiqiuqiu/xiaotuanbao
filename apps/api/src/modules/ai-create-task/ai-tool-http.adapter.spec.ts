@@ -3,7 +3,10 @@ import {
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
   type GetMaterialParseResultOutput,
   type GetTaskContextOutput,
+  type SearchPartnersOutput,
   type SearchRouteTemplatesOutput,
+  type SearchSuppliersOutput,
+  type SearchUsersOutput,
   type SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
@@ -83,6 +86,9 @@ function adapterWith(
   methods: {
     getTaskContextForAgent?: () => Promise<GetTaskContextOutput>
     searchRouteTemplatesForAgent?: () => Promise<SearchRouteTemplatesOutput>
+    searchUsersForAgent?: () => Promise<SearchUsersOutput>
+    searchSuppliersForAgent?: () => Promise<SearchSuppliersOutput>
+    searchPartnersForAgent?: () => Promise<SearchPartnersOutput>
     getMaterialParseResultForAgent?: (
       caller?: AiToolRequestUser,
       rawInput?: unknown,
@@ -97,6 +103,9 @@ function adapterWith(
   const tasks = {
     getTaskContextForAgent: methods.getTaskContextForAgent ?? (async () => contextPayload),
     searchRouteTemplatesForAgent: methods.searchRouteTemplatesForAgent ?? (async () => searchPayload),
+    searchUsersForAgent: methods.searchUsersForAgent ?? (async () => ({ items: [] })),
+    searchSuppliersForAgent: methods.searchSuppliersForAgent ?? (async () => ({ items: [] })),
+    searchPartnersForAgent: methods.searchPartnersForAgent ?? (async () => ({ items: [] })),
     getMaterialParseResultForAgent:
       methods.getMaterialParseResultForAgent ?? (async () => parsePayload),
     submitReviewPackageForAgent: methods.submitReviewPackageForAgent ?? (async () => reviewOutput),
@@ -251,6 +260,87 @@ describe('AiToolHttpAdapter.searchRouteTemplates', () => {
         runId: 'run-1',
         organizationId: 'org-other',
         keyword: '川西',
+      }),
+    ).rejects.toBeInstanceOf(AiCollaborationHttpException)
+  })
+})
+
+describe('AiToolHttpAdapter related object search #443', () => {
+  it('returns user catalog matches and leaves a read AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const users = {
+      items: [
+        {
+          kind: 'user' as const,
+          id: 'user-2',
+          name: '王杰',
+          status: 'enabled' as const,
+          matchReasons: [{ code: 'name_contains_token' as const, token: '王杰' }],
+        },
+      ],
+    }
+    const adapter = adapterWith(store, {
+      searchUsersForAgent: async () => users,
+    })
+
+    const result = await adapter.searchUsers(user, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      keyword: '王杰',
+    })
+    expect(result).toBe(users)
+    expect(store.records[0]).toMatchObject({
+      name: 'searchUsers',
+      kind: 'read',
+      decision: 'allow',
+      targetRef: { kind: 'user_catalog', id: 'org-1' },
+    })
+  })
+
+  it('rejects a claimed organization on supplier and partner search without returning matches', async () => {
+    const leaked = {
+      items: [
+        {
+          kind: 'supplier' as const,
+          id: 'sup-other',
+          name: '别家车队',
+          status: 'enabled' as const,
+          categories: ['transport'],
+          matchReasons: [{ code: 'name_contains_token' as const, token: '车队' }],
+        },
+      ],
+    }
+    const adapter = adapterWith(new InMemoryAiActionStore(), {
+      searchSuppliersForAgent: async () => leaked as SearchSuppliersOutput,
+      searchPartnersForAgent: async () => ({
+        items: [
+          {
+            kind: 'partner',
+            id: 'partner-other',
+            name: '别家组团',
+            status: 'enabled',
+            partnerKind: 'group_agent',
+            matchReasons: [{ code: 'name_contains_token', token: '组团' }],
+          },
+        ],
+      }),
+    })
+
+    await expect(
+      adapter.searchSuppliers(user, {
+        taskId: 'task-1',
+        runId: 'run-1',
+        organizationId: 'org-other',
+        keyword: '车队',
+        category: 'transport',
+      }),
+    ).rejects.toBeInstanceOf(AiCollaborationHttpException)
+    await expect(
+      adapter.searchPartners(user, {
+        taskId: 'task-1',
+        runId: 'run-1',
+        organizationId: 'org-other',
+        keyword: '组团',
       }),
     ).rejects.toBeInstanceOf(AiCollaborationHttpException)
   })

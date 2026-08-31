@@ -18,6 +18,7 @@ import {
   AiCreatePhase,
   DepartureCreationDraftMode,
   DepartureType,
+  ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   classifyDraftFields,
@@ -29,6 +30,12 @@ import {
   getMaterialParseResultOutputSchema,
   searchRouteTemplatesInputSchema,
   searchRouteTemplatesOutputSchema,
+  searchUsersInputSchema,
+  searchUsersOutputSchema,
+  searchSuppliersInputSchema,
+  searchSuppliersOutputSchema,
+  searchPartnersInputSchema,
+  searchPartnersOutputSchema,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
@@ -41,12 +48,15 @@ import {
   reviewDecisionIdentitySchema,
   type GetTaskContextOutput,
   type SearchRouteTemplatesOutput,
+  type SearchUsersOutput,
+  type SearchSuppliersOutput,
+  type SearchPartnersOutput,
   type ProposeReviewPackageOutput,
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
 import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, TaskActivityKind } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
@@ -77,6 +87,11 @@ import {
 } from './review-package.mapper'
 import { findReviewPackageByProposalIdentity } from './review-package.projection'
 import { loadEvidenceAuthority } from './evidence-authority'
+import {
+  searchPartnersForAgent,
+  searchSuppliersForAgent,
+  searchUsersForAgent,
+} from './related-object-search'
 import {
   requireValidReviewProposal,
   ReviewProposalRejectedError,
@@ -386,6 +401,107 @@ export class AiCreateTaskService {
       dayCount: input.dayCount,
     })
     return searchRouteTemplatesOutputSchema.parse({ items })
+  }
+
+  async searchUsersForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<SearchUsersOutput> {
+    const input = this.parseRelatedSearchInput(searchUsersInputSchema, caller, rawInput)
+    await this.requireOwnedSearchableTask(caller)
+    const users = await this.prisma.user.findMany({
+      where: {
+        organizationId: caller.organizationId,
+        deletedAt: null,
+      },
+      select: { id: true, name: true, status: true },
+    })
+    return searchUsersOutputSchema.parse({
+      items: searchUsersForAgent(
+        users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          status: user.status === UserStatus.enabled ? 'enabled' : 'disabled',
+        })),
+        { keyword: input.keyword },
+      ),
+    })
+  }
+
+  async searchSuppliersForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<SearchSuppliersOutput> {
+    const input = this.parseRelatedSearchInput(searchSuppliersInputSchema, caller, rawInput)
+    await this.requireOwnedSearchableTask(caller)
+    const suppliers = await this.prisma.supplier.findMany({
+      where: { organizationId: caller.organizationId },
+      select: { id: true, name: true, status: true, categories: true },
+    })
+    return searchSuppliersOutputSchema.parse({
+      items: searchSuppliersForAgent(
+        suppliers.map((supplier) => ({
+          id: supplier.id,
+          name: supplier.name,
+          status: supplier.status === DirectoryProfileStatus.active ? 'enabled' : 'disabled',
+          categories: supplier.categories,
+        })),
+        { keyword: input.keyword, category: input.category },
+      ),
+    })
+  }
+
+  async searchPartnersForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<SearchPartnersOutput> {
+    const input = this.parseRelatedSearchInput(searchPartnersInputSchema, caller, rawInput)
+    await this.requireOwnedSearchableTask(caller)
+    const partners = await this.prisma.partner.findMany({
+      where: { organizationId: caller.organizationId },
+      select: { id: true, name: true, status: true, partnerKind: true },
+    })
+    return searchPartnersOutputSchema.parse({
+      items: searchPartnersForAgent(
+        partners.map((partner) => ({
+          id: partner.id,
+          name: partner.name,
+          status: partner.status === DirectoryProfileStatus.active ? 'enabled' : 'disabled',
+          partnerKind: partner.partnerKind,
+        })),
+        { keyword: input.keyword },
+      ),
+    })
+  }
+
+  private parseRelatedSearchInput<T extends { taskId: string; runId: string }>(
+    schema: { parse(input: unknown): T },
+    caller: { taskId: string; runId: string },
+    rawInput: unknown,
+  ): T {
+    let input: T
+    try {
+      input = schema.parse(rawInput)
+    } catch {
+      throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    return input
+  }
+
+  private async requireOwnedSearchableTask(caller: {
+    userId: string
+    organizationId: string
+    taskId: string
+    runId: string
+  }) {
+    const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
+    if (task.agentTask.status !== AgentTaskStatus.active || task.departureId) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可查询关联对象')
+    }
+    await this.requireRunningAttempt(caller)
   }
 
   async proposeReviewPackageForAgent(
@@ -920,46 +1036,45 @@ export class AiCreateTaskService {
           where: { id: adoptedTemplateId, organizationId },
         })
         if (!template) {
-          await this.writeReviewRecord(tx, {
+          return this.failReviewValidation(tx, {
             organizationId,
-            packageId: pkg.id,
-            operatorUserId: userId,
-            action: AiReviewRecordAction.confirm,
-            decisionCommandId: identity.decisionCommandId,
+            userId,
+            taskId,
+            pkg,
             candidates,
             corrections,
-            submittedValues: submissions,
+            submissions,
             objectVersion: task.draft.version,
-            writeResult: AiReviewWriteResult.validation_failed,
-          })
-          const latest = await tx.aiCreateTask.findFirstOrThrow({
-            where: { id: taskId, agentTask: { organizationId } },
-            include: TASK_WITH_PENDING_INCLUDE,
-          })
-          const summary = this.toSummary(latest)
-          const message = '常用路线已不可用，请重新选择后确认'
-          await this.completeReviewDecision(tx, {
-            organizationId,
-            taskId,
             decisionCommandId: identity.decisionCommandId,
             requestHash,
-            result: {
-              kind: 'validation_failed',
-              summary,
-              message,
-            },
+            message: '常用路线已不可用，请重新选择后确认',
           })
-          return {
-            kind: 'validation_failed' as const,
-            summary,
-            events: [] as AiConversationEvent[],
-            message,
-          }
         }
         merge.nextSnapshot.mode = DepartureCreationDraftMode.TEMPLATE
         merge.nextSnapshot.templateId = template.id
         merge.nextSnapshot.routeName = template.name
         merge.nextSnapshot.defaultDayCount = template.defaultDayCount
+      }
+
+      const crewFailure = await this.validateCrewSuppliersForReview(tx, {
+        organizationId,
+        snapshot: merge.nextSnapshot,
+        submissions,
+      })
+      if (crewFailure) {
+        return this.failReviewValidation(tx, {
+          organizationId,
+          userId,
+          taskId,
+          pkg,
+          candidates,
+          corrections,
+          submissions,
+          objectVersion: task.draft.version,
+          decisionCommandId: identity.decisionCommandId,
+          requestHash,
+          message: crewFailure,
+        })
       }
 
       this.assertValidDraft(merge.nextSnapshot, { allowIncompleteManualRoute: true })
@@ -2081,5 +2196,109 @@ export class AiCreateTaskService {
       pendingReview: pendingReviews.length === 1 ? pendingReviews[0] : null,
       pendingReviews,
     }
+  }
+
+  private async failReviewValidation(
+    tx: Prisma.TransactionClient,
+    input: {
+      organizationId: string
+      userId: string
+      taskId: string
+      pkg: AiReviewPackage
+      candidates: StoredReviewCandidate[]
+      corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+      submissions: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+      objectVersion: number
+      decisionCommandId: string
+      requestHash: string
+      message: string
+    },
+  ) {
+    await this.writeReviewRecord(tx, {
+      organizationId: input.organizationId,
+      packageId: input.pkg.id,
+      operatorUserId: input.userId,
+      action: AiReviewRecordAction.confirm,
+      decisionCommandId: input.decisionCommandId,
+      candidates: input.candidates,
+      corrections: input.corrections,
+      submittedValues: input.submissions,
+      objectVersion: input.objectVersion,
+      writeResult: AiReviewWriteResult.validation_failed,
+    })
+    const latest = await tx.aiCreateTask.findFirstOrThrow({
+      where: { id: input.taskId, agentTask: { organizationId: input.organizationId } },
+      include: TASK_WITH_PENDING_INCLUDE,
+    })
+    const summary = this.toSummary(latest)
+    await this.completeReviewDecision(tx, {
+      organizationId: input.organizationId,
+      taskId: input.taskId,
+      decisionCommandId: input.decisionCommandId,
+      requestHash: input.requestHash,
+      result: {
+        kind: 'validation_failed',
+        summary,
+        message: input.message,
+      },
+    })
+    return {
+      kind: 'validation_failed' as const,
+      summary,
+      events: [] as AiConversationEvent[],
+      message: input.message,
+    }
+  }
+
+  private async validateCrewSuppliersForReview(
+    tx: Prisma.TransactionClient,
+    input: {
+      organizationId: string
+      snapshot: DepartureCreationDraftSnapshot
+      submissions: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+    },
+  ): Promise<string | null> {
+    if (input.submissions.driverSupplierId !== undefined) {
+      const message = await this.validateCrewSupplier(
+        tx,
+        input.organizationId,
+        input.snapshot.driverSupplierId,
+        ResourceKind.TRANSPORT,
+        '司机必须选择当前组织已启用且含「用车」类别的供应商',
+      )
+      if (message) return message
+    }
+    if (input.submissions.guideSupplierId !== undefined) {
+      return this.validateCrewSupplier(
+        tx,
+        input.organizationId,
+        input.snapshot.guideSupplierId,
+        ResourceKind.GUIDE,
+        '导游必须选择当前组织已启用且含「导游」类别的供应商',
+      )
+    }
+    return null
+  }
+
+  private async validateCrewSupplier(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    supplierId: string | null | undefined,
+    requiredCategory: ResourceKind,
+    message: string,
+  ): Promise<string | null> {
+    const id = supplierId?.trim()
+    if (!id) return message
+    const supplier = await tx.supplier.findFirst({
+      where: { id, organizationId },
+      select: { status: true, categories: true },
+    })
+    if (!supplier || supplier.status !== DirectoryProfileStatus.active) {
+      return message
+    }
+    if (!supplier.categories.includes(requiredCategory)) {
+      return message
+    }
+    return null
   }
 }

@@ -1096,6 +1096,8 @@ export type AiReviewableBasicInfoField =
   | 'endDate'
   | 'departureType'
   | 'notes'
+  | 'driverSupplierId'
+  | 'guideSupplierId'
   | 'vehiclePlate'
   | 'contactPhone'
   | 'expectedGuestCountHint'

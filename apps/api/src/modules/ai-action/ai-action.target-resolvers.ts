@@ -35,6 +35,9 @@ type TargetResolver = (
 const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   getTaskContext: resolveTaskContext,
   searchRouteTemplates: resolveRouteCatalog,
+  searchUsers: resolveUserCatalog,
+  searchSuppliers: resolveSupplierCatalog,
+  searchPartners: resolvePartnerCatalog,
   proposeReviewPackage: resolveDepartureDraft,
   getMaterialParseResult: resolvePinnedMaterial,
   readConversationHistory: resolveConversation,
@@ -62,8 +65,37 @@ async function resolveRouteCatalog(
   actor: AiActionActor,
   input: unknown,
 ): Promise<AiActionTargetResolveResult> {
+  return resolveOrganizationCatalog(actor, input, 'route_template_catalog')
+}
+
+async function resolveUserCatalog(
+  actor: AiActionActor,
+  input: unknown,
+): Promise<AiActionTargetResolveResult> {
+  return resolveOrganizationCatalog(actor, input, 'user_catalog')
+}
+
+async function resolveSupplierCatalog(
+  actor: AiActionActor,
+  input: unknown,
+): Promise<AiActionTargetResolveResult> {
+  return resolveOrganizationCatalog(actor, input, 'supplier_catalog')
+}
+
+async function resolvePartnerCatalog(
+  actor: AiActionActor,
+  input: unknown,
+): Promise<AiActionTargetResolveResult> {
+  return resolveOrganizationCatalog(actor, input, 'partner_catalog')
+}
+
+async function resolveOrganizationCatalog(
+  actor: AiActionActor,
+  input: unknown,
+  kind: 'route_template_catalog' | 'user_catalog' | 'supplier_catalog' | 'partner_catalog',
+): Promise<AiActionTargetResolveResult> {
   const targetRef = {
-    kind: 'route_template_catalog',
+    kind,
     id: actor.organizationId,
   }
   const mismatch = denyClaimedMismatch(actor, input, targetRef)
@@ -77,7 +109,7 @@ async function resolveRouteCatalog(
   return {
     ok: true,
     target: {
-      kind: 'route_template_catalog',
+      kind,
       id: actor.organizationId,
       organizationId: actor.organizationId,
       version: null,

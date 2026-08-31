@@ -70,6 +70,8 @@ describe('evaluateReviewConfirmMerge', () => {
         ownerUserId: 'hijacked',
         departureType: 'independent',
         notes: '客人需要轮椅',
+        driverSupplierId: 'sup-driver',
+        guideSupplierId: 'sup-guide',
         vehiclePlate: '新A·12345',
         contactPhone: '13800138000',
       } as never,
@@ -80,6 +82,8 @@ describe('evaluateReviewConfirmMerge', () => {
       expect(result.nextSnapshot.ownerUserId).toBe('user-owner')
       expect(result.nextSnapshot.departureType).toBe('independent')
       expect(result.nextSnapshot.notes).toBe('客人需要轮椅')
+      expect(result.nextSnapshot.driverSupplierId).toBe('sup-driver')
+      expect(result.nextSnapshot.guideSupplierId).toBe('sup-guide')
       expect(result.nextSnapshot.vehiclePlate).toBe('新A·12345')
       expect(result.nextSnapshot.contactPhone).toBe('13800138000')
       expect(result.nextSnapshot.name).toBe('八月川西团')

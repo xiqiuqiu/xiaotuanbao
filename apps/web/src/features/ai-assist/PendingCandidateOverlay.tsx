@@ -81,6 +81,9 @@ export function PendingCandidateOverlay({
           onChange={(event) => correct(event.target.value)}
         />
       )}
+      {candidate.clarity === 'needs_confirmation' ? (
+        <Typography.Text type="warning">需确认</Typography.Text>
+      ) : null}
       <Typography.Text type="secondary" className={styles.saved}>
         已保存：{field.format(savedDisplay)}
       </Typography.Text>
