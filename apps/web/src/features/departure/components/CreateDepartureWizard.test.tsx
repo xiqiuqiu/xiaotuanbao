@@ -1956,6 +1956,56 @@ describe('CreateDepartureWizard', () => {
     )
   })
 
+  it('does not create when cancelling the package reports that another device handled it', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    const handled = {
+      ...restored,
+      draft: {
+        ...restored.draft,
+        version: 3,
+        snapshot: { ...restored.draft.snapshot, name: '已应用的 AI 团名' },
+      },
+      pendingReview: { ...pending, id: 'other-pkg' },
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(cancelAiReviewPackage).mockRejectedValue(
+      new ApiError('审核包已处理', 409, handled),
+    )
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: '创建发团' }))
+    await user.click((await screen.findAllByRole('button', { name: '确认取消并创建' }))[0]!)
+
+    await waitFor(() => {
+      expect(cancelAiReviewPackage).toHaveBeenCalled()
+    })
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
   it('clears the pending review overlay when another device already handled the package', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }

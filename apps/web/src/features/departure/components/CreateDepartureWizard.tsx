@@ -84,6 +84,10 @@ function newConfirmIdempotencyKey(taskId: string): string {
     : `confirm-${taskId}-${Date.now()}`
 }
 
+function hasPendingReview(summary: AiCreateTaskSummary): boolean {
+  return Boolean(summary.pendingReview) || (summary.pendingReviews?.length ?? 0) > 0
+}
+
 function useCreateDepartureWizardController() {
   const { token } = theme.useToken()
   const { message, modal } = App.useApp()
@@ -609,20 +613,36 @@ function useCreateDepartureWizardController() {
         )
       }
 
-      try {
-        if (pending) {
-          const currentTaskId = taskIdRef.current
-          if (!currentTaskId) {
-            throw new Error('发团创建任务尚未准备好，请稍后再试')
-          }
-          await flushDraft()
+      if (pending) {
+        const currentTaskId = taskIdRef.current
+        if (!currentTaskId) {
+          throw new Error('发团创建任务尚未准备好，请稍后再试')
+        }
+        await flushDraft()
+        try {
           const summary = await cancelAiReviewPackage(currentTaskId, pending.id, {
             expectedPackageVersion: pending.version,
           })
           queryClient.setQueryData(['ai-create-task', summary.id], summary)
           applySavedDraft(summary)
           pendingReviewRef.current = null
+        } catch (error) {
+          const conflict = readAiCreateTaskConflict(error)
+          if (conflict) {
+            queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
+            applySavedDraft(conflict, { keepDirty: true })
+            if (!hasPendingReview(conflict)) {
+              pendingReviewRef.current = null
+            } else {
+              throw error
+            }
+          } else {
+            throw error
+          }
         }
+      }
+
+      try {
         return await runConfirm()
       } catch (error) {
         const conflict = readAiCreateTaskConflict(error)
@@ -680,7 +700,9 @@ function useCreateDepartureWizardController() {
           content: `当前有待审核建议（${candidateSummary || '未标注字段'}）。确认后将取消这份建议，并按当前已保存草稿创建发团。`,
           okText: '确认取消并创建',
           cancelText: '返回修改',
-          onOk: () => createMutation.mutateAsync(),
+          onOk: () => {
+            createMutation.mutate()
+          },
         })
         return
       }
