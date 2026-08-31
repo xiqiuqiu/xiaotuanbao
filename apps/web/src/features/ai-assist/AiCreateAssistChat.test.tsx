@@ -107,6 +107,16 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     return <div data-testid="copilot-kit">{children}</div>
   },
   CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
+  CopilotChatReasoningMessage: Object.assign(
+    ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    {
+      Header: ({ label }: { label?: string }) => (
+        <button type="button">{label ?? '思考过程'}</button>
+      ),
+      Content: () => null,
+      Toggle: () => null,
+    },
+  ),
   CopilotChatInput: Object.assign(
     ({
       value,

@@ -23,6 +23,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
+import { AgentReasoningMessage } from '@/features/agent-conversation/agent-reasoning-message'
 import {
   abandonConversationBatch,
   cancelAiConversationInteraction,
@@ -535,6 +536,7 @@ function ChatComposer({
         className={styles.chat}
         messages={messages}
         isRunning={isRunning}
+        messageView={{ reasoningMessage: AgentReasoningMessage }}
         inputValue={pendingText ? '' : draft}
         onInputChange={setDraft}
         onSubmitMessage={(value) => {
