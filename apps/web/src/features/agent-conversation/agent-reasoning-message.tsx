@@ -149,6 +149,7 @@ export function AgentReasoningMessage({
     >
       <span className={styles.indicator} tabIndex={0} aria-label={description}>
         <ChatWorkingMascot
+          beat="loop"
           size={CHAT_WORKING_MASCOT_SIZE}
           playing
           aria-label="Agent 正在工作"

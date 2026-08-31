@@ -5,100 +5,26 @@
   vertical-align: middle;
 }
 
-.scene {
-  transform-origin: 50% 50%;
-}
-
-.body {
-  transform-origin: 50% 50%;
-  transform-box: fill-box;
-}
-
-.trail {
+.halo,
+.trails {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.halo {
   opacity: 0;
-  transform-origin: 50% 50%;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .root[data-playing='true'] .body {
-    animation: chat-working-body 6.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  }
-
-  .root[data-playing='true'] .trailLime {
-    animation: chat-working-trail 6.5s ease-in-out infinite;
-    animation-delay: 0s;
-  }
-
-  .root[data-playing='true'] .trailCyan {
-    animation: chat-working-trail 6.5s ease-in-out infinite;
-    animation-delay: 0.08s;
-  }
-
-  .root[data-playing='true'] .trailOrange {
-    animation: chat-working-trail 6.5s ease-in-out infinite;
-    animation-delay: 0.16s;
-  }
-
-  .root[data-playing='true'] .trailMagenta {
-    animation: chat-working-trail 6.5s ease-in-out infinite;
-    animation-delay: 0.24s;
-  }
+.trails {
+  opacity: 0;
 }
 
-/*
- * Recording loop (~6.5s): rest → squash → tumble/backflip with rainbow trails → rest.
- * Body stays a horizontal capsule with slit eyes the whole time.
- */
-@keyframes chat-working-body {
-  0%,
-  8% {
-    transform: translate(0, 0) rotate(0deg) scale(1, 1);
-  }
-  18% {
-    transform: translate(0, 4%) rotate(-8deg) scale(0.82, 1.12);
-  }
-  28% {
-    transform: translate(0, 6%) rotate(12deg) scale(1.18, 0.72);
-  }
-  42% {
-    transform: translate(-4%, -10%) rotate(-120deg) scale(1.05, 0.9);
-  }
-  58% {
-    transform: translate(6%, 4%) rotate(-280deg) scale(0.95, 1.05);
-  }
-  72% {
-    transform: translate(0, -2%) rotate(-360deg) scale(1.08, 0.88);
-  }
-  82%,
-  100% {
-    transform: translate(0, 0) rotate(-360deg) scale(1, 1);
-  }
+.body {
+  transform-origin: 50px 50px;
 }
 
-@keyframes chat-working-trail {
-  0%,
-  22% {
-    opacity: 0;
-    stroke-dashoffset: 40;
-  }
-  32% {
-    opacity: 0.95;
-    stroke-dashoffset: 12;
-  }
-  55% {
-    opacity: 0.85;
-    stroke-dashoffset: 0;
-  }
-  70% {
-    opacity: 0.35;
-    stroke-dashoffset: -8;
-  }
-  82%,
-  100% {
-    opacity: 0;
-    stroke-dashoffset: -24;
-  }
+.eyes {
+  transform-origin: 37.6px 49px;
 }
