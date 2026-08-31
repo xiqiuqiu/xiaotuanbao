@@ -1,6 +1,7 @@
 import { DepartureCreationDraftMode } from '@xiaotuanbao/shared'
 import type { Departure } from '@prisma/client'
 import type { DepartureCreationDraftSnapshot } from '@xiaotuanbao/shared'
+import { formatDateOnly } from '../departure/departure-date.utils'
 
 export function toFormalDepartureSnapshot(
   departure: Departure,
@@ -18,8 +19,8 @@ export function toFormalDepartureSnapshot(
     copyFromDepartureId: null,
     defaultDayCount: departure.dayCount,
     name: departure.name,
-    startDate: departure.startDate.toISOString().slice(0, 10),
-    endDate: departure.endDate.toISOString().slice(0, 10),
+    startDate: formatDateOnly(departure.startDate),
+    endDate: formatDateOnly(departure.endDate),
     ownerUserId: departure.ownerUserId,
     departureType: departure.departureType,
     notes: departure.notes,

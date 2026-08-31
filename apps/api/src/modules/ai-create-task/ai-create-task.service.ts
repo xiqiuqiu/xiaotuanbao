@@ -374,6 +374,14 @@ export class AiCreateTaskService {
     if (!caller.inputBatchId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
+    const task = await this.findOwnedTaskOrThrow(
+      caller.organizationId,
+      caller.userId,
+      caller.taskId,
+    )
+    if (task.departureId || task.departure) {
+      throw new BadRequestException('正式发团后不可读取建团资料解析结果')
+    }
     const result = await this.materialService.getPinnedParseResult({
       organizationId: caller.organizationId,
       inputBatchId: caller.inputBatchId,

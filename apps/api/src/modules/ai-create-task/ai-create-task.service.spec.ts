@@ -12,6 +12,46 @@ import {
 } from './review-package.envelope'
 
 describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440', () => {
+  it('rejects material reads after the task has switched to a formal Departure', async () => {
+    const materialRead = jest.fn()
+    const service = new AiCreateTaskService(
+      {
+        aiCreateTask: {
+          findFirst: jest.fn().mockResolvedValue({
+            draft: { snapshot: {} },
+            departure: { id: 'departure-1' },
+            agentTask: { ownerUserId: 'user-1' },
+          }),
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getPinnedParseResult: materialRead } as never,
+    )
+
+    await expect(
+      service.getMaterialParseResultForAgent(
+        {
+          userId: 'user-1',
+          organizationId: 'org-1',
+          taskId: 'task-1',
+          runId: 'run-1',
+          inputBatchId: 'batch-1',
+        },
+        {
+          taskId: 'task-1',
+          runId: 'run-1',
+          materialId: 'material-1',
+          parseResultVersion: 1,
+        },
+      ),
+    ).rejects.toThrow('正式发团')
+    expect(materialRead).not.toHaveBeenCalled()
+  })
+
   it('rejects an unknown schema version before applying any business write', async () => {
     const organizationId = 'org-1'
     const userId = 'user-1'
