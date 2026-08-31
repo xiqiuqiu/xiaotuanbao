@@ -295,6 +295,37 @@ describe('AI related-object search, disambiguation and evidence (#443)', () => {
     expect(JSON.stringify(partners.body.data)).not.toContain('contactPhone')
   })
 
+  it('reports total and hasMore when controlled search truncates six matching users', async () => {
+    const matchingUsers = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        prisma.user.create({
+          data: {
+            organizationId,
+            username: `ai-more-${Date.now()}-${index}`,
+            name: `${testPrefix}-同名搜索-${index}`,
+            passwordHash: 'unused',
+            status: UserStatus.enabled,
+          },
+        }),
+      ),
+    )
+    createdUserIds.push(...matchingUsers.map((user) => user.id))
+    const opened = await openTask()
+
+    const response = await agentPost(
+      '/api/ai-tools/v1/search-users',
+      opened.delegationToken,
+      {
+        taskId: opened.taskId,
+        runId: opened.runId,
+        keyword: `${testPrefix}-同名搜索`,
+      },
+    ).expect(200)
+
+    expect(response.body.data.items).toHaveLength(5)
+    expect(response.body.data).toMatchObject({ total: 6, hasMore: true })
+  })
+
   it('keeps unreviewed driver candidates out of the snapshot and rejects forged or wrong-category ids', async () => {
     const driver = await prisma.supplier.create({
       data: {

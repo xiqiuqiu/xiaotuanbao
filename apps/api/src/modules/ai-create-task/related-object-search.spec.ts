@@ -68,36 +68,53 @@ describe('related object search matcher #443', () => {
   ]
 
   it('returns empty when keyword is blank', () => {
-    expect(searchUsersForAgent(users, {})).toEqual([])
-    expect(searchUsersForAgent(users, { keyword: '   ' })).toEqual([])
-    expect(searchSuppliersForAgent(suppliers, { category: 'transport' })).toEqual([])
-    expect(searchPartnersForAgent(partners, { keyword: '' })).toEqual([])
+    const emptyResult = { items: [], total: 0, hasMore: false }
+    expect(searchUsersForAgent(users, {})).toEqual(emptyResult)
+    expect(searchUsersForAgent(users, { keyword: '   ' })).toEqual(emptyResult)
+    expect(searchSuppliersForAgent(suppliers, { category: 'transport' })).toEqual(emptyResult)
+    expect(searchPartnersForAgent(partners, { keyword: '' })).toEqual(emptyResult)
   })
 
   it('filters disabled users and returns multiple same-name matches without picking one', () => {
-    const items = searchUsersForAgent(users, { keyword: '王杰' })
+    const { items } = searchUsersForAgent(users, { keyword: '王杰' })
     expect(items.map((item) => item.id)).toEqual(['user-enabled', 'user-same-b', 'user-same-a'])
     expect(items.every((item) => item.status === 'enabled')).toBe(true)
     expect(items.some((item) => item.id === 'user-disabled')).toBe(false)
   })
 
   it('filters suppliers by enabled status and required category', () => {
-    const drivers = searchSuppliersForAgent(suppliers, { keyword: '川西', category: 'transport' })
+    const { items: drivers } = searchSuppliersForAgent(suppliers, {
+      keyword: '川西',
+      category: 'transport',
+    })
     expect(drivers.map((item) => item.id)).toEqual(['sup-driver'])
     expect(drivers[0]?.categories).toEqual(['transport'])
 
-    const allNamed = searchSuppliersForAgent(suppliers, { keyword: '川西' })
+    const { items: allNamed } = searchSuppliersForAgent(suppliers, { keyword: '川西' })
     expect(allNamed.map((item) => item.id).sort()).toEqual(['sup-driver', 'sup-guide', 'sup-hotel'])
     expect(allNamed.some((item) => item.id === 'sup-disabled')).toBe(false)
   })
 
   it('filters disabled partners and keeps disambiguation candidates', () => {
-    const items = searchPartnersForAgent(partners, { keyword: '成都组团' })
+    const { items } = searchPartnersForAgent(partners, { keyword: '成都组团' })
     expect(items.map((item) => item.id)).toEqual([
       'partner-enabled',
       'partner-same-a',
       'partner-same-b',
     ])
     expect(items.some((item) => item.id === 'partner-disabled')).toBe(false)
+  })
+
+  it('returns truncation metadata when more than five matching users exist', () => {
+    const matches = Array.from({ length: 6 }, (_, index) => ({
+      id: `user-${index + 1}`,
+      name: `同名用户 ${index + 1}`,
+      status: 'enabled' as const,
+    }))
+
+    expect(searchUsersForAgent(matches, { keyword: '同名用户' })).toMatchObject({
+      total: 6,
+      hasMore: true,
+    })
   })
 })

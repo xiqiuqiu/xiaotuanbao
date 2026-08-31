@@ -58,6 +58,16 @@ function toDayjs(value?: string): Dayjs | null {
   return value ? dayjs(value) : null
 }
 
+function candidateSupplierDisplay(
+  candidateId: string,
+  query: { data?: Pick<SupplierSummary, 'name'>; isPending: boolean; isError: boolean },
+): string | undefined {
+  if (!candidateId) return undefined
+  if (query.isPending) return '名称加载中'
+  if (query.isError) return '无法解析名称'
+  return query.data?.name ?? '无法解析名称'
+}
+
 interface DepartureInfoFormProps {
   form: FormInstance<InfoFormValues>
   route: RouteStepValues
@@ -428,7 +438,7 @@ function DepartureInfoForm({
                   placeholder="选择含「用车」类别的供应商"
                   emptyHint="暂无匹配供应商，请先到供应商名录维护「用车」类别"
                 />,
-                driverCandidateQuery.data?.name ?? driverPinnedOption?.name,
+                candidateSupplierDisplay(driverCandidateId, driverCandidateQuery),
               )}
             </Form.Item>
           </Col>
@@ -448,7 +458,7 @@ function DepartureInfoForm({
                   placeholder="选择含「导游」类别的供应商"
                   emptyHint="暂无匹配供应商，请先到供应商名录维护「导游」类别"
                 />,
-                guideCandidateQuery.data?.name ?? guidePinnedOption?.name,
+                candidateSupplierDisplay(guideCandidateId, guideCandidateQuery),
               )}
             </Form.Item>
           </Col>

@@ -416,8 +416,8 @@ export class AiCreateTaskService {
       },
       select: { id: true, name: true, status: true },
     })
-    return searchUsersOutputSchema.parse({
-      items: searchUsersForAgent(
+    return searchUsersOutputSchema.parse(
+      searchUsersForAgent(
         users.map((user) => ({
           id: user.id,
           name: user.name,
@@ -425,7 +425,7 @@ export class AiCreateTaskService {
         })),
         { keyword: input.keyword },
       ),
-    })
+    )
   }
 
   async searchSuppliersForAgent(
@@ -438,8 +438,8 @@ export class AiCreateTaskService {
       where: { organizationId: caller.organizationId },
       select: { id: true, name: true, status: true, categories: true },
     })
-    return searchSuppliersOutputSchema.parse({
-      items: searchSuppliersForAgent(
+    return searchSuppliersOutputSchema.parse(
+      searchSuppliersForAgent(
         suppliers.map((supplier) => ({
           id: supplier.id,
           name: supplier.name,
@@ -448,7 +448,7 @@ export class AiCreateTaskService {
         })),
         { keyword: input.keyword, category: input.category },
       ),
-    })
+    )
   }
 
   async searchPartnersForAgent(
@@ -461,8 +461,8 @@ export class AiCreateTaskService {
       where: { organizationId: caller.organizationId },
       select: { id: true, name: true, status: true, partnerKind: true },
     })
-    return searchPartnersOutputSchema.parse({
-      items: searchPartnersForAgent(
+    return searchPartnersOutputSchema.parse(
+      searchPartnersForAgent(
         partners.map((partner) => ({
           id: partner.id,
           name: partner.name,
@@ -471,7 +471,7 @@ export class AiCreateTaskService {
         })),
         { keyword: input.keyword },
       ),
-    })
+    )
   }
 
   private parseRelatedSearchInput<T extends { taskId: string; runId: string }>(

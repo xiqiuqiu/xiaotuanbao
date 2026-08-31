@@ -22,6 +22,12 @@ export interface PartnerSearchRecord extends RelatedObjectSearchRecord {
   partnerKind: string
 }
 
+export interface RelatedObjectSearchResult<T> {
+  items: T[]
+  total: number
+  hasMore: boolean
+}
+
 function tokenize(keyword: string | undefined): string[] {
   return (keyword ?? '')
     .trim()
@@ -55,14 +61,22 @@ function compareByNameThenId(
   return 0
 }
 
+function limitMatches<T>(matches: T[]): RelatedObjectSearchResult<T> {
+  return {
+    items: matches.slice(0, SEARCH_RELATED_OBJECTS_LIMIT),
+    total: matches.length,
+    hasMore: matches.length > SEARCH_RELATED_OBJECTS_LIMIT,
+  }
+}
+
 export function searchUsersForAgent(
   users: readonly UserSearchRecord[],
   query: { keyword?: string },
-): SearchUserItem[] {
+): RelatedObjectSearchResult<SearchUserItem> {
   const tokens = tokenize(query.keyword)
-  if (tokens.length === 0) return []
+  if (tokens.length === 0) return limitMatches([])
 
-  return [...users]
+  const matches = [...users]
     .filter((user) => user.status === 'enabled')
     .flatMap((user) => {
       const matchReasons = reasonsForName(user.name, tokens)
@@ -70,18 +84,18 @@ export function searchUsersForAgent(
       return [{ kind: 'user' as const, id: user.id, name: user.name, status: user.status, matchReasons }]
     })
     .sort(compareByNameThenId)
-    .slice(0, SEARCH_RELATED_OBJECTS_LIMIT)
+  return limitMatches(matches)
 }
 
 export function searchSuppliersForAgent(
   suppliers: readonly SupplierSearchRecord[],
   query: { keyword?: string; category?: string },
-): SearchSupplierItem[] {
+): RelatedObjectSearchResult<SearchSupplierItem> {
   const tokens = tokenize(query.keyword)
-  if (tokens.length === 0) return []
+  if (tokens.length === 0) return limitMatches([])
   const category = query.category?.trim()
 
-  return [...suppliers]
+  const matches = [...suppliers]
     .filter((supplier) => supplier.status === 'enabled')
     .filter((supplier) => (category ? supplier.categories.includes(category) : true))
     .flatMap((supplier) => {
@@ -99,17 +113,17 @@ export function searchSuppliersForAgent(
       ]
     })
     .sort(compareByNameThenId)
-    .slice(0, SEARCH_RELATED_OBJECTS_LIMIT)
+  return limitMatches(matches)
 }
 
 export function searchPartnersForAgent(
   partners: readonly PartnerSearchRecord[],
   query: { keyword?: string },
-): SearchPartnerItem[] {
+): RelatedObjectSearchResult<SearchPartnerItem> {
   const tokens = tokenize(query.keyword)
-  if (tokens.length === 0) return []
+  if (tokens.length === 0) return limitMatches([])
 
-  return [...partners]
+  const matches = [...partners]
     .filter((partner) => partner.status === 'enabled')
     .flatMap((partner) => {
       const matchReasons = reasonsForName(partner.name, tokens)
@@ -126,5 +140,5 @@ export function searchPartnersForAgent(
       ]
     })
     .sort(compareByNameThenId)
-    .slice(0, SEARCH_RELATED_OBJECTS_LIMIT)
+  return limitMatches(matches)
 }

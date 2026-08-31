@@ -140,6 +140,8 @@ describe('search related objects contract v1 #443', () => {
           matchReasons: [{ code: 'name_contains_token', token: '王杰' }],
         },
       ],
+      total: 1,
+      hasMore: false,
       organizationId: 'org-secret',
       permissionKeys: ['departure:write'],
     })
@@ -153,6 +155,8 @@ describe('search related objects contract v1 #443', () => {
           matchReasons: [{ code: 'name_contains_token', token: '王杰' }],
         },
       ],
+      total: 1,
+      hasMore: false,
     })
     expect(users).not.toHaveProperty('organizationId')
     expect(users).not.toHaveProperty('permissionKeys')
@@ -168,6 +172,8 @@ describe('search related objects contract v1 #443', () => {
           matchReasons: [{ code: 'name_contains_token', token: '川西' }],
         },
       ],
+      total: 1,
+      hasMore: false,
       organizationId: 'org-secret',
     })
     expect(suppliers.items[0]).toMatchObject({
@@ -187,6 +193,8 @@ describe('search related objects contract v1 #443', () => {
           matchReasons: [{ code: 'name_contains_token', token: '成都' }],
         },
       ],
+      total: 1,
+      hasMore: false,
       contactPhone: '13800000000',
     })
     expect(partners.items[0]).toMatchObject({
@@ -208,5 +216,15 @@ describe('search related objects contract v1 #443', () => {
         })),
       }),
     ).toThrow()
+  })
+
+  it('preserves total and hasMore so the model can detect truncated candidates', () => {
+    expect(
+      searchUsersOutputSchema.parse({
+        items: [],
+        total: 6,
+        hasMore: true,
+      }),
+    ).toEqual({ items: [], total: 6, hasMore: true })
   })
 })

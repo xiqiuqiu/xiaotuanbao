@@ -8,9 +8,9 @@ describe('DepartureAgentTaskAdapter #440', () => {
   it('provides the registered snapshot, field catalog, review submission, command and navigation', async () => {
     const tasks = {
       getTaskContextForAgent: jest.fn().mockResolvedValue({ snapshot: { routeName: '川西' } }),
-      searchUsersForAgent: jest.fn().mockResolvedValue({ items: [] }),
-      searchSuppliersForAgent: jest.fn().mockResolvedValue({ items: [] }),
-      searchPartnersForAgent: jest.fn().mockResolvedValue({ items: [] }),
+      searchUsersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
+      searchSuppliersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
+      searchPartnersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
       proposeReviewPackageForAgent: jest.fn().mockResolvedValue({ status: 'accepted' }),
       submitReviewPackageForAgent: jest.fn().mockResolvedValue({ reviewPackageId: 'pkg-1' }),
       resolveOwnedReviewTaskId: jest.fn().mockResolvedValue('task-1'),

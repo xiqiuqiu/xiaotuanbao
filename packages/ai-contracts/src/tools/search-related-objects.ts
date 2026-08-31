@@ -84,6 +84,8 @@ export const searchUsersModelInputSchema = z
 export const searchUsersOutputSchema = z
   .object({
     items: z.array(searchUserItemSchema).max(SEARCH_RELATED_OBJECTS_LIMIT),
+    total: z.number().int().nonnegative().default(0),
+    hasMore: z.boolean().default(false),
   })
   .strip()
 
@@ -106,6 +108,8 @@ export const searchSuppliersModelInputSchema = z
 export const searchSuppliersOutputSchema = z
   .object({
     items: z.array(searchSupplierItemSchema).max(SEARCH_RELATED_OBJECTS_LIMIT),
+    total: z.number().int().nonnegative().default(0),
+    hasMore: z.boolean().default(false),
   })
   .strip()
 
@@ -126,6 +130,8 @@ export const searchPartnersModelInputSchema = z
 export const searchPartnersOutputSchema = z
   .object({
     items: z.array(searchPartnerItemSchema).max(SEARCH_RELATED_OBJECTS_LIMIT),
+    total: z.number().int().nonnegative().default(0),
+    hasMore: z.boolean().default(false),
   })
   .strip()
 

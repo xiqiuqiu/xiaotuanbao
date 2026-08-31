@@ -103,9 +103,12 @@ function adapterWith(
   const tasks = {
     getTaskContextForAgent: methods.getTaskContextForAgent ?? (async () => contextPayload),
     searchRouteTemplatesForAgent: methods.searchRouteTemplatesForAgent ?? (async () => searchPayload),
-    searchUsersForAgent: methods.searchUsersForAgent ?? (async () => ({ items: [] })),
-    searchSuppliersForAgent: methods.searchSuppliersForAgent ?? (async () => ({ items: [] })),
-    searchPartnersForAgent: methods.searchPartnersForAgent ?? (async () => ({ items: [] })),
+    searchUsersForAgent:
+      methods.searchUsersForAgent ?? (async () => ({ items: [], total: 0, hasMore: false })),
+    searchSuppliersForAgent:
+      methods.searchSuppliersForAgent ?? (async () => ({ items: [], total: 0, hasMore: false })),
+    searchPartnersForAgent:
+      methods.searchPartnersForAgent ?? (async () => ({ items: [], total: 0, hasMore: false })),
     getMaterialParseResultForAgent:
       methods.getMaterialParseResultForAgent ?? (async () => parsePayload),
     submitReviewPackageForAgent: methods.submitReviewPackageForAgent ?? (async () => reviewOutput),
@@ -278,6 +281,8 @@ describe('AiToolHttpAdapter related object search #443', () => {
           matchReasons: [{ code: 'name_contains_token' as const, token: '王杰' }],
         },
       ],
+      total: 1,
+      hasMore: false,
     }
     const adapter = adapterWith(store, {
       searchUsersForAgent: async () => users,
@@ -309,6 +314,8 @@ describe('AiToolHttpAdapter related object search #443', () => {
           matchReasons: [{ code: 'name_contains_token' as const, token: '车队' }],
         },
       ],
+      total: 1,
+      hasMore: false,
     }
     const adapter = adapterWith(new InMemoryAiActionStore(), {
       searchSuppliersForAgent: async () => leaked as SearchSuppliersOutput,
@@ -323,6 +330,8 @@ describe('AiToolHttpAdapter related object search #443', () => {
             matchReasons: [{ code: 'name_contains_token', token: '组团' }],
           },
         ],
+        total: 1,
+        hasMore: false,
       }),
     })
 

@@ -46,6 +46,32 @@ const initialValues: InfoFormValues = {
   dayCount: 10,
 }
 
+function reviewWithCandidates(
+  candidates: AiReviewPackageView['candidates'],
+  baselineSnapshot: Record<string, unknown> = initialValues,
+): AiReviewPackageView {
+  return {
+    id: 'pkg-crew',
+    status: 'pending',
+    confirmationUnit: 'basic_info_draft',
+    payloadSchema: 'departure.basic_info_draft@v1',
+    schemaSupported: true,
+    baseObjectVersion: 1,
+    version: 1,
+    runId: 'run-1',
+    conversationId: 'conv-1',
+    inputBatchId: 'batch-1',
+    attemptId: 'attempt-1',
+    capabilityKey: 'departure.review-package.propose',
+    capabilityVersion: 1,
+    targetKind: 'departure_creation_draft',
+    targetId: 'draft-1',
+    proposalHash: 'b'.repeat(64),
+    baselineSnapshot,
+    candidates,
+  }
+}
+
 function renderStep(
   values: InfoFormValues = initialValues,
   routeValues: RouteStepValues = route,
@@ -77,6 +103,14 @@ function renderStep(
 describe('CreateDepartureStepInfo', () => {
   afterEach(() => {
     cleanup()
+    vi.mocked(getSupplier).mockImplementation((id: string) =>
+      Promise.resolve({
+        id,
+        name: id === 'driver-101' ? '第 101 位司机' : '第 101 位导游',
+        categories: [],
+        status: 'active',
+      }),
+    )
   })
 
   it('团号与天数不可编辑时呈现禁用框效果', () => {
@@ -201,6 +235,113 @@ describe('CreateDepartureStepInfo', () => {
     expect(await screen.findByText('执行班组供应商加载失败')).toBeInTheDocument()
     expect(screen.getByText('执行班组：司机加载失败；导游未选择')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /重\s*试/ })).toBeInTheDocument()
+  })
+
+  it('审核条按提议 ID 展示班组名称，不复用已保存名称', async () => {
+    vi.mocked(getSupplier).mockImplementation((id: string) =>
+      Promise.resolve({
+        id,
+        name: id === 'driver-b' ? '候选司机 B' : '已保存司机 A',
+        categories: [],
+        status: 'active',
+      }),
+    )
+    const pendingReview = reviewWithCandidates(
+      [{
+        fieldKey: 'driverSupplierId',
+        proposedValue: 'driver-b',
+        clarity: 'needs_confirmation',
+        status: 'pending',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '司机 B' }],
+      }],
+      { ...initialValues, driverSupplierId: 'driver-a' },
+    )
+
+    renderStep(
+      { ...initialValues, driverSupplierId: 'driver-a' },
+      route,
+      { pendingReview, onCorrectCandidate: vi.fn() },
+    )
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('司机候选')).toHaveTextContent('候选司机 B')
+    })
+    expect(screen.getByLabelText('司机候选')).not.toHaveTextContent('已保存司机 A')
+  })
+
+  it('班组候选名称加载期间显示加载态，不冒充已保存司机', async () => {
+    vi.mocked(getSupplier).mockImplementation((id: string) => {
+      if (id === 'driver-b') return new Promise(() => undefined)
+      return Promise.resolve({
+        id,
+        name: '已保存司机 A',
+        categories: [],
+        status: 'active',
+      })
+    })
+    const pendingReview = reviewWithCandidates(
+      [{
+        fieldKey: 'driverSupplierId',
+        proposedValue: 'driver-b',
+        clarity: 'needs_confirmation',
+        status: 'pending',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '司机 B' }],
+      }],
+      { ...initialValues, driverSupplierId: 'driver-a' },
+    )
+
+    renderStep(
+      { ...initialValues, driverSupplierId: 'driver-a' },
+      route,
+      { pendingReview, onCorrectCandidate: vi.fn() },
+    )
+
+    expect(await screen.findByLabelText('司机候选')).toHaveTextContent('名称加载中')
+    expect(screen.getByLabelText('司机候选')).not.toHaveTextContent('已保存司机 A')
+  })
+
+  it('班组候选名称解析失败时显示失败态，不冒充已保存司机或导游', async () => {
+    vi.mocked(getSupplier).mockImplementation((id: string) => {
+      if (id.endsWith('-b')) return Promise.reject(new Error('forbidden'))
+      return Promise.resolve({
+        id,
+        name: id === 'driver-a' ? '已保存司机 A' : '已保存导游 A',
+        categories: [],
+        status: 'active',
+      })
+    })
+    const pendingReview = reviewWithCandidates(
+      [
+        {
+          fieldKey: 'driverSupplierId',
+          proposedValue: 'driver-b',
+          clarity: 'needs_confirmation',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '司机 B' }],
+        },
+        {
+          fieldKey: 'guideSupplierId',
+          proposedValue: 'guide-b',
+          clarity: 'needs_confirmation',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '导游 B' }],
+        },
+      ],
+      { ...initialValues, driverSupplierId: 'driver-a', guideSupplierId: 'guide-a' },
+    )
+
+    renderStep(
+      { ...initialValues, driverSupplierId: 'driver-a', guideSupplierId: 'guide-a' },
+      route,
+      { pendingReview, onCorrectCandidate: vi.fn() },
+    )
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('司机候选')).toHaveTextContent('无法解析名称')
+      expect(screen.getByLabelText('导游候选')).toHaveTextContent('无法解析名称')
+    })
+    expect(screen.getByLabelText('司机候选')).not.toHaveTextContent('已保存司机 A')
+    expect(screen.getByLabelText('导游候选')).not.toHaveTextContent('已保存导游 A')
   })
 
   it('选用常用路线且天数大于或小于团期时均给出字段级错误', async () => {

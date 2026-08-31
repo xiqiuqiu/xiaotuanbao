@@ -25,7 +25,7 @@ export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
   'User 要采用某条常用路线时，调用 proposeReviewPackage 提交 templateId 候选；确认/拒绝只在中间表单完成。',
   '解析 User、司机、导游或合作伙伴时必须调用 searchUsers、searchSuppliers 或 searchPartners，只使用工具返回的真实对象。',
   '不得编造或提交模型自己生成的对象 ID、Organization 或权限声明。',
-  'searchUsers、searchSuppliers、searchPartners 无结果、多候选或工具失败时，必须追问消歧，不要猜测唯一对象。',
+  'searchUsers、searchSuppliers、searchPartners 无结果、多候选、hasMore=true 或工具失败时，必须追问并缩小关键词消歧，不要猜测唯一对象。',
   '司机搜索须带 category=transport，导游搜索须带 category=guide。合作伙伴只用于消歧，不得写入发团创建草稿。',
   '当用户提供了团名、路线、出团/结束日期或天数、预计人数提示、备注、车牌、联系电话、司机或导游时，调用 proposeReviewPackage 形成待审核候选，并引用用户原话或资料摘录作为 evidence。',
   '同一审核包内每个字段最多一条候选。资料中有多个可能的团名、路线或关联对象时，只提交最可能的一条，clarity 用 needs_confirmation，其他可能写在回复里，不要一次提交两条同名字段。',
@@ -52,11 +52,11 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   searchRouteTemplates:
     '按当前 Organization 用关键词和可选天数查询常用路线。只返回服务端给出的候选与匹配理由，不写草稿。关键词与天数都空时结果为空。',
   searchUsers:
-    '按当前 Organization 用关键词查询已启用 User。只返回服务端给出的消歧候选，不写草稿。空关键词结果为空。不得提交模型生成的 User ID。',
+    '按当前 Organization 用关键词查询已启用 User。只返回服务端给出的消歧候选，不写草稿。hasMore=true 表示结果被截断，必须缩小关键词继续消歧。空关键词结果为空。不得提交模型生成的 User ID。',
   searchSuppliers:
-    '按当前 Organization 用关键词和可选类别查询已启用 Supplier。司机用 category=transport，导游用 category=guide。只返回服务端给出的消歧候选，不写草稿。空关键词结果为空。',
+    '按当前 Organization 用关键词和可选类别查询已启用 Supplier。司机用 category=transport，导游用 category=guide。只返回服务端给出的消歧候选，不写草稿。hasMore=true 表示结果被截断，必须缩小关键词继续消歧。空关键词结果为空。',
   searchPartners:
-    '按当前 Organization 用关键词查询已启用 Partner。只返回消歧所需的最小字段，不写草稿，不披露联系电话或结算备注。空关键词结果为空。',
+    '按当前 Organization 用关键词查询已启用 Partner。只返回消歧所需的最小字段，不写草稿，不披露联系电话或结算备注。hasMore=true 表示结果被截断，必须缩小关键词继续消歧。空关键词结果为空。',
   proposeReviewPackage:
     '提出发团基础信息的待审核候选（团名、路线、出团/结束日期、发团类型、预计人数提示、备注、司机、导游、车牌、联系电话）。关联对象 ID 必须来自受控查询结果。只做无副作用预校验，不写入发团创建草稿，也不创建审核包；须由 Worker 复验后投影，再由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。证据错误会返回当前 Attempt 供修正重提。',
   getMaterialParseResult:

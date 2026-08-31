@@ -51,9 +51,9 @@ describe('related object search tools #443', () => {
     mockSearchUsers.mockReset()
     mockSearchSuppliers.mockReset()
     mockSearchPartners.mockReset()
-    mockSearchUsers.mockResolvedValue({ items: [] })
-    mockSearchSuppliers.mockResolvedValue({ items: [] })
-    mockSearchPartners.mockResolvedValue({ items: [] })
+    mockSearchUsers.mockResolvedValue({ items: [], total: 0, hasMore: false })
+    mockSearchSuppliers.mockResolvedValue({ items: [], total: 0, hasMore: false })
+    mockSearchPartners.mockResolvedValue({ items: [], total: 0, hasMore: false })
   })
 
   it('sends dual identity plus model query, not model-supplied task or organization ids', async () => {
