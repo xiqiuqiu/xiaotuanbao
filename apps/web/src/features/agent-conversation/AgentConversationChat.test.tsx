@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useState, type ReactNode } from 'react'
+import { useState, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -42,6 +42,47 @@ function MockReasoningMessage({ content }: { content: string }) {
     </div>
   )
 }
+
+function MockCopilotChatReasoningMessageHeader({
+  label,
+  isStreaming,
+}: {
+  label?: string
+  isStreaming?: boolean
+}) {
+  return (
+    <button type="button" data-testid="reasoning-header">
+      {label ?? (isStreaming ? '正在思考' : '思考过程')}
+    </button>
+  )
+}
+
+function MockCopilotChatReasoningMessage({
+  isRunning,
+  message,
+  header: HeaderSlot = MockCopilotChatReasoningMessageHeader,
+}: {
+  isRunning?: boolean
+  message?: { id?: string; content?: unknown }
+  header?:
+    | ComponentType<{ isStreaming?: boolean; label?: string }>
+    | ((props: { isStreaming?: boolean; label?: string }) => ReactNode)
+}) {
+  const Header = HeaderSlot
+  return (
+    <div data-testid="reasoning-message">
+      <Header
+        isStreaming={Boolean(isRunning)}
+        label={isRunning ? '正在思考' : '思考过程'}
+      />
+      {typeof message?.content === 'string' ? <div>{message.content}</div> : null}
+    </div>
+  )
+}
+MockCopilotChatReasoningMessage.Header = MockCopilotChatReasoningMessageHeader
+MockCopilotChatReasoningMessage.Content = () => null
+MockCopilotChatReasoningMessage.Toggle = () => null
+
 
 function useMockComposerAttachments() {
   const [files, setFiles] = useState<File[]>(() => {
@@ -206,14 +247,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       capturedChatConfig = { agentId }
       return children
     },
-    CopilotChatReasoningMessage: Object.assign(
-      () => null,
-      {
-        Header: () => null,
-        Content: () => null,
-        Toggle: () => null,
-      },
-    ),
+    CopilotChatReasoningMessage: MockCopilotChatReasoningMessage,
     CopilotChatInput: Object.assign(MockCopilotChatInput, {
       SendButton: ({
         children,
@@ -238,6 +272,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
       onStop,
       isRunning,
       messages,
+      messageView,
       onAddFile,
       attachments,
     }: {
@@ -247,6 +282,14 @@ vi.mock('@copilotkit/react-core/v2', () => {
       onSubmitMessage?: (value: string) => void
       onStop?: () => void
       isRunning?: boolean
+      messageView?: {
+        reasoningMessage?:
+          | ComponentType<{
+              message?: { id?: string; role?: string; content?: unknown }
+              isRunning?: boolean
+            }>
+          | { header?: ComponentType<{ isStreaming?: boolean; label?: string }> }
+      }
       onAddFile?: () => void
       attachments?: Array<{ id?: string; filename?: string }>
       messages?: Array<{
@@ -262,6 +305,16 @@ vi.mock('@copilotkit/react-core/v2', () => {
         ))}
         {(messages ?? []).map((message) => {
           if (message.role === 'reasoning' && typeof message.content === 'string') {
+            const Reasoning = messageView?.reasoningMessage
+            if (typeof Reasoning === 'function') {
+              return (
+                <Reasoning
+                  key={message.id}
+                  message={message}
+                  isRunning={isRunning}
+                />
+              )
+            }
             return <MockReasoningMessage key={message.id} content={message.content} />
           }
           if (
@@ -1016,7 +1069,6 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
   })
 
   it('shows collapsible 思考过程 from the first reasoning token and keeps it after agent_message', async () => {
-    const user = userEvent.setup()
     renderChat()
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
@@ -1036,10 +1088,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByText('先核对出团日期')).toBeInTheDocument()
-    const toggle = screen.getByRole('button', { name: '思考过程' })
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    await user.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '正在思考' })).toBeInTheDocument()
+    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1059,6 +1109,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(await screen.findByText('已记下路线。')).toBeInTheDocument()
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
     expect(screen.getByText('再核人数')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1082,6 +1133,82 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     })
     expect(await screen.findByText('已记下路线。可继续问。')).toBeInTheDocument()
     expect(screen.getByText('再核人数')).toBeInTheDocument()
+    // batch 仍为 agent_running：isRunning 为真，thinking mascot 继续显示
+    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '正在思考' })).toBeInTheDocument()
+  })
+
+  it('shows thinking mascot while isRunning and removes it when the run ends', async () => {
+    renderChat()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 1,
+            reasoningText: '正在组织回复',
+            text: '',
+          }),
+        }),
+      )
+    })
+
+    expect(await screen.findByTestId('agent-thinking-mascot')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '正在思考' })).toHaveAttribute(
+      'data-mascot-preset',
+      'thinking',
+    )
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'conversation.event',
+            event: {
+              id: 'e-3',
+              sequence: 3,
+              kind: 'agent_message',
+              payload: {
+                text: '完成。',
+                batchId: 'batch-1',
+                attemptId: 'attempt-9',
+              },
+              createdAt: '2026-08-26T00:00:03.000Z',
+            },
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('完成。')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'conversation.event',
+            event: {
+              id: 'e-4',
+              sequence: 4,
+              kind: 'batch_status',
+              payload: {
+                status: 'completed',
+                batchId: 'batch-1',
+                attemptId: 'attempt-9',
+                generation: 3,
+              },
+              createdAt: '2026-08-26T00:00:04.000Z',
+            },
+          }),
+        }),
+      )
+    })
+
+    expect(screen.queryByTestId('agent-thinking-mascot')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '思考过程' })).toBeInTheDocument()
   })
 })

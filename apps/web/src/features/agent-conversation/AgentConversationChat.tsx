@@ -41,7 +41,7 @@ import {
   type QueuedConversationMessage,
   type ReviewPackageActivityContent,
 } from '@/features/ai-assist/ai-create-copilot-messages'
-import { AgentReasoningHeader } from './agent-reasoning-message'
+import { AgentReasoningMessage } from './agent-reasoning-message'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
@@ -893,7 +893,7 @@ function useAgentConversationChatController() {
   const isRunning = isCopilotChatRunning(visibleEvents, null, pendingText, liveAssistant)
   const stoppableBatchId = currentStoppableBatchId(visibleEvents)
   const messageView = useMemo(
-    () => ({ reasoningMessage: { header: AgentReasoningHeader } }),
+    () => ({ reasoningMessage: AgentReasoningMessage }),
     [],
   )
   const openAgentTask = useCallback(
@@ -970,7 +970,7 @@ function AgentConversationComposer({
   draft: string
   isRunning: boolean
   messages: ReturnType<typeof projectConversationFrame>
-  messageView: { reasoningMessage: { header: typeof AgentReasoningHeader } }
+  messageView: { reasoningMessage: typeof AgentReasoningMessage }
   pendingText: string | null
   queuedMessagesContextValue: QueuedMessagesContextValue
   send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>

@@ -1,0 +1,13 @@
+.headerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mascotSlot {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 0;
+}

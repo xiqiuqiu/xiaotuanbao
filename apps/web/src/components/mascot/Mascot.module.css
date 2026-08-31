@@ -1,0 +1,6 @@
+.root {
+  display: block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  overflow: visible;
+}
