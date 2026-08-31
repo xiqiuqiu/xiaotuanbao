@@ -7,7 +7,7 @@ How this repo keeps `main` stable. Summary for agents also lives in root `AGENTS
 | Layer | When | What | Blocks |
 | ----- | ---- | ---- | ------ |
 | Local L2 | Before push (hook `pnpm hooks:install`); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related; permission-matrix guard if API routes changed | Dirty push / Agent handoff |
-| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + API e2e (E2) | Merge into `main` (required checks) |
+| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + unit tests + API e2e (E2) | Merge into `main` (required checks) |
 
 There is **no** hard pre-commit gate. Full API e2e is **not** required on every local commit.
 
@@ -50,7 +50,8 @@ Workflow: [`.github/workflows/verify.yml`](../../.github/workflows/verify.yml)
 Jobs / checks (names must match branch protection):
 
 1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
-2. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
+2. **`unit-tests`** — shared、AI contracts、Agent、API 单元/回归测试 → `pnpm test:unit:ci`
+3. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
 
@@ -84,7 +85,7 @@ Do **not** add path filters that skip e2e for “docs-only” or “web-only” 
 
 - Disallow direct pushes
 - Require a pull request
-- Require status checks to pass: `typecheck`, `api-e2e`
+- Require status checks to pass: `typecheck`, `unit-tests`, `api-e2e`
 - Do **not** require approving reviews yet (**V2**); when a second developer joins, raise to **V1** (at least one non-author Approve) and update this section
 
 ### GitHub plan blocker (current)
@@ -106,7 +107,7 @@ gh api -X PUT "repos/xiqiuqiu/xiaotuanbao/branches/main/protection" \
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["typecheck", "api-e2e"]
+    "contexts": ["typecheck", "unit-tests", "api-e2e"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": {
@@ -162,5 +163,5 @@ See `apps/web-e2e/README.md` and `docs/superpowers/specs/2026-08-04-web-browser-
 
 - [ ] Branch protection: require ≥1 approving review (V1)
 - [ ] Extend pre-push hook with typecheck (+ Doctor) if the team wants full L2 enforced locally
-- [ ] Optional: add web unit tests as a third required check (was deferred from C1)
+- [ ] Web 单元测试现有基线清零后，将 `pnpm --filter web test` 纳入 `test:unit:ci`
 - [ ] Optional: promote browser E2E smoke to a non-blocking or required CI job after the suite is stable

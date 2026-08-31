@@ -52,6 +52,39 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+  unit-tests:
+    name: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @xiaotuanbao/shared build && pnpm --filter @xiaotuanbao/ai-contracts build
+
+      - name: Write CI .env
+        run: cp .env.example .env
+
+      - name: Prisma generate
+        run: pnpm --filter api prisma:generate
+
+      - name: Unit tests
+        run: pnpm test:unit:ci
+
   api-e2e:
     name: api-e2e
     runs-on: ubuntu-latest
