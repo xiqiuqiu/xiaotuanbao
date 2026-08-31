@@ -8,6 +8,11 @@ import { createGetTaskContextTool } from './get-task-context.tool'
 import { createReadConversationHistoryTool } from './read-conversation-history.tool'
 import { createReadConversationSourceTool } from './read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
+import {
+  createSearchPartnersTool,
+  createSearchSuppliersTool,
+  createSearchUsersTool,
+} from './search-related-objects.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 
 describe('AI Create actual tool model contract', () => {
@@ -20,6 +25,9 @@ describe('AI Create actual tool model contract', () => {
     const actualTools = {
       getTaskContext: createGetTaskContextTool(config),
       searchRouteTemplates: createSearchRouteTemplatesTool(config),
+      searchUsers: createSearchUsersTool(config),
+      searchSuppliers: createSearchSuppliersTool(config),
+      searchPartners: createSearchPartnersTool(config),
       proposeReviewPackage: createSubmitReviewPackageTool(config),
       getMaterialParseResult: createGetMaterialParseResultTool(config),
       readConversationHistory: createReadConversationHistoryTool(config),

@@ -18,6 +18,7 @@ type SnapshotCaller = Parameters<AiCreateTaskService['getTaskContextForAgent']>[
 type ReviewCaller = Parameters<AiCreateTaskService['proposeReviewPackageForAgent']>[0]
 type SubmitReviewOptions = Parameters<AiCreateTaskService['submitReviewPackageForAgent']>[2]
 type ReferenceCaller = Parameters<AiCreateTaskService['searchRouteTemplatesForAgent']>[0]
+type RelatedSearchCaller = Parameters<AiCreateTaskService['searchUsersForAgent']>[0]
 type MaterialCaller = Parameters<AiCreateTaskService['getMaterialParseResultForAgent']>[0]
 
 /**
@@ -36,6 +37,18 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
 
   searchReferences(caller: TaskBoundAiToolRequestUser, input: unknown) {
     return this.tasks.searchRouteTemplatesForAgent(caller as ReferenceCaller, input)
+  }
+
+  searchUsers(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.searchUsersForAgent(caller as RelatedSearchCaller, input)
+  }
+
+  searchSuppliers(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.searchSuppliersForAgent(caller as RelatedSearchCaller, input)
+  }
+
+  searchPartners(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.searchPartnersForAgent(caller as RelatedSearchCaller, input)
   }
 
   getMaterial(caller: TaskBoundAiToolRequestUser, input: unknown) {

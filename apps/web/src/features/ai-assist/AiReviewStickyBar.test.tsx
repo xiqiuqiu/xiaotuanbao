@@ -66,12 +66,46 @@ describe('AiReviewStickyBar', () => {
     expect(
       screen.getByText('已建议修改团名、路线。确认后写入发团创建草稿，拒绝后保留当前已保存值。'),
     ).toBeInTheDocument()
+    expect(screen.queryByText('含需确认字段，请对照证据后再写入')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
     expect(onConfirm).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: '拒绝建议' }))
     expect(onReject).toHaveBeenCalledTimes(1)
+  })
+
+  it('flags a package that still needs confirmation against evidence #443', () => {
+    render(
+      <ConfigProvider locale={zhCN}>
+        <AiReviewStickyBar
+          pendingReview={{
+            ...pendingReview,
+            candidates: [
+              {
+                ...pendingReview.candidates[0]!,
+                fieldKey: 'driverSupplierId',
+                proposedValue: 'sup-1',
+                clarity: 'needs_confirmation',
+                evidence: [
+                  {
+                    kind: 'material_region',
+                    materialId: 'mat-1',
+                    parseResultVersion: 1,
+                    pageNumber: 1,
+                    excerpt: '司机：川西车队',
+                  },
+                ],
+              },
+            ],
+          }}
+          onConfirm={vi.fn()}
+          onReject={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByText('含需确认字段，请对照证据后再写入')).toBeInTheDocument()
   })
 
   it('safely blocks confirmation for an unknown or stale Review Schema #440', async () => {

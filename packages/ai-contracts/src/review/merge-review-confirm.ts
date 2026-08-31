@@ -188,6 +188,14 @@ export function evaluateReviewConfirmMerge(args: {
       nextSnapshot.notes = text.length > 0 ? text : null
       continue
     }
+    if (field === 'driverSupplierId') {
+      nextSnapshot.driverSupplierId = text.length > 0 ? text : null
+      continue
+    }
+    if (field === 'guideSupplierId') {
+      nextSnapshot.guideSupplierId = text.length > 0 ? text : null
+      continue
+    }
     if (field === 'vehiclePlate') {
       nextSnapshot.vehiclePlate = text.length > 0 ? text : null
       continue

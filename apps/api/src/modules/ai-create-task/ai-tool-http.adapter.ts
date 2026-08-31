@@ -5,7 +5,10 @@ import type {
   ProposeReviewPackageOutput,
   ReadConversationHistoryOutput,
   ReadConversationSourceOutput,
+  SearchPartnersOutput,
   SearchRouteTemplatesOutput,
+  SearchSuppliersOutput,
+  SearchUsersOutput,
   SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
@@ -51,6 +54,49 @@ export class AiToolHttpAdapter {
           runId: caller.runId,
           keyword: claimedStringField(body, 'keyword') ?? undefined,
           dayCount: claimedPositiveIntField(body, 'dayCount') ?? undefined,
+        },
+      ),
+    )
+  }
+
+  searchUsers(user: AiToolRequestUser, body: unknown): Promise<SearchUsersOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('searchUsers', caller, body, ({ target }) =>
+      this.domain.searchUsers(
+        { ...caller, organizationId: target.id },
+        {
+          taskId: caller.taskId,
+          runId: caller.runId,
+          keyword: claimedStringField(body, 'keyword') ?? undefined,
+        },
+      ),
+    )
+  }
+
+  searchSuppliers(user: AiToolRequestUser, body: unknown): Promise<SearchSuppliersOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('searchSuppliers', caller, body, ({ target }) =>
+      this.domain.searchSuppliers(
+        { ...caller, organizationId: target.id },
+        {
+          taskId: caller.taskId,
+          runId: caller.runId,
+          keyword: claimedStringField(body, 'keyword') ?? undefined,
+          category: claimedStringField(body, 'category') ?? undefined,
+        },
+      ),
+    )
+  }
+
+  searchPartners(user: AiToolRequestUser, body: unknown): Promise<SearchPartnersOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('searchPartners', caller, body, ({ target }) =>
+      this.domain.searchPartners(
+        { ...caller, organizationId: target.id },
+        {
+          taskId: caller.taskId,
+          runId: caller.runId,
+          keyword: claimedStringField(body, 'keyword') ?? undefined,
         },
       ),
     )
@@ -140,6 +186,9 @@ export class AiToolHttpAdapter {
     name:
       | 'getTaskContext'
       | 'searchRouteTemplates'
+      | 'searchUsers'
+      | 'searchSuppliers'
+      | 'searchPartners'
       | 'getMaterialParseResult'
       | 'proposeReviewPackage'
       | 'readConversationHistory'

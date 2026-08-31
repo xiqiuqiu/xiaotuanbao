@@ -66,6 +66,9 @@ describe('agent server', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
       'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
@@ -90,6 +93,9 @@ describe('agent server', () => {
         tools: [
           'getTaskContext',
           'searchRouteTemplates',
+          'searchUsers',
+          'searchSuppliers',
+          'searchPartners',
           'proposeReviewPackage',
           'getMaterialParseResult',
           'readConversationHistory',

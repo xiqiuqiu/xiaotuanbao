@@ -10,6 +10,9 @@ const INTERNAL_IDENTIFIERS = [
   'getTaskContext',
   'getMaterialParseResult',
   'searchRouteTemplates',
+  'searchUsers',
+  'searchSuppliers',
+  'searchPartners',
   'replyPlaintext',
   'awaitReviewPackageDecision',
 ] as const

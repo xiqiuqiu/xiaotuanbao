@@ -4,7 +4,10 @@ import type {
   ProposeReviewPackageOutput,
   ReviewFieldDescriptor,
   ReviewSchema,
+  SearchPartnersOutput,
   SearchRouteTemplatesOutput,
+  SearchSuppliersOutput,
+  SearchUsersOutput,
   SubmitReviewPackageOutput,
   TaskCompletedHref,
   TaskDescriptor,
@@ -39,6 +42,9 @@ export interface AgentTaskDomainAdapter {
   fieldCatalog(): readonly ReviewFieldDescriptor[]
   getSnapshot(user: TaskBoundAiToolRequestUser, input: unknown): Promise<GetTaskContextOutput>
   searchReferences(user: TaskBoundAiToolRequestUser, input: unknown): Promise<SearchRouteTemplatesOutput>
+  searchUsers(user: TaskBoundAiToolRequestUser, input: unknown): Promise<SearchUsersOutput>
+  searchSuppliers(user: TaskBoundAiToolRequestUser, input: unknown): Promise<SearchSuppliersOutput>
+  searchPartners(user: TaskBoundAiToolRequestUser, input: unknown): Promise<SearchPartnersOutput>
   getMaterial(user: TaskBoundAiToolRequestUser, input: unknown): Promise<GetMaterialParseResultOutput>
   proposeReview(user: TaskBoundAiToolRequestUser, input: unknown): Promise<ProposeReviewPackageOutput>
   submitReview(

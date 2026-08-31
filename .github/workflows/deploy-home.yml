@@ -49,7 +49,7 @@ jobs:
             echo "push_latest=true" >> "$GITHUB_OUTPUT"
           fi
 
-  unit-tests:
+  unit-tests-core:
     needs: resolve
     runs-on: ubuntu-latest
     steps:
@@ -81,11 +81,41 @@ jobs:
       - name: Prisma generate
         run: pnpm --filter api prisma:generate
 
-      - name: Unit tests
-        run: pnpm test:unit:ci
+      - name: Core unit tests
+        run: pnpm test:unit:core:ci
+
+  web-unit-tests:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.git_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Web unit tests
+        run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
 
   build-push:
-    needs: [resolve, unit-tests]
+    needs: [resolve, unit-tests-core, web-unit-tests]
     # Native arm64 — avoids QEMU. Emulated linux/arm64 previously SIGILL'd
     # during `pnpm deploy` (exit 132) and hung on a second prod install.
     runs-on: ubuntu-24.04-arm

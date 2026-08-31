@@ -7,8 +7,8 @@ How this repo keeps `main` stable. Summary for agents also lives in root `AGENTS
 | Layer | When | What | Blocks |
 | ----- | ---- | ---- | ------ |
 | Local L2 | Before push (hook `pnpm hooks:install`); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related; permission-matrix guard if API routes changed | Dirty push / Agent handoff |
-| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + unit tests + API e2e (E2) | Merge into `main` (required checks) |
-| Release R1 | Version tag or manual home-image build | `pnpm test:unit:ci` | Build and push release images |
+| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + core unit tests + Web unit tests for Web-related changes + API e2e (E2) | Merge into `main` (required checks) |
+| Release R1 | Version tag or manual home-image build | Core unit tests + 4-way sharded Web unit tests | Build and push release images |
 
 There is **no** hard pre-commit gate. Full API e2e is **not** required on every local commit.
 
@@ -51,12 +51,12 @@ Workflow: [`.github/workflows/verify.yml`](../../.github/workflows/verify.yml)
 Jobs / checks (names must match branch protection):
 
 1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
-2. **`unit-tests`** — shared、AI contracts、Agent、API、Web 单元/回归测试 → `pnpm test:unit:ci`
+2. **`unit-tests`** — 聚合门禁：shared、AI contracts、Agent、API 单测始终执行；仅当 `apps/web`、Web 直接依赖或测试配置变化时，4 路并行执行 Web 单元/回归测试
 3. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
 
-`deploy-home.yml` 对标签发布和手动镜像构建复用同一 `test:unit:ci` 入口；测试失败时不构建、不推送镜像。
+`deploy-home.yml` 对标签发布和手动镜像构建并行执行核心单测与 4 路 Web 单测；任一分片失败时不构建、不推送镜像。
 
 `typecheck` must run `prisma generate` on a fresh checkout; committed tree does not include generated `@prisma/client` types.
 

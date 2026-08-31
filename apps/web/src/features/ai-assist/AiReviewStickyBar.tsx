@@ -67,6 +67,9 @@ export function AiReviewStickyBar({
               已建议修改{fieldList}。确认后写入{unit?.targetLabel}，拒绝后保留当前已保存值。
             </Typography.Text>
             <Typography.Text type="secondary">风险：{riskLabels}</Typography.Text>
+            {pendingReview.candidates.some((candidate) => candidate.clarity === 'needs_confirmation') ? (
+              <Typography.Text type="warning">含需确认字段，请对照证据后再写入</Typography.Text>
+            ) : null}
           </>
         ) : (
           <Alert type="error" showIcon title="审核包版本不受支持，请拒绝本次建议" />

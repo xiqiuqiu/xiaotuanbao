@@ -52,6 +52,33 @@ export class AiToolController {
     return this.aiToolHttpAdapter.searchRouteTemplates(request.user, body)
   }
 
+  @Post('v1/search-users')
+  @HttpCode(200)
+  searchUsers(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.searchUsers(request.user, body)
+  }
+
+  @Post('v1/search-suppliers')
+  @HttpCode(200)
+  searchSuppliers(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.searchSuppliers(request.user, body)
+  }
+
+  @Post('v1/search-partners')
+  @HttpCode(200)
+  searchPartners(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.searchPartners(request.user, body)
+  }
+
   @Post('v1/get-material-parse-result')
   @HttpCode(200)
   getMaterialParseResult(

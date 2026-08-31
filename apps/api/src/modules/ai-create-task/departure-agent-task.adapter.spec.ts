@@ -8,6 +8,9 @@ describe('DepartureAgentTaskAdapter #440', () => {
   it('provides the registered snapshot, field catalog, review submission, command and navigation', async () => {
     const tasks = {
       getTaskContextForAgent: jest.fn().mockResolvedValue({ snapshot: { routeName: '川西' } }),
+      searchUsersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
+      searchSuppliersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
+      searchPartnersForAgent: jest.fn().mockResolvedValue({ items: [], total: 0, hasMore: false }),
       proposeReviewPackageForAgent: jest.fn().mockResolvedValue({ status: 'accepted' }),
       submitReviewPackageForAgent: jest.fn().mockResolvedValue({ reviewPackageId: 'pkg-1' }),
       resolveOwnedReviewTaskId: jest.fn().mockResolvedValue('task-1'),
@@ -32,6 +35,9 @@ describe('DepartureAgentTaskAdapter #440', () => {
       DEPARTURE_BASIC_INFO_REVIEW_SCHEMA.confirmationUnits[0].fields,
     )
 
+    await adapter.searchUsers(caller as never, { keyword: '王杰' })
+    await adapter.searchSuppliers(caller as never, { keyword: '川西车队', category: 'transport' })
+    await adapter.searchPartners(caller as never, { keyword: '成都组团' })
     await adapter.proposeReview(caller as never, { objectVersion: 1 })
     await adapter.submitReview(caller as never, { objectVersion: 1 }, { sourceActionId: 'action-1' })
     await adapter.executeBusinessCommand({

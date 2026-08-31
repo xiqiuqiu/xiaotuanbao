@@ -156,4 +156,38 @@ describe('PendingCandidateOverlay', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(onCorrect).not.toHaveBeenCalled()
   })
+
+  it('marks an ambiguous related-object candidate as needing confirmation and shows material evidence #443', async () => {
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          {...reviewCoordinates}
+          fieldKey="driverSupplierId"
+          candidate={candidate({
+            fieldKey: 'driverSupplierId',
+            proposedValue: 'sup-1',
+            clarity: 'needs_confirmation',
+            evidence: [
+              {
+                kind: 'material_region',
+                materialId: 'mat-1',
+                parseResultVersion: 1,
+                pageNumber: 1,
+                excerpt: '司机：川西车队',
+              },
+            ],
+          })}
+          displayValue="川西车队"
+          savedDisplay="未选择"
+          onCorrect={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByText('需确认')).toBeInTheDocument()
+    expect(screen.getByLabelText('司机候选')).toHaveTextContent('川西车队')
+    await user.click(screen.getByRole('button', { name: '查看证据' }))
+    expect(screen.getByText('资料第 1 页：司机：川西车队')).toBeInTheDocument()
+  })
 })

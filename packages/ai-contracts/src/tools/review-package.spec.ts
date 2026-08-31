@@ -55,6 +55,9 @@ describe('submitReviewPackage contract v1', () => {
     expect(AI_CREATE_TOOL_NAMES).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
       'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
@@ -214,6 +217,9 @@ describe('submitReviewPackage contract v1', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
       'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
@@ -222,6 +228,9 @@ describe('submitReviewPackage contract v1', () => {
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

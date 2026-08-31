@@ -149,6 +149,8 @@ const DEPARTURE_BASIC_INFO_FIELDS = [
     { label: '独立团', value: 'independent' },
   ]),
   departureField('notes', '备注', 'text'),
+  departureField('driverSupplierId', '司机', 'reference'),
+  departureField('guideSupplierId', '导游', 'reference'),
   departureField('vehiclePlate', '车牌', 'text'),
   departureField('contactPhone', '联系电话', 'text'),
   departureField('expectedGuestCountHint', '预计人数提示', 'integer', {
