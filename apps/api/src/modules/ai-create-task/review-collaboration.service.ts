@@ -5,6 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import {
+  SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+} from '@xiaotuanbao/ai-contracts'
 import type {
   AcceptReviewConfirmationDto,
   DepartureCollaborationView,
@@ -22,12 +25,18 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
+import { SourceOrderService } from '../departure/source-order.service'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiConversationService } from './ai-conversation.service'
 import { reviewDecisionRequestHash } from './review-package.envelope'
-import { toReviewPackageView } from './review-package.mapper'
+import { reviewConfirmValues, toReviewPackageView } from './review-package.mapper'
+import { departureObjectVersion } from './review-package.projection'
+import {
+  sourceOrderWriteFromReviewValues,
+  valuesFromReviewPackage,
+} from './source-order-review.mapper'
 import { ensureDepartureCollaborationTaskInTx } from './ensure-departure-collaboration-task'
 import {
   REVIEW_CONFIRM_BATCH_OPERATION,
@@ -44,6 +53,7 @@ export class ReviewCollaborationService {
     private readonly tasks: AiCreateTaskService,
     private readonly conversations: AiConversationService,
     private readonly departures: DepartureService,
+    private readonly sourceOrders: SourceOrderService,
   ) {}
 
   async ensureDepartureCollaborationTask(
@@ -423,10 +433,12 @@ export class ReviewCollaborationService {
       throw new Error('REVIEW_CONFIRM_OPERATOR_MISSING')
     }
     if (pkg.status === AiReviewPackageStatus.confirmed) {
-      await this.completeItem(job, pkg, 'succeeded', {
-        objectKind: pkg.targetKind,
-        objectId: pkg.targetId,
-      })
+      await this.completeItem(
+        job,
+        pkg,
+        'succeeded',
+        await this.resultRefForConfirmedPackage(job, pkg),
+      )
       return
     }
     const snapshot = job.idempotencyRecord?.requestSnapshot as
@@ -474,8 +486,7 @@ export class ReviewCollaborationService {
   }
 
   /**
-   * #447 底座：协作事项确认只关闭待审包并写回执，不改 Departure / 客源 / 资源。
-   * 领域写入留给 #446、#449、#450。
+   * 客源单写入走 #446；其他协作事项仍只关闭待审包（#449/#450）。
    */
   private async confirmIndependentItem(
     organizationId: string,
@@ -498,6 +509,16 @@ export class ReviewCollaborationService {
       if (current.version !== expectedPackageVersion) {
         throw new ConflictException('审核包版本已变化，请刷新后重试')
       }
+      const departure = await tx.departure.findFirst({
+        where: { id: current.targetId, organizationId },
+        select: { updatedAt: true },
+      })
+      if (!departure) {
+        throw new ConflictException('发团不存在或已变化，请刷新后重试')
+      }
+      if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
+        throw new ConflictException('发团已变化，请刷新后重试')
+      }
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
@@ -512,6 +533,18 @@ export class ReviewCollaborationService {
       if (claimed.count !== 1) {
         throw new ConflictException('审核事项已处置')
       }
+      const resultRef = await this.writeIndependentItemInTx(tx, organizationId, current)
+      const view = toReviewPackageView(current)
+      const { corrections, submissions } = reviewConfirmValues(
+        view.candidates.map((candidate) => ({
+          fieldKey: candidate.fieldKey,
+          proposedValue: candidate.proposedValue,
+          userCorrectedValue: candidate.userCorrectedValue,
+          clarity: candidate.clarity,
+          status: candidate.status,
+          evidence: candidate.evidence,
+        })),
+      )
       await tx.aiReviewRecord.create({
         data: {
           organizationId,
@@ -519,12 +552,13 @@ export class ReviewCollaborationService {
           operatorUserId: userId,
           action: AiReviewRecordAction.confirm,
           packageVersion: expectedPackageVersion,
-          originalCandidates: pkg.candidates as Prisma.InputJsonValue,
-          userCorrections: pkg.userCorrections as Prisma.InputJsonValue,
-          submittedValues: pkg.userCorrections as Prisma.InputJsonValue,
+          originalCandidates: current.candidates as Prisma.InputJsonValue,
+          userCorrections: corrections as Prisma.InputJsonValue,
+          submittedValues: submissions as Prisma.InputJsonValue,
           evidence: [] as Prisma.InputJsonValue,
-          objectVersion: pkg.baseObjectVersion,
+          objectVersion: current.baseObjectVersion,
           writeResult: AiReviewWriteResult.success,
+          afterSnapshot: resultRef as Prisma.InputJsonValue,
         },
       })
       const events = await this.conversations.finalizeReviewDisposition(tx, {
@@ -535,10 +569,7 @@ export class ReviewCollaborationService {
         inputBatchId: pkg.inputBatchId,
         disposition: 'confirmed',
       })
-      await this.completeItemInTx(tx, job, pkg, 'succeeded', {
-        objectKind: pkg.targetKind,
-        objectId: pkg.targetId,
-      })
+      await this.completeItemInTx(tx, job, current, 'succeeded', resultRef)
       return { events }
     })
     for (const event of events) {
@@ -555,6 +586,46 @@ export class ReviewCollaborationService {
       return
     }
     await this.completeItem(job, job.reviewPackage, 'failed', undefined, reason, retryable)
+  }
+
+  private async resultRefForConfirmedPackage(
+    job: { idempotencyRecord?: { resultJson?: unknown } | null },
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    const fromResultJson = parseStoredResultRef(job.idempotencyRecord?.resultJson)
+    if (fromResultJson) {
+      return fromResultJson
+    }
+    const record = await this.prisma.aiReviewRecord.findFirst({
+      where: { packageId: pkg.id, writeResult: AiReviewWriteResult.success },
+      orderBy: { createdAt: 'desc' },
+      select: { afterSnapshot: true },
+    })
+    const fromSnapshot = parseStoredResultRef(record?.afterSnapshot)
+    if (fromSnapshot) {
+      return fromSnapshot
+    }
+    return { objectKind: pkg.targetKind, objectId: pkg.targetId }
+  }
+
+  private async writeIndependentItemInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    if (pkg.payloadSchema !== SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA) {
+      return { objectKind: pkg.targetKind, objectId: pkg.targetId }
+    }
+    const view = toReviewPackageView(pkg)
+    const { dto, guests } = sourceOrderWriteFromReviewValues(valuesFromReviewPackage(view))
+    const created = await this.sourceOrders.createWithSelectedGuests(
+      organizationId,
+      pkg.targetId,
+      dto,
+      guests,
+      tx,
+    )
+    return { objectKind: 'source_order', objectId: created.id }
   }
 
   private async completeItem(
@@ -606,5 +677,24 @@ export class ReviewCollaborationService {
       })
     }
   }
+}
+
+function parseStoredResultRef(raw: unknown): { objectKind: string; objectId: string } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  const nested = record.resultRef
+  const candidate =
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : record
+  if (typeof candidate.objectKind !== 'string' || typeof candidate.objectId !== 'string') {
+    return null
+  }
+  if (!candidate.objectKind || !candidate.objectId) {
+    return null
+  }
+  return { objectKind: candidate.objectKind, objectId: candidate.objectId }
 }
 

@@ -421,6 +421,45 @@ describe('AiCreateTaskService review disposition #440', () => {
     })
   })
 
+  it('merges group corrections instead of replacing the stored userCorrections table', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-merge-corrections',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      version: 1,
+      userCorrections: { name: '已改团名' },
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '候选团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名' }],
+        },
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-01',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月1日' }],
+        },
+      ],
+    }
+    const { service, tx } = createService(pkg)
+
+    await service.patchReviewPackage('org-1', 'user-1', 'task-1', pkg.id, {
+      corrections: { startDate: '2026-09-02' },
+      expectedPackageVersion: 1,
+    })
+
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: { id: pkg.id, status: AiReviewPackageStatus.pending, version: 1 },
+      data: expect.objectContaining({
+        userCorrections: { name: '已改团名', startDate: '2026-09-02' },
+      }),
+    })
+  })
+
   it('applies a valid registered proposal to the draft on confirm', async () => {
     const modelCandidate = {
       fieldKey: 'name' as const,

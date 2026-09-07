@@ -4,6 +4,8 @@ import { AI_REVIEWABLE_BASIC_INFO_FIELDS, type AiReviewableBasicInfoField } from
 export const DEPARTURE_REVIEW_TARGET_KIND = 'departure_creation_draft' as const
 export const DEPARTURE_REVIEW_PAYLOAD_SCHEMA = 'departure.basic_info_draft@v1' as const
 export const DEPARTURE_OBJECT_TARGET_KIND = 'departure' as const
+export const SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA = 'source_order.create@v1' as const
+export const SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT = 'source_order_create' as const
 export const DEFAULT_REVIEW_ITEM_IDENTITY = 'item:0' as const
 
 export const REVIEW_PROPOSAL_IDENTITY_FIELDS = [

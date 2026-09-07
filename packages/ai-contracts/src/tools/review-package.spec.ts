@@ -237,11 +237,21 @@ describe('submitReviewPackage contract v1', () => {
     ])
     expect(capabilitiesForPendingReview(false, true)).toEqual([
       'getTaskContext',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
+      'proposeReviewPackage',
+      'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
     ])
     expect(capabilitiesForPendingReview(true, true)).toEqual([
       'getTaskContext',
+      'searchUsers',
+      'searchSuppliers',
+      'searchPartners',
+      'proposeReviewPackage',
+      'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
     ])

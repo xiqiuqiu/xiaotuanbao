@@ -3,10 +3,8 @@ import {
   AI_EVIDENCE_PER_CANDIDATE_LIMIT,
   AI_EVIDENCE_PROPOSAL_JSON_MAX_BYTES,
   AI_EVIDENCE_SCHEMA_VERSION,
-  type AiReviewCandidateInput,
   type EvidenceProposalV1,
   type NormalizedEvidenceProposalV1,
-  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
   validateEvidenceProposal,
@@ -14,6 +12,7 @@ import {
   type EvidenceSystemRuleRegistry,
   type EvidenceValidationErrorCode,
 } from './evidence-validator'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 export type ReviewProposalErrorCode =
   | EvidenceValidationErrorCode
@@ -32,14 +31,14 @@ export type ReviewProposalValidationResult =
   | {
       success: true
       normalizedProposal: NormalizedEvidenceProposalV1
-      reviewPackage: SubmitReviewPackageModelInput
+      reviewPackage: ReviewPackageProposal
     }
   | { success: false; errors: ReviewProposalError[] }
 
 const EMPTY_RULES: EvidenceSystemRuleRegistry = {}
 
 export function validateReviewProposal(input: {
-  proposal: SubmitReviewPackageModelInput
+  proposal: ReviewPackageProposal
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): ReviewProposalValidationResult {
@@ -68,7 +67,7 @@ export function validateReviewProposal(input: {
   }
 }
 
-function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProposalError | null {
+function proposalLimitError(proposal: ReviewPackageProposal): ReviewProposalError | null {
   if (proposal.candidates.length > AI_EVIDENCE_CANDIDATE_LIMIT) {
     return {
       candidateIndex: 0,
@@ -100,21 +99,21 @@ function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProp
 }
 
 function toEvidenceProposal(
-  proposal: SubmitReviewPackageModelInput,
+  proposal: ReviewPackageProposal,
   authority: EvidenceAuthority,
 ): EvidenceProposalV1 {
   return {
     schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
     candidates: proposal.candidates.map((candidate) => ({
       candidateId: candidate.fieldKey,
-      proposedValue: candidate.proposedValue,
+      proposedValue: (candidate.proposedValue ?? null) as EvidenceProposalV1['candidates'][number]['proposedValue'],
       evidence: candidate.evidence.map((evidence) => toEvidenceItem(evidence, authority)),
     })),
   }
 }
 
 function toEvidenceItem(
-  evidence: AiReviewCandidateInput['evidence'][number],
+  evidence: ReviewPackageProposal['candidates'][number]['evidence'][number],
   authority: EvidenceAuthority,
 ): EvidenceProposalV1['candidates'][number]['evidence'][number] {
   if (evidence.kind === 'user_message') {

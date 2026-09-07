@@ -175,7 +175,7 @@ export class PatchAiReviewPackageDto {
   expectedPackageVersion!: number
 
   @IsObject()
-  corrections!: Record<string, string | number | null>
+  corrections!: Record<string, unknown>
 }
 
 export class SendAiConversationMessageDto {

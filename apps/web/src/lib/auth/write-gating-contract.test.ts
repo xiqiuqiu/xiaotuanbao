@@ -80,6 +80,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   retractQueuedAgentConversationBatch: { gating: 'public', endpointKey: null },
   retryFailedConversationBatch: { gating: 'public', endpointKey: null },
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  acceptReviewConfirmation: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   cancelAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },

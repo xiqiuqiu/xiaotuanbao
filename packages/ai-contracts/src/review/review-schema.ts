@@ -10,12 +10,13 @@ import {
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
 } from './envelope'
+import { SOURCE_ORDER_CREATE_REVIEW_SCHEMA } from './source-order-schema'
 
-export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'choice' | 'reference'
+export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'choice' | 'reference' | 'list'
 export type ReviewRiskLevel = 'standard' | 'sensitive' | 'high'
 export type ReviewSchemaCandidate = {
   fieldKey: string
-  proposedValue: string | number
+  proposedValue: unknown
   clarity: AiReviewCandidateInput['clarity']
   evidence: AiReviewCandidateInput['evidence']
 }
@@ -28,6 +29,7 @@ export type ReviewFieldDescriptor<FieldKey extends string = string> = {
   valueSchema: ZodType
   number?: { min?: number; max?: number; precision?: number }
   options?: readonly { label: string; value: string }[]
+  group?: string
   format: (value: unknown) => string
   evidence: {
     presentation: 'expandable'
@@ -182,6 +184,7 @@ export const DEPARTURE_BASIC_INFO_REVIEW_SCHEMA: ReviewSchema<AiReviewableBasicI
 
 export const registeredReviewSchemas = new ReviewSchemaRegistry([
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
+  SOURCE_ORDER_CREATE_REVIEW_SCHEMA,
 ])
 
 export function resolveReviewField(

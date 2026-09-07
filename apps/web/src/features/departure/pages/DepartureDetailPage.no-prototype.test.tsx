@@ -41,6 +41,10 @@ vi.mock('@/services/departure.service', () => ({
   getDeparture: vi.fn(),
 }))
 
+vi.mock('../components/DepartureSourceOrderReview', () => ({
+  DepartureSourceOrderReview: () => null,
+}))
+
 vi.mock('../components/DepartureHeader', () => ({
   DepartureHeader: () => <div>发团头</div>,
 }))

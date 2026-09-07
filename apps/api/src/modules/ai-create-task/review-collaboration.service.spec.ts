@@ -156,6 +156,12 @@ describe('ReviewCollaborationService #447', () => {
       },
       aiReviewRecord: { create: jest.fn().mockResolvedValue({}) },
       agentTask: { findFirst: jest.fn() },
+      departure: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'departure-1',
+          updatedAt: new Date(pendingPackage.baseObjectVersion),
+        }),
+      },
     }
     const prisma = {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
@@ -168,7 +174,10 @@ describe('ReviewCollaborationService #447', () => {
       },
       conversationDepartureLink: { findMany: jest.fn().mockResolvedValue([]) },
       aiReviewPackage: { findMany: jest.fn().mockResolvedValue([]) },
-      aiReviewRecord: { findMany: jest.fn().mockResolvedValue([]) },
+      aiReviewRecord: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     }
     const tasks = {
       confirmDepartureReviewPackage: jest.fn(),
@@ -178,13 +187,17 @@ describe('ReviewCollaborationService #447', () => {
       finalizeReviewDisposition: jest.fn().mockResolvedValue([]),
       publish: jest.fn(),
     }
+    const sourceOrders = {
+      createWithSelectedGuests: jest.fn().mockResolvedValue({ id: 'source-order-1' }),
+    }
     const service = new ReviewCollaborationService(
       prisma as never,
       tasks as never,
       conversations as never,
       { getById: jest.fn().mockResolvedValue({ id: 'departure-1' }) } as never,
+      sourceOrders as never,
     )
-    return { service, prisma, tx, tasks, conversations, jobs, packages }
+    return { service, prisma, tx, tasks, conversations, sourceOrders, jobs, packages }
   }
 
   it('accepts a multi-item confirmation and enqueues one job per item', async () => {
@@ -323,6 +336,117 @@ describe('ReviewCollaborationService #447', () => {
     expect(jobs).toHaveLength(0)
   })
 
+  it('writes a source order and selected guests when confirming a source-order package', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+      targetKind: 'departure',
+      targetId: 'departure-1',
+      candidates: [
+        {
+          fieldKey: 'partnerId',
+          proposedValue: 'partner-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户甲' }],
+        },
+        {
+          fieldKey: 'adultGuestCount',
+          proposedValue: 2,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '2成人' }],
+        },
+        {
+          fieldKey: 'childGuestCount',
+          proposedValue: 0,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无儿童' }],
+        },
+        {
+          fieldKey: 'adultUnitPriceCents',
+          proposedValue: 100000,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '1000元' }],
+        },
+        {
+          fieldKey: 'fareAdjustments',
+          proposedValue: [],
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无调整' }],
+        },
+        {
+          fieldKey: 'discountType',
+          proposedValue: 'none',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无优惠' }],
+        },
+        {
+          fieldKey: 'collectionMode',
+          proposedValue: 'partner_settled',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户结算' }],
+        },
+        {
+          fieldKey: 'guests',
+          proposedValue: [{ name: '王强', included: true }],
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '王强' }],
+        },
+      ],
+      userCorrections: {},
+    }
+    const { service, sourceOrders, prisma, tx } = createService({ packages: [sourcePackage] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-1',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(sourcePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).toHaveBeenCalledWith(
+      organizationId,
+      'departure-1',
+      expect.objectContaining({
+        partnerId: 'partner-1',
+        adultGuestCount: 2,
+        childGuestCount: 0,
+        collectionMode: 'partner_settled',
+      }),
+      [{ name: '王强' }],
+      tx,
+    )
+    expect(tx.aiWorkflowJob.update).toHaveBeenCalledWith({
+      where: { id: 'job-1' },
+      data: expect.objectContaining({ status: AiWorkflowJobStatus.succeeded }),
+    })
+    expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        submittedValues: expect.objectContaining({
+          partnerId: 'partner-1',
+          adultGuestCount: 2,
+          childGuestCount: 0,
+        }),
+      }),
+    })
+  })
+
   it('confirms an independent item in one transaction without the creation-draft path', async () => {
     const { service, tasks, conversations, prisma, tx } = createService()
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({
@@ -398,6 +522,52 @@ describe('ReviewCollaborationService #447', () => {
     })
   })
 
+  it('rejects independent confirm when the departure version no longer matches the package baseline', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+      baseObjectVersion: 3,
+      candidates: [
+        {
+          fieldKey: 'partnerId',
+          proposedValue: 'partner-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户甲' }],
+        },
+      ],
+    }
+    const { service, prisma, tx, sourceOrders } = createService({ packages: [sourcePackage] })
+    tx.departure.findFirst.mockResolvedValue({
+      id: 'departure-1',
+      updatedAt: new Date(99),
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(sourcePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith({
+      where: { id: 'idem-item-1' },
+      data: expect.objectContaining({
+        resultJson: expect.objectContaining({ status: 'conflict' }),
+      }),
+    })
+  })
+
   it('does not rewrite an already confirmed independent item', async () => {
     const { service, conversations, prisma, tx } = createService()
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({
@@ -413,6 +583,44 @@ describe('ReviewCollaborationService #447', () => {
 
     expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
     expect(conversations.finalizeReviewDisposition).not.toHaveBeenCalled()
+  })
+
+  it('keeps the source-order resultRef when re-entering a confirmed source-order item', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      status: AiReviewPackageStatus.confirmed,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+    }
+    const { service, prisma, tx, sourceOrders } = createService({ packages: [sourcePackage] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+        resultJson: {
+          status: 'succeeded',
+          packageId: 'pkg-1',
+          resultRef: { objectKind: 'source_order', objectId: 'source-order-1' },
+        },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith({
+      where: { id: 'idem-item-1' },
+      data: expect.objectContaining({
+        resultJson: expect.objectContaining({
+          resultRef: { objectKind: 'source_order', objectId: 'source-order-1' },
+        }),
+      }),
+    })
   })
 
   it('lists pending and disposed packages for an existing departure', async () => {

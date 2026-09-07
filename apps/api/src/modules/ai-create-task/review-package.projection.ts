@@ -4,9 +4,9 @@ import {
   DEPARTURE_REVIEW_TARGET_KIND,
   nextReviewItemIdentity,
   reviewItemIdentity,
-  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { reviewPackageCreateData } from './review-package.envelope'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 
@@ -26,7 +26,7 @@ export async function projectPendingReviewPackage(
     conversationId: string
     inputBatchId: string
     attemptId?: string | null
-    reviewPackage: SubmitReviewPackageModelInput
+    reviewPackage: ReviewPackageProposal
     sourceActionId: string
     itemIdentity?: string
     target?: ReviewPackageTarget
@@ -124,7 +124,7 @@ export async function projectPendingReviewPackages(
     inputBatchId: string
     attemptId?: string | null
     sourceActionId: string
-    reviewPackages: readonly SubmitReviewPackageModelInput[]
+    reviewPackages: readonly ReviewPackageProposal[]
     target?: ReviewPackageTarget
   },
 ): Promise<string[]> {
@@ -152,7 +152,7 @@ async function resolveReviewPackageTarget(
   params: {
     organizationId: string
     taskId: string
-    reviewPackage: SubmitReviewPackageModelInput
+    reviewPackage: ReviewPackageProposal
   },
 ): Promise<ReviewPackageTarget> {
   const agentTask = await tx.agentTask.findFirst({
@@ -273,7 +273,7 @@ async function allocateNextItemIdentity(
   return nextReviewItemIdentity([...rows.map((row) => row.itemIdentity), ...extraIdentities])
 }
 
-function departureObjectVersion(updatedAt: Date | string): number {
+export function departureObjectVersion(updatedAt: Date | string): number {
   const value = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt)
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error('REVIEW_PACKAGE_TASK_MISSING')

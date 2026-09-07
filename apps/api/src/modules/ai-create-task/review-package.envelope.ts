@@ -5,10 +5,11 @@ import {
   DEFAULT_REVIEW_ITEM_IDENTITY,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
-  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
-import { toStoredCandidates } from './review-package.mapper'
+import { toStoredCandidates, type ReviewPackageProposal } from './review-package.mapper'
 
 export function reviewProposalHash(payload: unknown): string {
   return createHash('sha256')
@@ -17,7 +18,7 @@ export function reviewProposalHash(payload: unknown): string {
 }
 
 export function departureReviewProposalHash(
-  reviewPackage: SubmitReviewPackageModelInput,
+  reviewPackage: ReviewPackageProposal,
 ): string {
   return reviewProposalHash({
     confirmationUnit: reviewPackage.confirmationUnit,
@@ -49,10 +50,15 @@ export function reviewPackageCreateData(params: {
   payloadSchema?: string
   baseObjectVersion: number
   baselineSnapshot: Prisma.InputJsonValue
-  reviewPackage: SubmitReviewPackageModelInput
+  reviewPackage: ReviewPackageProposal
 }): Prisma.AiReviewPackageCreateInput {
   const stored = toStoredCandidates(params.reviewPackage.candidates)
   const capability = AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage
+  const payloadSchema =
+    params.payloadSchema ??
+    (params.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
+      ? SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA
+      : DEPARTURE_REVIEW_PAYLOAD_SCHEMA)
   return {
     organization: { connect: { id: params.organizationId } },
     task: { connect: { id: params.taskId } },
@@ -62,7 +68,7 @@ export function reviewPackageCreateData(params: {
     sourceAction: { connect: { id: params.sourceActionId } },
     status: 'pending',
     confirmationUnit: params.reviewPackage.confirmationUnit,
-    payloadSchema: params.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+    payloadSchema,
     capabilityKey: capability.key,
     capabilityVersion: capability.version,
     targetKind: params.targetKind ?? DEPARTURE_REVIEW_TARGET_KIND,
