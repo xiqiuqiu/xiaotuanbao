@@ -295,7 +295,10 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/agent/review-packages/${pending.id}`)
-      .send({ corrections: { name: `${testPrefix}-修正团名` } })
+      .send({
+        corrections: { name: `${testPrefix}-修正团名` },
+        expectedPackageVersion: pending.version,
+      })
       .expect(200)
     expect(patched.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
     expect(patched.body.data.pendingReview.candidates[0].userCorrectedValue).toBe(
@@ -307,7 +310,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version,
-        expectedPackageVersion: pending.version,
+        expectedPackageVersion: patched.body.data.pendingReview.version,
         corrections: { name: `${testPrefix}-修正团名` },
       })
       .expect(200)

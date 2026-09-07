@@ -3,6 +3,8 @@ import { AI_REVIEWABLE_BASIC_INFO_FIELDS, type AiReviewableBasicInfoField } from
 
 export const DEPARTURE_REVIEW_TARGET_KIND = 'departure_creation_draft' as const
 export const DEPARTURE_REVIEW_PAYLOAD_SCHEMA = 'departure.basic_info_draft@v1' as const
+export const DEPARTURE_OBJECT_TARGET_KIND = 'departure' as const
+export const DEFAULT_REVIEW_ITEM_IDENTITY = 'item:0' as const
 
 export const REVIEW_PROPOSAL_IDENTITY_FIELDS = [
   'inputBatchId',
@@ -12,12 +14,19 @@ export const REVIEW_PROPOSAL_IDENTITY_FIELDS = [
   'proposalHash',
 ] as const
 
+export const REVIEW_ITEM_IDENTITY_FIELDS = ['inputBatchId', 'itemIdentity'] as const
+
 export type ReviewProposalIdentity = {
   inputBatchId: string
   capabilityVersion: number
   targetKind: string
   targetId: string
   proposalHash: string
+}
+
+export type ReviewItemIdentity = {
+  inputBatchId: string
+  itemIdentity: string
 }
 
 export type ReviewDecisionIdentity = {
@@ -35,6 +44,39 @@ export const reviewProposalIdentitySchema = z
     proposalHash: z.string().length(64),
   })
   .strip()
+
+export const reviewItemIdentitySchema = z
+  .object({
+    inputBatchId: z.string().min(1),
+    itemIdentity: z.string().min(1).max(80),
+  })
+  .strip()
+
+export function reviewItemIdentity(ordinal: number): string {
+  if (!Number.isInteger(ordinal) || ordinal < 0) {
+    throw new Error('REVIEW_ITEM_ORDINAL_INVALID')
+  }
+  return `item:${ordinal}`
+}
+
+export function parseReviewItemOrdinal(identity: string): number | null {
+  const matched = /^item:(\d+)$/.exec(identity)
+  if (!matched) {
+    return null
+  }
+  return Number(matched[1])
+}
+
+export function nextReviewItemIdentity(existing: readonly string[]): string {
+  let max = -1
+  for (const identity of existing) {
+    const ordinal = parseReviewItemOrdinal(identity)
+    if (ordinal != null && ordinal > max) {
+      max = ordinal
+    }
+  }
+  return reviewItemIdentity(max + 1)
+}
 
 export const reviewDecisionIdentitySchema = z
   .object({
@@ -54,6 +96,7 @@ export const reviewPackageEnvelopeSchema = z
     capabilityVersion: z.number().int().positive(),
     targetKind: z.string().min(1),
     targetId: z.string().min(1),
+    itemIdentity: z.string().min(1).max(80).default(DEFAULT_REVIEW_ITEM_IDENTITY),
     baseVersion: z.number().int().positive(),
     proposalHash: z.string().length(64),
     status: z.enum(['pending', 'confirmed', 'rejected', 'superseded', 'conflict', 'cancelled']),
@@ -87,6 +130,15 @@ export function sameReviewProposalIdentity(
   const parsedLeft = reviewProposalIdentitySchema.parse(left)
   const parsedRight = reviewProposalIdentitySchema.parse(right)
   return REVIEW_PROPOSAL_IDENTITY_FIELDS.every((field) => parsedLeft[field] === parsedRight[field])
+}
+
+export function sameReviewItemIdentity(
+  left: ReviewItemIdentity,
+  right: ReviewItemIdentity,
+): boolean {
+  const parsedLeft = reviewItemIdentitySchema.parse(left)
+  const parsedRight = reviewItemIdentitySchema.parse(right)
+  return REVIEW_ITEM_IDENTITY_FIELDS.every((field) => parsedLeft[field] === parsedRight[field])
 }
 
 export function isTargetVersionStale(baseVersion: number, currentVersion: number): boolean {

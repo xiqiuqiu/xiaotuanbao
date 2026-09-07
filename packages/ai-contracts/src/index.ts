@@ -216,18 +216,27 @@ export {
   type ReviewConfirmMergeResult,
 } from './review/merge-review-confirm'
 export {
+  DEFAULT_REVIEW_ITEM_IDENTITY,
+  DEPARTURE_OBJECT_TARGET_KIND,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
+  REVIEW_ITEM_IDENTITY_FIELDS,
   REVIEW_PROPOSAL_IDENTITY_FIELDS,
   canonicalizeReviewValue,
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
+  reviewItemIdentity,
+  nextReviewItemIdentity,
+  parseReviewItemOrdinal,
+  reviewItemIdentitySchema,
   reviewPackageEnvelopeSchema,
   reviewProposalIdentitySchema,
+  sameReviewItemIdentity,
   sameReviewProposalIdentity,
   type ReviewConflictChangeSummary,
   type ReviewDecisionIdentity,
+  type ReviewItemIdentity,
   type ReviewPackageEnvelope,
   type ReviewProposalIdentity,
 } from './review/envelope'
@@ -310,6 +319,10 @@ export {
   type RegisteredAgentIntent,
 } from './runtime/conversation-routing'
 export {
+  DEPARTURE_COLLABORATION_GOAL_INTENT_KEY,
+  DEPARTURE_COLLABORATION_ROUTING_DECISION,
+  DEPARTURE_COLLABORATION_TASK_DESCRIPTOR,
+  DEPARTURE_COLLABORATION_TASK_TYPE,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   DEPARTURE_CREATION_TASK_TYPE,
   TaskDescriptorRegistry,

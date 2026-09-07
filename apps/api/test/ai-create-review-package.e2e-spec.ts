@@ -231,7 +231,10 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/agent/review-packages/${packageId}`)
-      .send({ corrections: { name: `${testPrefix}-修正团名` } })
+      .send({
+        corrections: { name: `${testPrefix}-修正团名` },
+        expectedPackageVersion: 1,
+      })
       .expect(200)
     expect(patched.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
     expect(patched.body.data.pendingReview.candidates[0].userCorrectedValue).toBe(
@@ -257,7 +260,10 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${packageId}/confirm`)
-      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
+      .send({
+        expectedVersion: opened.version,
+        expectedPackageVersion: patched.body.data.pendingReview.version,
+      })
       .expect(200)
 
     expect(confirmed.body.data.pendingReview).toBeNull()
@@ -268,9 +274,15 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const records = await prisma.aiReviewRecord.findMany({
       where: { packageId },
+      orderBy: { createdAt: 'asc' },
     })
-    expect(records).toHaveLength(1)
+    expect(records).toHaveLength(2)
     expect(records[0]).toMatchObject({
+      action: 'revise',
+      writeResult: 'success',
+      operatorUserId: ownerUserId,
+    })
+    expect(records[1]).toMatchObject({
       action: 'confirm',
       writeResult: 'success',
       operatorUserId: ownerUserId,
@@ -302,7 +314,10 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/agent/review-packages/${packageId}`)
-      .send({ corrections: { startDate: null, expectedGuestCountHint: null } })
+      .send({
+        corrections: { startDate: null, expectedGuestCountHint: null },
+        expectedPackageVersion: 1,
+      })
       .expect(200)
     expect(patched.body.data.draft.snapshot.startDate).toBe('2026-09-01')
     expect(patched.body.data.draft.snapshot.expectedGuestCountHint).toBe(8)
@@ -317,7 +332,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .post(`/api/agent/review-packages/${packageId}/confirm`)
       .send({
         expectedVersion: opened.version,
-        expectedPackageVersion: 1,
+        expectedPackageVersion: patched.body.data.pendingReview.version,
         corrections: { startDate: null, expectedGuestCountHint: null },
       })
       .expect(200)

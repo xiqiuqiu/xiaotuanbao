@@ -421,6 +421,7 @@ function templateDetail(
 describe('CreateDepartureWizard', () => {
   afterEach(() => {
     cleanup()
+    vi.useRealTimers()
     vi.clearAllMocks()
     Modal.destroyAll()
     mockSearch = {}
@@ -432,6 +433,10 @@ describe('CreateDepartureWizard', () => {
   })
 
   beforeEach(() => {
+    vi.useFakeTimers({
+      now: new Date('2026-08-07T12:00:00.000Z'),
+      shouldAdvanceTime: true,
+    })
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.getState().reset()
@@ -2532,6 +2537,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { name: '修正团名' },
       })
     })
@@ -2601,6 +2607,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { name: '修正团名', expectedGuestCountHint: 12 },
       })
     })
@@ -2663,6 +2670,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { expectedGuestCountHint: null },
       })
     })

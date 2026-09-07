@@ -33,6 +33,7 @@ const stored = {
 
 function createHarness(options?: {
   transactionImpl?: (tx: Record<string, unknown>) => Promise<unknown>
+  pageLocator?: { kind: 'departure'; objectId: string }
 }) {
   const callOrder: string[] = []
   const storedObjectService = {
@@ -204,7 +205,15 @@ function createHarness(options?: {
     aiWorkflowJob,
     aiConversationDraft,
     taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
-    agentTask: { update: jest.fn() },
+    agentTask: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'collab-task-1',
+        status: AgentTaskStatus.active,
+        ...data,
+      })),
+      update: jest.fn(),
+    },
     conversationTaskLink: {
       findMany: jest.fn().mockResolvedValue([
         {
@@ -222,6 +231,9 @@ function createHarness(options?: {
           },
         },
       ]),
+    },
+    conversationDepartureLink: {
+      upsert: jest.fn().mockResolvedValue({ id: 'link-1' }),
     },
   }
 
@@ -270,7 +282,11 @@ function createHarness(options?: {
     { getPermissionKeysForUser: async () => ['departure:write'] } as never,
     { publish: jest.fn() } as never,
     materialService,
-    { resolve: jest.fn().mockResolvedValue(undefined) } as never,
+    { resolve: jest.fn().mockResolvedValue(
+      options?.pageLocator
+        ? { locator: options.pageLocator, objectVersion: 1, facts: {} }
+        : undefined,
+    ) } as never,
     { observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }), getCurrent: async () => null } as never,
   )
 
@@ -506,6 +522,46 @@ describe('AiConversationService.sendTasklessText linked departure task', () => {
         data: expect.objectContaining({
           taskId,
           kind: 'progress',
+        }),
+      }),
+    )
+  })
+})
+
+describe('AiConversationService.sendTasklessText existing departure #447', () => {
+  it('creates a collaboration task from the departure page without a creation draft', async () => {
+    const { service, tx } = createHarness({
+      pageLocator: { kind: 'departure', objectId: 'departure-1' },
+    })
+
+    await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '根据这份名单建客源',
+      'idem-collab',
+      undefined,
+      [],
+      { kind: 'departure', objectId: 'departure-1' },
+    )
+
+    expect(tx.conversationDepartureLink.upsert).toHaveBeenCalled()
+    expect(tx.agentTask.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'departure_collaboration',
+        departureId: 'departure-1',
+      }),
+    })
+    expect(tx.aiInputBatch.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskLinks: {
+            create: {
+              organizationId,
+              taskId: 'collab-task-1',
+              role: 'primary',
+            },
+          },
         }),
       }),
     )

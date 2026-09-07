@@ -5,6 +5,9 @@ import { versionedDefinitionRefSchema, type VersionedDefinitionRef } from './age
 export const DEPARTURE_CREATION_TASK_TYPE = 'departure_creation' as const
 export const DEPARTURE_CREATION_GOAL_INTENT_KEY = 'task.departure-creation.requested'
 export const DEPARTURE_CREATION_ROUTING_DECISION = 'propose_departure_creation' as const
+export const DEPARTURE_COLLABORATION_TASK_TYPE = 'departure_collaboration' as const
+export const DEPARTURE_COLLABORATION_GOAL_INTENT_KEY = 'task.departure-collaboration.requested'
+export const DEPARTURE_COLLABORATION_ROUTING_DECISION = 'propose_departure_collaboration' as const
 
 const taskTypeSchema = z
   .string()
@@ -172,8 +175,35 @@ export const DEPARTURE_CREATION_TASK_DESCRIPTOR: TaskDescriptor = {
   },
 }
 
+export const DEPARTURE_COLLABORATION_TASK_DESCRIPTOR: TaskDescriptor = {
+  taskType: DEPARTURE_COLLABORATION_TASK_TYPE,
+  version: 1,
+  defaultTitle: '发团协作',
+  attachmentLabel: '当前发团协作',
+  requiredPermissionKey: 'departure:write',
+  agentDefinition: { key: 'conversation.general', version: 1 },
+  registeredIntent: {
+    key: DEPARTURE_COLLABORATION_GOAL_INTENT_KEY,
+    routingDecision: DEPARTURE_COLLABORATION_ROUTING_DECISION,
+    kind: 'task_creation_proposal',
+  },
+  workspace: {
+    pathname: '/departure/$departureId',
+    taskIdSearchParam: 'taskId',
+  },
+  completedRoute: {
+    pathname: '/departure/$departureId',
+    objectIdParam: 'departureId',
+  },
+  activity: {
+    regionLabel: 'Agent 协作',
+    actionLabel: '查看协作',
+  },
+}
+
 export const registeredTaskDescriptors = new TaskDescriptorRegistry([
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  DEPARTURE_COLLABORATION_TASK_DESCRIPTOR,
 ])
 
 export function matchTaskWorkspaceAttachment(

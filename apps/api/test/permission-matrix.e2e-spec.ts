@@ -75,6 +75,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'POST', path: '/api/agent/review-packages/:packageId/reject' },
     { method: 'POST', path: '/api/agent/review-packages/:packageId/cancel' },
     { method: 'POST', path: '/api/agent/review-packages/:packageId/regenerate' },
+    { method: 'POST', path: '/api/agent/review-decisions' },
     { method: 'POST', path: '/api/departures/:id/copy' },
     { method: 'POST', path: '/api/departures/:id/formal-attachments' },
     { method: 'PATCH', path: '/api/departures/:id' },

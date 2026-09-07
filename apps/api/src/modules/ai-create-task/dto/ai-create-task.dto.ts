@@ -169,6 +169,11 @@ export class CancelAiReviewPackageDto {
 }
 
 export class PatchAiReviewPackageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedPackageVersion!: number
+
   @IsObject()
   corrections!: Record<string, string | number | null>
 }
@@ -288,4 +293,29 @@ export class ListAgentConversationsQueryDto {
   @Min(1)
   @Max(50)
   limit?: number
+}
+
+export class ReviewConfirmationItemDto {
+  @IsString()
+  @IsNotEmpty()
+  packageId!: string
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedPackageVersion!: number
+}
+
+export class AcceptReviewConfirmationDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  decisionCommandId!: string
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique((item: ReviewConfirmationItemDto) => item.packageId)
+  @ValidateNested({ each: true })
+  @Type(() => ReviewConfirmationItemDto)
+  items!: ReviewConfirmationItemDto[]
 }

@@ -125,6 +125,7 @@ export function toReviewPackageView(pkg: {
   targetKind?: string | null
   targetId?: string | null
   proposalHash?: string | null
+  itemIdentity?: string | null
   candidates: unknown
   baselineSnapshot: unknown
   userCorrections?: unknown
@@ -164,6 +165,7 @@ export function toReviewPackageView(pkg: {
     targetKind: pkg.targetKind ?? '',
     targetId: pkg.targetId ?? '',
     proposalHash: pkg.proposalHash ?? '',
+    itemIdentity: pkg.itemIdentity ?? undefined,
     candidates: (candidatePayloadSupported ? parsedCandidates : []).map((candidate) => ({
       fieldKey: candidate.fieldKey,
       proposedValue: candidate.proposedValue,
