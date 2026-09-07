@@ -3,6 +3,7 @@ import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
   ProposeReviewPackageOutput,
+  ProposeSegmentResourceReviewPackageOutput,
   ReadConversationHistoryOutput,
   ReadConversationSourceOutput,
   SearchPartnersOutput,
@@ -159,6 +160,14 @@ export class AiToolHttpAdapter {
     return this.domain.proposeReview(caller, body)
   }
 
+  proposeSegmentResourceReviewPackage(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ProposeSegmentResourceReviewPackageOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.domain.proposeSegmentResourceReview(caller, body)
+  }
+
   submitReviewPackage(
     user: AiToolRequestUser,
     body: unknown,
@@ -191,6 +200,7 @@ export class AiToolHttpAdapter {
       | 'searchPartners'
       | 'getMaterialParseResult'
       | 'proposeReviewPackage'
+      | 'proposeSegmentResourceReviewPackage'
       | 'readConversationHistory'
       | 'readConversationSource',
     user: AiToolRequestUser,

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
+import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
 
 export const USAGE_SOURCES = ['missing', 'estimated', 'actual'] as const
@@ -171,7 +172,10 @@ export const headlessAwaitingUserInputResultSchema = z
 export const headlessAwaitingReviewResultSchema = z
   .object({
     kind: z.literal('awaiting_review'),
-    reviewPackage: submitReviewPackageModelInputSchema,
+    reviewPackage: z.union([
+      submitReviewPackageModelInputSchema,
+      submitSegmentResourceReviewModelInputSchema,
+    ]),
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()

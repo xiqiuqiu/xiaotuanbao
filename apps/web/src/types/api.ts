@@ -118,6 +118,7 @@ export type {
   AcceptReviewConfirmationDto,
   ReviewConfirmationView,
   DepartureCollaborationView,
+  ReviewRevisionView,
   UpdateDepartureDto,
   TransitionDepartureDto,
   CloseDepartureDto,

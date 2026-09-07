@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-definitions'
+import { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-definitions'
 import { versionedDefinitionRefSchema, type VersionedDefinitionRef } from './agent-platform'
 
 export const DEPARTURE_CREATION_TASK_TYPE = 'departure_creation' as const
@@ -181,7 +182,7 @@ export const DEPARTURE_COLLABORATION_TASK_DESCRIPTOR: TaskDescriptor = {
   defaultTitle: '发团协作',
   attachmentLabel: '当前发团协作',
   requiredPermissionKey: 'departure:write',
-  agentDefinition: { key: 'conversation.general', version: 1 },
+  agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
   registeredIntent: {
     key: DEPARTURE_COLLABORATION_GOAL_INTENT_KEY,
     routingDecision: DEPARTURE_COLLABORATION_ROUTING_DECISION,

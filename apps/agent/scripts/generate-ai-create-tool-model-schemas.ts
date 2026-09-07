@@ -12,6 +12,7 @@ import {
   createSearchUsersTool,
 } from '../src/search-related-objects.tool'
 import { createSubmitReviewPackageTool } from '../src/submit-review-package.tool'
+import { createProposeSegmentResourceReviewTool } from '../src/propose-segment-resource-review.tool'
 import { createConversationRoutingTool } from '../src/conversation-routing.tool'
 
 const config = {
@@ -26,6 +27,7 @@ const tools = {
   searchSuppliers: createSearchSuppliersTool(config),
   searchPartners: createSearchPartnersTool(config),
   proposeReviewPackage: createSubmitReviewPackageTool(config),
+  proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
   readConversationHistory: createReadConversationHistoryTool(config),
   readConversationSource: createReadConversationSourceTool(config),

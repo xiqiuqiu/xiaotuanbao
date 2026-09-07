@@ -5,6 +5,9 @@ import {
   DEFAULT_REVIEW_ITEM_IDENTITY,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
+  DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
@@ -53,12 +56,7 @@ export function reviewPackageCreateData(params: {
   reviewPackage: ReviewPackageProposal
 }): Prisma.AiReviewPackageCreateInput {
   const stored = toStoredCandidates(params.reviewPackage.candidates)
-  const capability = AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage
-  const payloadSchema =
-    params.payloadSchema ??
-    (params.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
-      ? SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA
-      : DEPARTURE_REVIEW_PAYLOAD_SCHEMA)
+  const capability = capabilityRefForReviewPackage(params.reviewPackage.confirmationUnit)
   return {
     organization: { connect: { id: params.organizationId } },
     task: { connect: { id: params.taskId } },
@@ -68,7 +66,8 @@ export function reviewPackageCreateData(params: {
     sourceAction: { connect: { id: params.sourceActionId } },
     status: 'pending',
     confirmationUnit: params.reviewPackage.confirmationUnit,
-    payloadSchema,
+    payloadSchema:
+      params.payloadSchema ?? payloadSchemaForConfirmationUnit(params.reviewPackage.confirmationUnit),
     capabilityKey: capability.key,
     capabilityVersion: capability.version,
     targetKind: params.targetKind ?? DEPARTURE_REVIEW_TARGET_KIND,
@@ -80,4 +79,21 @@ export function reviewPackageCreateData(params: {
     candidates: stored as unknown as Prisma.InputJsonValue,
     version: 1,
   }
+}
+
+function capabilityRefForReviewPackage(confirmationUnit: string) {
+  if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
+    return DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF
+  }
+  return AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage
+}
+
+function payloadSchemaForConfirmationUnit(confirmationUnit: string) {
+  if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
+    return SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+  }
+  if (confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT) {
+    return SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA
+  }
+  return DEPARTURE_REVIEW_PAYLOAD_SCHEMA
 }

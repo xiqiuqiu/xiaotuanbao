@@ -210,6 +210,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "AgentServiceIdentityGuard+AiOperationDelegationGuard",
     "requiredKey": null,
+    "route": "POST /api/ai-tools/v1/propose-segment-resource-review-package",
+  },
+  {
+    "guards": "AgentServiceIdentityGuard+AiOperationDelegationGuard",
+    "requiredKey": null,
     "route": "POST /api/ai-tools/v1/read-conversation-history",
   },
   {
@@ -1074,6 +1079,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-tools/v1/get-material-parse-result [—]",
     "POST /api/ai-tools/v1/get-task-context [—]",
     "POST /api/ai-tools/v1/propose-review-package [—]",
+    "POST /api/ai-tools/v1/propose-segment-resource-review-package [—]",
     "POST /api/ai-tools/v1/read-conversation-history [—]",
     "POST /api/ai-tools/v1/read-conversation-source [—]",
     "POST /api/ai-tools/v1/search-partners [—]",
@@ -1273,6 +1279,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-tools/v1/get-material-parse-result [—]",
     "POST /api/ai-tools/v1/get-task-context [—]",
     "POST /api/ai-tools/v1/propose-review-package [—]",
+    "POST /api/ai-tools/v1/propose-segment-resource-review-package [—]",
     "POST /api/ai-tools/v1/read-conversation-history [—]",
     "POST /api/ai-tools/v1/read-conversation-source [—]",
     "POST /api/ai-tools/v1/search-partners [—]",
@@ -1426,6 +1433,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-tools/v1/get-material-parse-result [—]",
     "POST /api/ai-tools/v1/get-task-context [—]",
     "POST /api/ai-tools/v1/propose-review-package [—]",
+    "POST /api/ai-tools/v1/propose-segment-resource-review-package [—]",
     "POST /api/ai-tools/v1/read-conversation-history [—]",
     "POST /api/ai-tools/v1/read-conversation-source [—]",
     "POST /api/ai-tools/v1/search-partners [—]",

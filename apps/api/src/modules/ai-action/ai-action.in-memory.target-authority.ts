@@ -88,6 +88,8 @@ export function authorityForActor(actor: {
             ownerUserId: actor.userId ?? 'user-1',
             draftId: 'draft-1',
             draftVersion: 1,
+            departureId: null,
+            departureVersion: null,
           },
         ]
       : [],

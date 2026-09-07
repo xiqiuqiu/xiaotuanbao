@@ -2,6 +2,8 @@ import { AgentTaskType, type Prisma } from '@prisma/client'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
   DEPARTURE_REVIEW_TARGET_KIND,
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   nextReviewItemIdentity,
   reviewItemIdentity,
 } from '@xiaotuanbao/ai-contracts'
@@ -179,6 +181,10 @@ async function resolveReviewPackageTarget(
         name: agentTask.departure.name,
         status: agentTask.departure.status,
       } as Prisma.InputJsonValue,
+      payloadSchema:
+        params.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+          ? SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+          : undefined,
     }
   }
   const draft = agentTask.departureCreationTask?.draft

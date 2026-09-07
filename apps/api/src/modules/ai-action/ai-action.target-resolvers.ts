@@ -39,6 +39,7 @@ const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   searchSuppliers: resolveSupplierCatalog,
   searchPartners: resolvePartnerCatalog,
   proposeReviewPackage: resolveDepartureDraft,
+  proposeSegmentResourceReviewPackage: resolveDepartureObject,
   getMaterialParseResult: resolvePinnedMaterial,
   readConversationHistory: resolveConversation,
   readConversationSource: resolveConversationSource,
@@ -113,6 +114,45 @@ async function resolveOrganizationCatalog(
       id: actor.organizationId,
       organizationId: actor.organizationId,
       version: null,
+    },
+  }
+}
+
+async function resolveDepartureObject(
+  actor: AiActionActor,
+  input: unknown,
+  authority: AiActionTargetAuthority,
+): Promise<AiActionTargetResolveResult> {
+  if (!actor.taskId) {
+    return deny('TARGET_MISSING', { kind: 'departure', id: null })
+  }
+  const task = await authority.findTask(actor.taskId)
+  const targetRef = {
+    kind: 'departure',
+    id: task?.departureId ?? actor.taskId,
+  }
+  const mismatch = denyClaimedMismatch(actor, input, targetRef)
+  if (mismatch) {
+    return mismatch
+  }
+  const scoped = taskScope(actor, task, targetRef)
+  if (!scoped.ok) {
+    return scoped
+  }
+  if (!task?.departureId || task.departureVersion == null) {
+    return deny('TARGET_MISSING', targetRef)
+  }
+  const claimedVersion = claimedPositiveIntField(input, 'objectVersion')
+  if (claimedVersion === null || claimedVersion !== task.departureVersion) {
+    return deny('TARGET_VERSION_MISMATCH', { kind: 'departure', id: task.departureId })
+  }
+  return {
+    ok: true,
+    target: {
+      kind: 'departure',
+      id: task.departureId,
+      organizationId: task.organizationId,
+      version: task.departureVersion,
     },
   }
 }

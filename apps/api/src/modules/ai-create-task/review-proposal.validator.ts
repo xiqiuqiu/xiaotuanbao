@@ -59,11 +59,7 @@ export function validateReviewProposal(input: {
   return {
     success: true,
     normalizedProposal: evidenceResult.normalizedProposal,
-    reviewPackage: {
-      objectVersion: input.proposal.objectVersion,
-      confirmationUnit: input.proposal.confirmationUnit,
-      candidates: input.proposal.candidates,
-    },
+    reviewPackage: input.proposal,
   }
 }
 

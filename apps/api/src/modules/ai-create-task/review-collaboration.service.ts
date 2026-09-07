@@ -25,6 +25,7 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
+import { SegmentResourceService } from '../departure/segment-resource.service'
 import { SourceOrderService } from '../departure/source-order.service'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
@@ -45,6 +46,10 @@ import {
   reviewConfirmItemKey,
   reviewConfirmJobKey,
 } from './review-collaboration.constants'
+import {
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  resolveSegmentResourceReviewDraft,
+} from '@xiaotuanbao/ai-contracts'
 
 @Injectable()
 export class ReviewCollaborationService {
@@ -53,6 +58,7 @@ export class ReviewCollaborationService {
     private readonly tasks: AiCreateTaskService,
     private readonly conversations: AiConversationService,
     private readonly departures: DepartureService,
+    private readonly segmentResources: SegmentResourceService,
     private readonly sourceOrders: SourceOrderService,
   ) {}
 
@@ -433,11 +439,17 @@ export class ReviewCollaborationService {
       throw new Error('REVIEW_CONFIRM_OPERATOR_MISSING')
     }
     if (pkg.status === AiReviewPackageStatus.confirmed) {
+      const resultRef = await this.resultRefForConfirmedPackage(job, pkg)
+      if (!resultRef) {
+        await this.completeItem(job, pkg, 'failed', undefined,
+          '审核已确认，但正式记录引用缺失，请核对审核记录，勿重复创建', false)
+        return
+      }
       await this.completeItem(
         job,
         pkg,
         'succeeded',
-        await this.resultRefForConfirmedPackage(job, pkg),
+        resultRef,
       )
       return
     }
@@ -486,7 +498,7 @@ export class ReviewCollaborationService {
   }
 
   /**
-   * 客源单写入走 #446；其他协作事项仍只关闭待审包（#449/#450）。
+   * 客源单与行程段资源在同一事务写入正式记录，不自动生成应收或应付。
    */
   private async confirmIndependentItem(
     organizationId: string,
@@ -497,6 +509,15 @@ export class ReviewCollaborationService {
   ): Promise<void> {
     if (!pkg.taskId) {
       throw new BadRequestException('审核事项缺少任务')
+    }
+    if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
+      const resolution = resolveSegmentResourceReviewDraft(
+        reviewCandidateValues(pkg.candidates),
+        reviewCorrectionValues(pkg.userCorrections),
+      )
+      if (resolution.status !== 'ready') {
+        throw new BadRequestException(resolution.reason)
+      }
     }
     const { events } = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, pkg.taskId!)
@@ -577,6 +598,34 @@ export class ReviewCollaborationService {
     }
   }
 
+  private async writeConfirmedSegmentResource(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    const resolution = resolveSegmentResourceReviewDraft(
+      reviewCandidateValues(pkg.candidates),
+      reviewCorrectionValues(pkg.userCorrections),
+    )
+    if (resolution.status !== 'ready') {
+      throw new BadRequestException(resolution.reason)
+    }
+    const created = await this.segmentResources.createInTx(
+      tx,
+      organizationId,
+      resolution.draft.itinerarySegmentId,
+      {
+        resourceKind: resolution.draft.resourceKind,
+        supplierId: resolution.draft.supplierId,
+        title: resolution.draft.title,
+        amountCents: resolution.draft.amountCents,
+        notes: resolution.draft.notes ?? undefined,
+      },
+      { expectedDepartureId: pkg.targetId },
+    )
+    return { objectKind: 'segment_resource', objectId: created.id }
+  }
+
   async failConfirmedItem(jobId: string, reason: string, retryable = true): Promise<void> {
     const job = await this.prisma.aiWorkflowJob.findUnique({
       where: { id: jobId },
@@ -591,9 +640,12 @@ export class ReviewCollaborationService {
   private async resultRefForConfirmedPackage(
     job: { idempotencyRecord?: { resultJson?: unknown } | null },
     pkg: AiReviewPackage,
-  ): Promise<{ objectKind: string; objectId: string }> {
+  ): Promise<{ objectKind: string; objectId: string } | null> {
+    const expectedKind = pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+      ? 'segment_resource'
+      : pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ? 'source_order' : null
     const fromResultJson = parseStoredResultRef(job.idempotencyRecord?.resultJson)
-    if (fromResultJson) {
+    if (fromResultJson && (!expectedKind || fromResultJson.objectKind === expectedKind)) {
       return fromResultJson
     }
     const record = await this.prisma.aiReviewRecord.findFirst({
@@ -602,9 +654,10 @@ export class ReviewCollaborationService {
       select: { afterSnapshot: true },
     })
     const fromSnapshot = parseStoredResultRef(record?.afterSnapshot)
-    if (fromSnapshot) {
+    if (fromSnapshot && (!expectedKind || fromSnapshot.objectKind === expectedKind)) {
       return fromSnapshot
     }
+    if (expectedKind) return null
     return { objectKind: pkg.targetKind, objectId: pkg.targetId }
   }
 
@@ -613,6 +666,9 @@ export class ReviewCollaborationService {
     organizationId: string,
     pkg: AiReviewPackage,
   ): Promise<{ objectKind: string; objectId: string }> {
+    if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
+      return this.writeConfirmedSegmentResource(tx, organizationId, pkg)
+    }
     if (pkg.payloadSchema !== SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA) {
       return { objectKind: pkg.targetKind, objectId: pkg.targetId }
     }
@@ -677,6 +733,36 @@ export class ReviewCollaborationService {
       })
     }
   }
+}
+
+function reviewCandidateValues(
+  raw: unknown,
+): Array<{ fieldKey: string; proposedValue: string | number }> {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+    const candidate = item as { fieldKey?: unknown; proposedValue?: unknown }
+    if (typeof candidate.fieldKey !== 'string') {
+      return []
+    }
+    if (typeof candidate.proposedValue !== 'string' && typeof candidate.proposedValue !== 'number') {
+      return []
+    }
+    return [{ fieldKey: candidate.fieldKey, proposedValue: candidate.proposedValue }]
+  })
+}
+
+function reviewCorrectionValues(
+  raw: unknown,
+): Partial<Record<string, string | number | null>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined
+  }
+  return raw as Partial<Record<string, string | number | null>>
 }
 
 function parseStoredResultRef(raw: unknown): { objectKind: string; objectId: string } | null {

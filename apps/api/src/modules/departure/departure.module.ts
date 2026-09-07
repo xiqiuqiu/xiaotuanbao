@@ -74,6 +74,7 @@ import { RouteLedgerExportService } from './route-ledger-export.service'
     SourceOrderReceivableGapService,
     SegmentResourcePayableGapService,
     AccountGenerationGapService,
+    SegmentResourceService,
   ],
 })
 export class DepartureModule {}
