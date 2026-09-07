@@ -432,10 +432,12 @@ export class ReviewCollaborationService {
       throw new Error('REVIEW_CONFIRM_OPERATOR_MISSING')
     }
     if (pkg.status === AiReviewPackageStatus.confirmed) {
-      await this.completeItem(job, pkg, 'succeeded', {
-        objectKind: pkg.targetKind,
-        objectId: pkg.targetId,
-      })
+      await this.completeItem(
+        job,
+        pkg,
+        'succeeded',
+        await this.resultRefForConfirmedPackage(job, pkg),
+      )
       return
     }
     const snapshot = job.idempotencyRecord?.requestSnapshot as
@@ -564,6 +566,26 @@ export class ReviewCollaborationService {
     await this.completeItem(job, job.reviewPackage, 'failed', undefined, reason, retryable)
   }
 
+  private async resultRefForConfirmedPackage(
+    job: { idempotencyRecord?: { resultJson?: unknown } | null },
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    const fromResultJson = parseStoredResultRef(job.idempotencyRecord?.resultJson)
+    if (fromResultJson) {
+      return fromResultJson
+    }
+    const record = await this.prisma.aiReviewRecord.findFirst({
+      where: { packageId: pkg.id, writeResult: AiReviewWriteResult.success },
+      orderBy: { createdAt: 'desc' },
+      select: { afterSnapshot: true },
+    })
+    const fromSnapshot = parseStoredResultRef(record?.afterSnapshot)
+    if (fromSnapshot) {
+      return fromSnapshot
+    }
+    return { objectKind: pkg.targetKind, objectId: pkg.targetId }
+  }
+
   private async writeIndependentItemInTx(
     tx: Prisma.TransactionClient,
     organizationId: string,
@@ -633,5 +655,24 @@ export class ReviewCollaborationService {
       })
     }
   }
+}
+
+function parseStoredResultRef(raw: unknown): { objectKind: string; objectId: string } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  const nested = record.resultRef
+  const candidate =
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : record
+  if (typeof candidate.objectKind !== 'string' || typeof candidate.objectId !== 'string') {
+    return null
+  }
+  if (!candidate.objectKind || !candidate.objectId) {
+    return null
+  }
+  return { objectKind: candidate.objectKind, objectId: candidate.objectId }
 }
 

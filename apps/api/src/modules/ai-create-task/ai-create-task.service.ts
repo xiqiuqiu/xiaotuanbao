@@ -76,7 +76,10 @@ import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
-import { projectPendingReviewPackage } from './review-package.projection'
+import {
+  departureObjectVersion,
+  projectPendingReviewPackage,
+} from './review-package.projection'
 import { parseSubmitReviewPackageInput } from './source-order-review.mapper'
 import { DepartureMaterialService } from './departure-material.service'
 import {
@@ -189,6 +192,18 @@ export class AiCreateTaskService {
       dto.expectedVersion,
       dto.draft,
     )
+  }
+
+  private assertCollaborationObjectVersion(
+    updatedAt: Date | string | null | undefined,
+    objectVersion: number,
+  ): void {
+    if (updatedAt == null) {
+      throw new NotFoundException('任务不存在')
+    }
+    if (departureObjectVersion(updatedAt) !== objectVersion) {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
   }
 
   private async requireRunningAttempt(caller: {
@@ -549,6 +564,7 @@ export class AiCreateTaskService {
 
     const agentTask = await this.prisma.agentTask.findFirst({
       where: { id: caller.taskId, organizationId: caller.organizationId },
+      include: { departure: { select: { updatedAt: true } } },
     })
     if (!agentTask) {
       throw new NotFoundException('任务不存在')
@@ -569,7 +585,9 @@ export class AiCreateTaskService {
             where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
             include: TASK_WITH_PENDING_INCLUDE,
           })
-    if (agentTask.type !== AgentTaskType.departure_collaboration) {
+    if (agentTask.type === AgentTaskType.departure_collaboration) {
+      this.assertCollaborationObjectVersion(agentTask.departure?.updatedAt, input.objectVersion)
+    } else {
       if (!createTask?.draft) {
         throw new NotFoundException('AI 建团任务不存在')
       }
@@ -646,6 +664,7 @@ export class AiCreateTaskService {
 
       const agentTask = await tx.agentTask.findFirst({
         where: { id: caller.taskId, organizationId: caller.organizationId },
+        include: { departure: { select: { updatedAt: true } } },
       })
       if (!agentTask) {
         throw new NotFoundException('任务不存在')
@@ -666,7 +685,9 @@ export class AiCreateTaskService {
               where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
               include: TASK_WITH_PENDING_INCLUDE,
             })
-      if (agentTask.type !== AgentTaskType.departure_collaboration) {
+      if (agentTask.type === AgentTaskType.departure_collaboration) {
+        this.assertCollaborationObjectVersion(agentTask.departure?.updatedAt, input.objectVersion)
+      } else {
         if (!task?.draft) {
           throw new NotFoundException('AI 建团任务不存在')
         }

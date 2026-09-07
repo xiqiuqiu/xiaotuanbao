@@ -168,7 +168,10 @@ describe('ReviewCollaborationService #447', () => {
       },
       conversationDepartureLink: { findMany: jest.fn().mockResolvedValue([]) },
       aiReviewPackage: { findMany: jest.fn().mockResolvedValue([]) },
-      aiReviewRecord: { findMany: jest.fn().mockResolvedValue([]) },
+      aiReviewRecord: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     }
     const tasks = {
       confirmDepartureReviewPackage: jest.fn(),
@@ -519,6 +522,44 @@ describe('ReviewCollaborationService #447', () => {
 
     expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
     expect(conversations.finalizeReviewDisposition).not.toHaveBeenCalled()
+  })
+
+  it('keeps the source-order resultRef when re-entering a confirmed source-order item', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      status: AiReviewPackageStatus.confirmed,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+    }
+    const { service, prisma, tx, sourceOrders } = createService({ packages: [sourcePackage] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+        resultJson: {
+          status: 'succeeded',
+          packageId: 'pkg-1',
+          resultRef: { objectKind: 'source_order', objectId: 'source-order-1' },
+        },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith({
+      where: { id: 'idem-item-1' },
+      data: expect.objectContaining({
+        resultJson: expect.objectContaining({
+          resultRef: { objectKind: 'source_order', objectId: 'source-order-1' },
+        }),
+      }),
+    })
   })
 
   it('lists pending and disposed packages for an existing departure', async () => {

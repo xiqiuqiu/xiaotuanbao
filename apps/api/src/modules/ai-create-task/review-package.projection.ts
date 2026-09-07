@@ -273,7 +273,7 @@ async function allocateNextItemIdentity(
   return nextReviewItemIdentity([...rows.map((row) => row.itemIdentity), ...extraIdentities])
 }
 
-function departureObjectVersion(updatedAt: Date | string): number {
+export function departureObjectVersion(updatedAt: Date | string): number {
   const value = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt)
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error('REVIEW_PACKAGE_TASK_MISSING')
