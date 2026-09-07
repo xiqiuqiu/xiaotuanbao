@@ -439,11 +439,17 @@ export class ReviewCollaborationService {
       throw new Error('REVIEW_CONFIRM_OPERATOR_MISSING')
     }
     if (pkg.status === AiReviewPackageStatus.confirmed) {
+      const resultRef = await this.resultRefForConfirmedPackage(job, pkg)
+      if (!resultRef) {
+        await this.completeItem(job, pkg, 'failed', undefined,
+          '审核已确认，但正式记录引用缺失，请核对审核记录，勿重复创建', false)
+        return
+      }
       await this.completeItem(
         job,
         pkg,
         'succeeded',
-        await this.resultRefForConfirmedPackage(job, pkg),
+        resultRef,
       )
       return
     }
@@ -634,9 +640,12 @@ export class ReviewCollaborationService {
   private async resultRefForConfirmedPackage(
     job: { idempotencyRecord?: { resultJson?: unknown } | null },
     pkg: AiReviewPackage,
-  ): Promise<{ objectKind: string; objectId: string }> {
+  ): Promise<{ objectKind: string; objectId: string } | null> {
+    const expectedKind = pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+      ? 'segment_resource'
+      : pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ? 'source_order' : null
     const fromResultJson = parseStoredResultRef(job.idempotencyRecord?.resultJson)
-    if (fromResultJson) {
+    if (fromResultJson && (!expectedKind || fromResultJson.objectKind === expectedKind)) {
       return fromResultJson
     }
     const record = await this.prisma.aiReviewRecord.findFirst({
@@ -645,9 +654,10 @@ export class ReviewCollaborationService {
       select: { afterSnapshot: true },
     })
     const fromSnapshot = parseStoredResultRef(record?.afterSnapshot)
-    if (fromSnapshot) {
+    if (fromSnapshot && (!expectedKind || fromSnapshot.objectKind === expectedKind)) {
       return fromSnapshot
     }
+    if (expectedKind) return null
     return { objectKind: pkg.targetKind, objectId: pkg.targetId }
   }
 

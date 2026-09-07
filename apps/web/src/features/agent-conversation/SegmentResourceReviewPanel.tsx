@@ -7,7 +7,6 @@ import {
   resolveReviewField,
   resolveSegmentResourceReviewDraft,
 } from '@xiaotuanbao/ai-contracts'
-import { ResourceKind } from '@xiaotuanbao/shared'
 import type { AiReviewCandidateView, AiReviewPackageView, ReviewConfirmationView } from '@/types/api'
 import { useAuthStore } from '@/app/store/auth.store'
 import { canEditDeparture } from '@/features/departure/utils/departure-permission'
@@ -137,11 +136,11 @@ function SegmentResourceReviewItem({
   const resourceKind = candidateValue(kindCandidate)
   const supplierCandidate = pkg.candidates.find((candidate) => candidate.fieldKey === 'supplierId')
   const supplierId = candidateValue(supplierCandidate)
-  const kindForSearch =
-    typeof resourceKind === 'string' ? (resourceKind as ResourceKind) : ResourceKind.HOTEL
+  const kindForSearch = KIND_OPTIONS.find((option) => option.value === resourceKind)?.value
 
   const suppliersQuery = useQuery({
     queryKey: ['review-suppliers', kindForSearch, supplierSearch],
+    enabled: kindForSearch !== undefined,
     queryFn: () =>
       listSuppliers({
         search: supplierSearch || undefined,
@@ -358,9 +357,9 @@ function SegmentResourceReviewItem({
               value: supplier.id,
               label: supplier.name,
             }))}
-            placeholder="请选择已有供应商或先通过普通入口维护供应商档案"
+            placeholder={kindForSearch ? "请选择已有供应商或先通过普通入口维护供应商档案" : "请先选择资源种类"}
             notFoundContent="请选择已有供应商或先通过普通入口维护供应商档案"
-            disabled={!canEdit || !pending}
+            disabled={!canEdit || !pending || !kindForSearch}
             onSearch={setSupplierSearch}
             onChange={(value) => patchField('supplierId', value)}
           />

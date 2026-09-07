@@ -287,6 +287,15 @@ describe('SegmentResourceReviewPanel #449', () => {
     }
   })
 
+  it('disables supplier search until a resource kind is selected', async () => {
+    const pkg = packageView()
+    pkg.candidates = pkg.candidates.filter((item) => item.fieldKey !== 'resourceKind')
+    getDepartureCollaboration.mockResolvedValue(collaboration([pkg]))
+    renderPanel()
+    expect(await screen.findByRole('combobox', { name: '供应商候选' })).toBeDisabled()
+    expect(listSuppliers).not.toHaveBeenCalled()
+  })
+
   it('blocks confirm when the material did not determine a segment', async () => {
     getDepartureCollaboration.mockResolvedValue(
       collaboration([

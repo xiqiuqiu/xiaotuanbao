@@ -632,6 +632,45 @@ describe('ReviewCollaborationService #447', () => {
     })
   })
 
+  it.each([
+    ['departure.segment_resource@v1', 'segment_resource'],
+    ['source_order.create@v1', 'source_order'],
+  ])('does not invent a result for a confirmed %s package with no receipt', async (payloadSchema) => {
+    const pkg = { ...pendingPackage, payloadSchema, status: AiReviewPackageStatus.confirmed }
+    const { service, prisma, tx, segmentResources, sourceOrders } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1', type: AiWorkflowJobType.review_confirm, organizationId, reviewPackage: pkg,
+      idempotencyRecord: { operatorUserId: userId, resultJson: {} },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    await service.executeConfirmedItem('job-1')
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ resultJson: expect.objectContaining({
+        status: 'failed', retryable: false,
+        reason: '审核已确认，但正式记录引用缺失，请核对审核记录，勿重复创建',
+      }) }),
+    }))
+    expect(segmentResources.createInTx).not.toHaveBeenCalled()
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('recovers a confirmed resource reference from its successful review record', async () => {
+    const pkg = { ...pendingPackage, payloadSchema: 'departure.segment_resource@v1', status: AiReviewPackageStatus.confirmed }
+    const { service, prisma, tx } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1', type: AiWorkflowJobType.review_confirm, organizationId, reviewPackage: pkg,
+      idempotencyRecord: { operatorUserId: userId, resultJson: {} }, idempotencyRecordId: 'idem-item-1',
+    })
+    prisma.aiReviewRecord.findFirst.mockResolvedValue({ afterSnapshot: { objectKind: 'segment_resource', objectId: 'res-1' } })
+    await service.executeConfirmedItem('job-1')
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ resultJson: expect.objectContaining({
+        status: 'succeeded', resultRef: { objectKind: 'segment_resource', objectId: 'res-1' },
+      }) }),
+    }))
+  })
+
   it('lists pending and disposed packages for an existing departure', async () => {
     const { service, prisma } = createService()
     prisma.conversationDepartureLink.findMany.mockResolvedValue([
