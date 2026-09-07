@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { AgentTaskStatus, AiCreateActivityRunStatus } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiCreateActivityRunStatus } from '@prisma/client'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AI_EVIDENCE_PER_CANDIDATE_LIMIT } from '@xiaotuanbao/ai-contracts'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -58,6 +58,15 @@ function createService() {
     attemptUpdate: jest.fn(),
   }
   const store = {
+    agentTask: {
+      findFirst: jest.fn().mockResolvedValue({
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        type: AgentTaskType.departure_creation,
+      }),
+    },
     aiCreateTask: {
       findFirst: jest.fn().mockResolvedValue({
         id: taskId,
