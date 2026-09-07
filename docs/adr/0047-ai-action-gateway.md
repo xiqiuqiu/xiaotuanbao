@@ -4,6 +4,8 @@ status: accepted
 
 # AI 动作经统一网关先决策、先记录、再执行
 
+> **2026-09-07 本轮适用性更新：** 客源与执行资源以 [#483](https://github.com/xiqiuqiu/xiaotuanbao/issues/483) 和其当前业务规格为准。下文涉及独立全局入口、中间表单/右侧聊天、建团阶段前置、单待审包或默认全表编辑的历史条款，在本轮范围内已被替代，不是开发验收或依赖。现有代码限制须按新方案调整；权限、组织隔离、来源验证、金额和幂等保护继续有效。历史文字保留用于追溯，不重新赋予旧条款效力。
+
 > 本 ADR 以 AI 建团四个工具完成首个治理竖切；通用 Agent 平台的会话、任务与框架职责见 [ADR-0048](./0048-conversation-first-agent-platform-and-framework-boundaries.md)。后续业务扩展同一个 Action Gateway 与能力注册表，不复制建团专属网关。
 
 ADR-0046 已把 AI 建团的执行生命周期收到服务端。生产主写却仍绕过统一治理：无头执行从 toolCalls 抽出候选，Worker 的 `persistReviewPackage()` 直接插入 AI 阶段审核包；HTTP `AiToolController` 四个 `v1/*` 在 Guard 通过后直调 `*ForAgent()`。两者都不能回答「提出了什么、对哪个真实对象、为何允许、是否已经发生」。
