@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -207,6 +207,66 @@ describe('SegmentResourceReviewPanel #449', () => {
     expect(acceptReviewConfirmation).toHaveBeenCalledTimes(1)
     expect(confirmAiReviewPackage).not.toHaveBeenCalled()
     expect(generatePayable).not.toHaveBeenCalled()
+  })
+
+  it('confirms the saved version when a correction is immediately followed by confirm', async () => {
+    let stored = packageView()
+    getDepartureCollaboration.mockImplementation(async () => collaboration([stored]))
+    patchAiReviewPackage.mockImplementation(async (_taskId, _packageId, input) => {
+      stored = packageView({ version: input.expectedPackageVersion + 1 })
+      return { pendingReviews: [stored], pendingReview: stored }
+    })
+    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
+    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
+    ))
+  })
+
+  it('waits for an in-flight debounced save and drains later corrections before confirming', async () => {
+    let finishSave!: () => void
+    let stored = packageView()
+    getDepartureCollaboration.mockImplementation(async () => collaboration([stored]))
+    patchAiReviewPackage.mockImplementation(async (_taskId, _packageId, input) => {
+      if (input.expectedPackageVersion === 1) await new Promise<void>((resolve) => { finishSave = resolve })
+      stored = packageView({ version: input.expectedPackageVersion + 1 })
+      return { pendingReviews: [stored], pendingReview: stored }
+    })
+    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    await waitFor(() => expect(patchAiReviewPackage).toHaveBeenCalledTimes(1))
+    fireEvent.change(screen.getByLabelText('约定总价候选'), { target: { value: '9000' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
+    expect(acceptReviewConfirmation).not.toHaveBeenCalled()
+    finishSave()
+    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 3 }] }),
+    ))
+    expect(patchAiReviewPackage.mock.calls[1][2]).toEqual({
+      expectedPackageVersion: 2, corrections: { amountCents: 900000 },
+    })
+  })
+
+  it('retains failed corrections for retry and does not confirm unsaved changes', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    patchAiReviewPackage.mockRejectedValueOnce(new Error('保存失败')).mockResolvedValue({
+      pendingReviews: [packageView({ version: 2 })],
+    })
+    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
+    await screen.findByText('保存失败')
+    expect(acceptReviewConfirmation).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
+    await waitFor(() => expect(patchAiReviewPackage).toHaveBeenCalledTimes(2))
+    expect(patchAiReviewPackage.mock.calls[1][2].corrections).toEqual({ title: '修订住宿' })
+    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
+    ))
   })
 
   it('blocks confirm when the material did not determine a segment', async () => {

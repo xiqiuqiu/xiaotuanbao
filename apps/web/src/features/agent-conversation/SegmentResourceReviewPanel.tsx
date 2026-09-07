@@ -106,6 +106,8 @@ function SegmentResourceReviewItem({
   const pendingCorrections = useRef<Record<string, string | number | null>>({})
   const correctTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const decisionCommandIds = useRef<Record<string, string>>({})
+  const savedVersion = useRef(pkg.version)
+  const savingCorrections = useRef<Promise<void> | null>(null)
   const [supplierSearch, setSupplierSearch] = useState('')
   const [evidenceOpen, setEvidenceOpen] = useState(false)
 
@@ -118,6 +120,14 @@ function SegmentResourceReviewItem({
   useEffect(() => {
     pendingCorrections.current = {}
   }, [pkg.id])
+
+  useEffect(() => {
+    savedVersion.current = Math.max(savedVersion.current, pkg.version)
+  }, [pkg.version])
+
+  useEffect(() => () => {
+    if (correctTimer.current) clearTimeout(correctTimer.current)
+  }, [])
 
   const segmentsQuery = useQuery({
     queryKey: ['segments', departureId],
@@ -150,17 +160,37 @@ function SegmentResourceReviewItem({
       clearTimeout(correctTimer.current)
       correctTimer.current = null
     }
-    const corrections = { ...pendingCorrections.current }
-    if (Object.keys(corrections).length === 0) return
-    pendingCorrections.current = {}
-    await patchAiReviewPackage('', pkg.id, {
-      expectedPackageVersion: pkg.version,
-      corrections,
-    })
-    await queryClient.invalidateQueries({
-      queryKey: ['departure-collaboration', departureId],
-    })
-  }, [departureId, pkg.id, pkg.version, queryClient])
+    while (savingCorrections.current || Object.keys(pendingCorrections.current).length > 0) {
+      if (savingCorrections.current) {
+        await savingCorrections.current
+        continue
+      }
+      const corrections = { ...pendingCorrections.current }
+      pendingCorrections.current = {}
+      savingCorrections.current = (async () => {
+        try {
+          const summary = await patchAiReviewPackage('', pkg.id, {
+            expectedPackageVersion: savedVersion.current,
+            corrections,
+          })
+          const updated = summary.pendingReviews?.find((item) => item.id === pkg.id)
+            ?? (summary.pendingReview?.id === pkg.id ? summary.pendingReview : undefined)
+          if (!updated) throw new Error('未取得修订后的审核包，请刷新后重试')
+          savedVersion.current = updated.version
+        } catch (error) {
+          pendingCorrections.current = { ...corrections, ...pendingCorrections.current }
+          throw error
+        } finally {
+          savingCorrections.current = null
+        }
+      })()
+      await savingCorrections.current
+      await queryClient.invalidateQueries({
+        queryKey: ['departure-collaboration', departureId],
+      })
+    }
+    return savedVersion.current
+  }, [departureId, pkg.id, queryClient])
 
   const patchField = useCallback(
     (fieldKey: string, value: string | number | null) => {
@@ -177,14 +207,14 @@ function SegmentResourceReviewItem({
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      await flushCorrections()
-      const decisionKey = `${pkg.id}:${pkg.version}`
+      const expectedPackageVersion = await flushCorrections()
+      const decisionKey = `${pkg.id}:${expectedPackageVersion}`
       const decisionCommandId =
         decisionCommandIds.current[decisionKey] ?? crypto.randomUUID()
       decisionCommandIds.current[decisionKey] = decisionCommandId
       const accepted = await acceptReviewConfirmation({
         decisionCommandId,
-        items: [{ packageId: pkg.id, expectedPackageVersion: pkg.version }],
+        items: [{ packageId: pkg.id, expectedPackageVersion }],
       })
       const deadline = Date.now() + 15_000
       let latest = accepted
@@ -202,7 +232,9 @@ function SegmentResourceReviewItem({
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
       if (item?.status === 'succeeded') {
         message.success('已写入行程段资源，未提交应付')
-        delete decisionCommandIds.current[`${pkg.id}:${pkg.version}`]
+        for (const [key, commandId] of Object.entries(decisionCommandIds.current)) {
+          if (commandId === result.decisionCommandId) delete decisionCommandIds.current[key]
+        }
       } else if (item?.status === 'accepted' || item?.status === 'queued' || item?.status === 'running') {
         message.info('正在核对提交结果')
       } else if (item?.reason) {
