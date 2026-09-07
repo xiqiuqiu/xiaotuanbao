@@ -168,6 +168,17 @@ describe('AiCreateTaskService.proposeSegmentResourceReviewPackageForAgent #449',
     expect(writes.reviewCreate).not.toHaveBeenCalled()
   })
 
+  it('retains an unmatched supplier candidate for review without writing formal resources (R7)', async () => {
+    const { service, writes } = createService()
+    const result = await service.proposeSegmentResourceReviewPackageForAgent(caller, {
+      taskId, runId, objectVersion,
+      candidates: candidates({ supplierId: 'unmatched-supplier' }),
+    })
+    expect(result).toMatchObject({ status: 'accepted' })
+    expect(writes.actionCreate).not.toHaveBeenCalled()
+    expect(writes.reviewCreate).not.toHaveBeenCalled()
+  })
+
   it('rejects a segment that does not belong to the formal departure', async () => {
     const { service, writes } = createService({ segmentId: null })
 

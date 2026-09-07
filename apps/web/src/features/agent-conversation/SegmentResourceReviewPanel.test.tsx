@@ -269,6 +269,24 @@ describe('SegmentResourceReviewPanel #449', () => {
     ))
   })
 
+  it.each(['amountCents', 'notes'])('preserves an explicit null correction for %s', async (fieldKey) => {
+    const pkg = packageView()
+    pkg.candidates = pkg.candidates.filter((item) => item.fieldKey !== fieldKey).concat({
+      fieldKey, proposedValue: fieldKey === 'amountCents' ? 880000 : '含早',
+      userCorrectedValue: null, clarity: 'clear', status: 'pending', evidence,
+    })
+    getDepartureCollaboration.mockResolvedValue(collaboration([pkg]))
+    renderPanel()
+    const confirm = await screen.findByRole('button', { name: '确认写入资源' })
+    if (fieldKey === 'amountCents') {
+      expect(screen.getByLabelText('约定总价候选')).toHaveValue('')
+      expect(confirm).toBeDisabled()
+    } else {
+      expect(screen.getByLabelText('备注候选')).toHaveValue('')
+      expect(confirm).toBeEnabled()
+    }
+  })
+
   it('blocks confirm when the material did not determine a segment', async () => {
     getDepartureCollaboration.mockResolvedValue(
       collaboration([

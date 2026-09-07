@@ -531,6 +531,7 @@ function useAgentConversationChatController() {
   }, [conversationId, conversationView, currentPageAttachment, syncDefaultPageAttachment])
 
   useEffect(() => {
+    setFocusedReviewPackageId(null)
     useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
   }, [conversationId])
 
