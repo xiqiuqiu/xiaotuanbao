@@ -31,7 +31,8 @@ import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiConversationService } from './ai-conversation.service'
 import { reviewDecisionRequestHash } from './review-package.envelope'
-import { toReviewPackageView } from './review-package.mapper'
+import { reviewConfirmValues, toReviewPackageView } from './review-package.mapper'
+import { departureObjectVersion } from './review-package.projection'
 import {
   sourceOrderWriteFromReviewValues,
   valuesFromReviewPackage,
@@ -508,6 +509,16 @@ export class ReviewCollaborationService {
       if (current.version !== expectedPackageVersion) {
         throw new ConflictException('审核包版本已变化，请刷新后重试')
       }
+      const departure = await tx.departure.findFirst({
+        where: { id: current.targetId, organizationId },
+        select: { updatedAt: true },
+      })
+      if (!departure) {
+        throw new ConflictException('发团不存在或已变化，请刷新后重试')
+      }
+      if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
+        throw new ConflictException('发团已变化，请刷新后重试')
+      }
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
@@ -523,6 +534,17 @@ export class ReviewCollaborationService {
         throw new ConflictException('审核事项已处置')
       }
       const resultRef = await this.writeIndependentItemInTx(tx, organizationId, current)
+      const view = toReviewPackageView(current)
+      const { corrections, submissions } = reviewConfirmValues(
+        view.candidates.map((candidate) => ({
+          fieldKey: candidate.fieldKey,
+          proposedValue: candidate.proposedValue,
+          userCorrectedValue: candidate.userCorrectedValue,
+          clarity: candidate.clarity,
+          status: candidate.status,
+          evidence: candidate.evidence,
+        })),
+      )
       await tx.aiReviewRecord.create({
         data: {
           organizationId,
@@ -531,8 +553,8 @@ export class ReviewCollaborationService {
           action: AiReviewRecordAction.confirm,
           packageVersion: expectedPackageVersion,
           originalCandidates: current.candidates as Prisma.InputJsonValue,
-          userCorrections: current.userCorrections as Prisma.InputJsonValue,
-          submittedValues: current.userCorrections as Prisma.InputJsonValue,
+          userCorrections: corrections as Prisma.InputJsonValue,
+          submittedValues: submissions as Prisma.InputJsonValue,
           evidence: [] as Prisma.InputJsonValue,
           objectVersion: current.baseObjectVersion,
           writeResult: AiReviewWriteResult.success,

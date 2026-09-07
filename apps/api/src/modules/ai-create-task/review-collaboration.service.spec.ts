@@ -156,6 +156,12 @@ describe('ReviewCollaborationService #447', () => {
       },
       aiReviewRecord: { create: jest.fn().mockResolvedValue({}) },
       agentTask: { findFirst: jest.fn() },
+      departure: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'departure-1',
+          updatedAt: new Date(pendingPackage.baseObjectVersion),
+        }),
+      },
     }
     const prisma = {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
@@ -430,6 +436,15 @@ describe('ReviewCollaborationService #447', () => {
       where: { id: 'job-1' },
       data: expect.objectContaining({ status: AiWorkflowJobStatus.succeeded }),
     })
+    expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        submittedValues: expect.objectContaining({
+          partnerId: 'partner-1',
+          adultGuestCount: 2,
+          childGuestCount: 0,
+        }),
+      }),
+    })
   })
 
   it('confirms an independent item in one transaction without the creation-draft path', async () => {
@@ -504,6 +519,52 @@ describe('ReviewCollaborationService #447', () => {
       decisionCommandId: 'decision-1',
       accepted: true,
       items: [{ packageId: 'pkg-1', itemIdentity: 'item:0', status: 'running' }],
+    })
+  })
+
+  it('rejects independent confirm when the departure version no longer matches the package baseline', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+      baseObjectVersion: 3,
+      candidates: [
+        {
+          fieldKey: 'partnerId',
+          proposedValue: 'partner-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户甲' }],
+        },
+      ],
+    }
+    const { service, prisma, tx, sourceOrders } = createService({ packages: [sourcePackage] })
+    tx.departure.findFirst.mockResolvedValue({
+      id: 'departure-1',
+      updatedAt: new Date(99),
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(sourcePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith({
+      where: { id: 'idem-item-1' },
+      data: expect.objectContaining({
+        resultJson: expect.objectContaining({ status: 'conflict' }),
+      }),
     })
   })
 

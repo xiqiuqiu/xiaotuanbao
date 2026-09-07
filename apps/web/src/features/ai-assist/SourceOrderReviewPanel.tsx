@@ -123,7 +123,7 @@ export function SourceOrderReviewPanel({
                       size="small"
                       loading={saving}
                       onClick={() => {
-                        void onSaveGroup?.({ ...savedValues, ...draft }).then(() => {
+                        void onSaveGroup?.(draft).then(() => {
                           setEditingGroup(null)
                           setDraft({})
                         })

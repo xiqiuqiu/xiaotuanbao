@@ -789,6 +789,7 @@ export class AiCreateTaskService {
         pkg,
       )
       const corrections = this.parseCorrections(dto.corrections, pkg)
+      const mergedCorrections = { ...beforeCorrections, ...corrections }
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
@@ -796,7 +797,7 @@ export class AiCreateTaskService {
           version: dto.expectedPackageVersion,
         },
         data: {
-          userCorrections: corrections as Prisma.InputJsonValue,
+          userCorrections: mergedCorrections as Prisma.InputJsonValue,
           version: { increment: 1 },
         },
       })
@@ -809,13 +810,13 @@ export class AiCreateTaskService {
         operatorUserId: userId,
         action: AiReviewRecordAction.revise,
         candidates: originalCandidates,
-        corrections,
+        corrections: mergedCorrections,
         submittedValues: {},
         objectVersion: pkg.baseObjectVersion,
         writeResult: AiReviewWriteResult.success,
         packageVersion: dto.expectedPackageVersion + 1,
         beforeSnapshot: beforeCorrections,
-        afterSnapshot: corrections,
+        afterSnapshot: mergedCorrections,
       })
       return this.toSummaryAfterReviewWrite(tx, organizationId, taskId)
     })

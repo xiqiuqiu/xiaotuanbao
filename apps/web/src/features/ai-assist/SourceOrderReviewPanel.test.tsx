@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -112,6 +113,26 @@ describe('SourceOrderReviewPanel', () => {
 
     expect(screen.getByText(/待确认缺失项/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '确认写入客源单' })).toBeDisabled()
+  })
+
+  it('saves only the fields edited in the current group', async () => {
+    const onSaveGroup = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <SourceOrderReviewPanel
+          pendingReview={pendingReview}
+          onSaveGroup={onSaveGroup}
+          onConfirm={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getAllByRole('button', { name: '组内编辑' })[0]!)
+    await user.click(screen.getByRole('button', { name: '保存本组' }))
+
+    expect(onSaveGroup).toHaveBeenCalledTimes(1)
+    expect(Object.keys(onSaveGroup.mock.calls[0]![0] as Record<string, unknown>)).toEqual([])
   })
 
   it('shows post-create actions without submitting receivables', () => {

@@ -10,6 +10,7 @@ import {
   listDepartureCollaboration,
   patchAiReviewPackage,
 } from '@/services/ai-create-task.service'
+import { awaitReviewConfirmationItem } from './await-review-confirmation-item'
 import { ApiError } from '@/lib/request/client'
 
 export function DepartureSourceOrderReview({
@@ -63,23 +64,11 @@ export function DepartureSourceOrderReview({
         decisionCommandId: crypto.randomUUID(),
         items: [{ packageId: pendingReview.id, expectedPackageVersion: pendingReview.version }],
       })
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const view = await getReviewConfirmation(accepted.decisionCommandId)
-        const item = view.items.find((entry) => entry.packageId === pendingReview.id)
-        if (
-          item &&
-          (item.status === 'succeeded' ||
-            item.status === 'failed' ||
-            item.status === 'conflict')
-        ) {
-          if (item.status !== 'succeeded') {
-            throw new Error(item.reason ?? '确认未成功')
-          }
-          return view
-        }
-        await new Promise((resolve) => setTimeout(resolve, 300))
-      }
-      return getReviewConfirmation(accepted.decisionCommandId)
+      return awaitReviewConfirmationItem({
+        decisionCommandId: accepted.decisionCommandId,
+        packageId: pendingReview.id,
+        getConfirmation: getReviewConfirmation,
+      })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
