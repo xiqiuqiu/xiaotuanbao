@@ -9,18 +9,7 @@ import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
 } from '@xiaotuanbao/ai-contracts'
-import { toStoredCandidates } from './review-package.mapper'
-
-type ReviewPackageProposal = {
-  objectVersion: number
-  confirmationUnit: string
-  candidates: Array<{
-    fieldKey: string
-    proposedValue?: unknown
-    clarity: 'clear' | 'needs_confirmation' | 'undetermined'
-    evidence: Parameters<typeof toStoredCandidates>[0][number]['evidence']
-  }>
-}
+import { toStoredCandidates, type ReviewPackageProposal } from './review-package.mapper'
 
 export function reviewProposalHash(payload: unknown): string {
   return createHash('sha256')

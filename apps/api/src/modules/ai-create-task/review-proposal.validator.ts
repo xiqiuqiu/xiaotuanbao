@@ -3,27 +3,16 @@ import {
   AI_EVIDENCE_PER_CANDIDATE_LIMIT,
   AI_EVIDENCE_PROPOSAL_JSON_MAX_BYTES,
   AI_EVIDENCE_SCHEMA_VERSION,
-  type AiReviewCandidateInput,
   type EvidenceProposalV1,
   type NormalizedEvidenceProposalV1,
 } from '@xiaotuanbao/ai-contracts'
-
-type AnyReviewPackageProposal = {
-  objectVersion: number
-  confirmationUnit: string
-  candidates: Array<{
-    fieldKey: string
-    proposedValue?: unknown
-    clarity: AiReviewCandidateInput['clarity']
-    evidence: AiReviewCandidateInput['evidence']
-  }>
-}
 import {
   validateEvidenceProposal,
   type EvidenceAuthority,
   type EvidenceSystemRuleRegistry,
   type EvidenceValidationErrorCode,
 } from './evidence-validator'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 export type ReviewProposalErrorCode =
   | EvidenceValidationErrorCode
@@ -42,14 +31,14 @@ export type ReviewProposalValidationResult =
   | {
       success: true
       normalizedProposal: NormalizedEvidenceProposalV1
-      reviewPackage: AnyReviewPackageProposal
+      reviewPackage: ReviewPackageProposal
     }
   | { success: false; errors: ReviewProposalError[] }
 
 const EMPTY_RULES: EvidenceSystemRuleRegistry = {}
 
 export function validateReviewProposal(input: {
-  proposal: AnyReviewPackageProposal
+  proposal: ReviewPackageProposal
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): ReviewProposalValidationResult {
@@ -78,7 +67,7 @@ export function validateReviewProposal(input: {
   }
 }
 
-function proposalLimitError(proposal: AnyReviewPackageProposal): ReviewProposalError | null {
+function proposalLimitError(proposal: ReviewPackageProposal): ReviewProposalError | null {
   if (proposal.candidates.length > AI_EVIDENCE_CANDIDATE_LIMIT) {
     return {
       candidateIndex: 0,
@@ -110,7 +99,7 @@ function proposalLimitError(proposal: AnyReviewPackageProposal): ReviewProposalE
 }
 
 function toEvidenceProposal(
-  proposal: AnyReviewPackageProposal,
+  proposal: ReviewPackageProposal,
   authority: EvidenceAuthority,
 ): EvidenceProposalV1 {
   return {
@@ -124,7 +113,7 @@ function toEvidenceProposal(
 }
 
 function toEvidenceItem(
-  evidence: AiReviewCandidateInput['evidence'][number],
+  evidence: ReviewPackageProposal['candidates'][number]['evidence'][number],
   authority: EvidenceAuthority,
 ): EvidenceProposalV1['candidates'][number]['evidence'][number] {
   if (evidence.kind === 'user_message') {

@@ -116,6 +116,7 @@ import {
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage } from './review-package.projection'
+import type { ReviewPackageProposal } from './review-package.mapper'
 import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
@@ -2356,11 +2357,7 @@ export class AiWorkflowProcessor {
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
     attemptId: string,
-    reviewPackage: {
-      objectVersion: number
-      confirmationUnit: string
-      candidates: SubmitReviewPackageModelInput['candidates']
-    },
+    reviewPackage: ReviewPackageProposal,
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')

@@ -14,13 +14,19 @@ export interface StoredReviewCandidate<FieldKey extends string = string> {
   evidence: AiReviewCandidateView['evidence']
 }
 
-export function toStoredCandidates(
-  candidates: readonly {
+export type ReviewPackageProposal = {
+  objectVersion: number
+  confirmationUnit: string
+  candidates: Array<{
     fieldKey: string
     proposedValue?: unknown
     clarity: StoredReviewCandidate['clarity']
     evidence: StoredReviewCandidate['evidence']
-  }[],
+  }>
+}
+
+export function toStoredCandidates(
+  candidates: readonly ReviewPackageProposal['candidates'][number][],
 ): StoredReviewCandidate[] {
   return candidates.map((candidate) => ({
     fieldKey: candidate.fieldKey,

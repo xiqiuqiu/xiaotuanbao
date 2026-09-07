@@ -253,10 +253,6 @@ export const SOURCE_ORDER_CREATE_REVIEW_SCHEMA: ReviewSchema<SourceOrderReviewFi
   parseCandidate: parseSourceOrderReviewCandidate,
 }
 
-export function isSourceOrderReviewConfirmationUnit(confirmationUnit: string): boolean {
-  return confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
-}
-
 function uniqueFieldKeys(candidates: Array<{ fieldKey: string }>): boolean {
   const keys = candidates.map((candidate) => candidate.fieldKey)
   return new Set(keys).size === keys.length

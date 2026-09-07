@@ -100,10 +100,7 @@ export function DepartureSourceOrderReview({
     return (
       <div style={{ marginBottom: 16 }}>
         <SourceOrderReviewPanel
-          pendingReview={collaborationQuery.data?.items[0] ?? pendingFallback}
           createdSourceOrderId={succeeded.resultRef.objectId}
-          onSaveGroup={async () => undefined}
-          onConfirm={async () => undefined}
           onViewSourceOrder={(sourceOrderId) => {
             void navigate({
               to: '/departure/$departureId',
@@ -138,25 +135,4 @@ export function DepartureSourceOrderReview({
       />
     </div>
   )
-}
-
-const pendingFallback = {
-  id: 'pkg',
-  status: 'confirmed' as const,
-  confirmationUnit: 'source_order_create',
-  payloadSchema: SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
-  schemaSupported: true,
-  baseObjectVersion: 1,
-  version: 1,
-  runId: null,
-  conversationId: null,
-  inputBatchId: null,
-  attemptId: null,
-  capabilityKey: 'departure.review-package.propose',
-  capabilityVersion: 1,
-  targetKind: 'departure',
-  targetId: '',
-  proposalHash: '',
-  baselineSnapshot: { mode: 'manual' as const, routeName: '' },
-  candidates: [],
 }

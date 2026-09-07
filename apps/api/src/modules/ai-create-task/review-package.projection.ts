@@ -6,29 +6,7 @@ import {
   reviewItemIdentity,
 } from '@xiaotuanbao/ai-contracts'
 import { reviewPackageCreateData } from './review-package.envelope'
-
-type ReviewPackageProposal = {
-  objectVersion: number
-  confirmationUnit: string
-  candidates: Array<{
-    fieldKey: string
-    proposedValue?: unknown
-    clarity: 'clear' | 'needs_confirmation' | 'undetermined'
-    evidence: StoredReviewCandidateEvidence
-  }>
-}
-
-type StoredReviewCandidateEvidence = Array<
-  | { kind: 'user_message'; excerpt: string; sequence: number; messageId?: string }
-  | { kind: 'system_derivation'; rule: string }
-  | {
-      kind: 'material_region'
-      materialId: string
-      parseResultVersion: number
-      pageNumber: number
-      excerpt: string
-    }
->
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 

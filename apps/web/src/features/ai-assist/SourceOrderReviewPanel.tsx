@@ -6,16 +6,15 @@ import {
   registeredReviewSchemas,
   type SourceOrderReviewGroup,
 } from '@xiaotuanbao/ai-contracts'
-import type { AiReviewPackageView } from '@xiaotuanbao/shared'
-import { valuesFromReviewCandidates } from './source-order-review-values'
+import type { AiReviewCandidateView, AiReviewPackageView } from '@xiaotuanbao/shared'
 
 export interface SourceOrderReviewPanelProps {
-  pendingReview: AiReviewPackageView
+  pendingReview?: AiReviewPackageView
   saving?: boolean
   confirming?: boolean
   createdSourceOrderId?: string | null
-  onSaveGroup: (corrections: Record<string, unknown>) => Promise<void>
-  onConfirm: () => Promise<void>
+  onSaveGroup?: (corrections: Record<string, unknown>) => Promise<void>
+  onConfirm?: () => Promise<void>
   onViewSourceOrder?: (sourceOrderId: string) => void
   onContinueReceivables?: (sourceOrderId: string) => void
 }
@@ -30,23 +29,14 @@ export function SourceOrderReviewPanel({
   onViewSourceOrder,
   onContinueReceivables,
 }: SourceOrderReviewPanelProps) {
-  const schema = registeredReviewSchemas.findByPayloadSchema(pendingReview.payloadSchema)
-  const unit = schema?.confirmationUnits.find(
-    (candidate) => candidate.key === pendingReview.confirmationUnit,
-  )
-  const schemaSupported = pendingReview.schemaSupported === true && Boolean(unit)
   const savedValues = useMemo(
-    () => valuesFromReviewCandidates(pendingReview.candidates),
-    [pendingReview.candidates],
+    () => (pendingReview ? valuesFromReviewCandidates(pendingReview.candidates) : {}),
+    [pendingReview],
   )
   const [editingGroup, setEditingGroup] = useState<SourceOrderReviewGroup | null>(null)
   const [draft, setDraft] = useState<Record<string, unknown>>({})
   const values = editingGroup ? { ...savedValues, ...draft } : savedValues
   const missing = missingSourceOrderLabels(values)
-
-  if (!schemaSupported || !unit) {
-    return <Alert type="error" showIcon title="审核包版本不受支持，请拒绝本次建议" />
-  }
 
   if (createdSourceOrderId) {
     return (
@@ -65,6 +55,16 @@ export function SourceOrderReviewPanel({
         </Space>
       </section>
     )
+  }
+
+  const schema = pendingReview
+    ? registeredReviewSchemas.findByPayloadSchema(pendingReview.payloadSchema)
+    : undefined
+  const unit = schema?.confirmationUnits.find(
+    (candidate) => candidate.key === pendingReview?.confirmationUnit,
+  )
+  if (!pendingReview || !schema || !unit || pendingReview.schemaSupported !== true) {
+    return <Alert type="error" showIcon title="审核包版本不受支持，请拒绝本次建议" />
   }
 
   return (
@@ -123,7 +123,7 @@ export function SourceOrderReviewPanel({
                       size="small"
                       loading={saving}
                       onClick={() => {
-                        void onSaveGroup({ ...savedValues, ...draft }).then(() => {
+                        void onSaveGroup?.({ ...savedValues, ...draft }).then(() => {
                           setEditingGroup(null)
                           setDraft({})
                         })
@@ -163,7 +163,7 @@ export function SourceOrderReviewPanel({
           type="primary"
           loading={confirming}
           disabled={Boolean(editingGroup) || missing.length > 0}
-          onClick={() => void onConfirm()}
+          onClick={() => void onConfirm?.()}
         >
           确认写入客源单
         </Button>
@@ -291,7 +291,20 @@ function SourceOrderAmountPreview({ values }: { values: Record<string, unknown> 
   )
 }
 
-export function missingSourceOrderLabels(values: Record<string, unknown>): string[] {
+function valuesFromReviewCandidates(
+  candidates: AiReviewCandidateView[],
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {}
+  for (const candidate of candidates) {
+    values[candidate.fieldKey] =
+      candidate.userCorrectedValue !== undefined
+        ? candidate.userCorrectedValue
+        : candidate.proposedValue
+  }
+  return values
+}
+
+function missingSourceOrderLabels(values: Record<string, unknown>): string[] {
   const missing: string[] = []
   if (typeof values.partnerId !== 'string' || !values.partnerId) missing.push('客户')
   if (typeof values.adultGuestCount !== 'number') missing.push('成人人数')
