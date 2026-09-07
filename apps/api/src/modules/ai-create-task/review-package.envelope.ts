@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
 import {
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  DEFAULT_REVIEW_ITEM_IDENTITY,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
   canonicalizeReviewValue,
@@ -42,7 +43,10 @@ export function reviewPackageCreateData(params: {
   inputBatchId: string
   attemptId?: string | null
   sourceActionId: string
+  targetKind?: string
   targetId: string
+  itemIdentity?: string
+  payloadSchema?: string
   baseObjectVersion: number
   baselineSnapshot: Prisma.InputJsonValue
   reviewPackage: SubmitReviewPackageModelInput
@@ -58,11 +62,12 @@ export function reviewPackageCreateData(params: {
     sourceAction: { connect: { id: params.sourceActionId } },
     status: 'pending',
     confirmationUnit: params.reviewPackage.confirmationUnit,
-    payloadSchema: DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+    payloadSchema: params.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
     capabilityKey: capability.key,
     capabilityVersion: capability.version,
-    targetKind: DEPARTURE_REVIEW_TARGET_KIND,
+    targetKind: params.targetKind ?? DEPARTURE_REVIEW_TARGET_KIND,
     targetId: params.targetId,
+    itemIdentity: params.itemIdentity ?? DEFAULT_REVIEW_ITEM_IDENTITY,
     proposalHash: departureReviewProposalHash(params.reviewPackage),
     baseObjectVersion: params.baseObjectVersion,
     baselineSnapshot: params.baselineSnapshot,

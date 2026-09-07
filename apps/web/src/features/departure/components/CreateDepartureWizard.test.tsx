@@ -2532,6 +2532,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { name: '修正团名' },
       })
     })
@@ -2601,6 +2602,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { name: '修正团名', expectedGuestCountHint: 12 },
       })
     })
@@ -2663,6 +2665,7 @@ describe('CreateDepartureWizard', () => {
 
     await waitFor(() => {
       expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
         corrections: { expectedGuestCountHint: null },
       })
     })

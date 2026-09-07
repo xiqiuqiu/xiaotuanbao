@@ -9,6 +9,7 @@ import { AiConversationService } from './ai-conversation.service'
 import { AiConversationRecallService } from './ai-conversation-recall.service'
 import { AgentConversationController } from './agent-conversation.controller'
 import { AgentReviewController } from './agent-review.controller'
+import { AgentCollaborationController } from './agent-collaboration.controller'
 import { AgentTaskController } from './agent-task.controller'
 import { AgentTaskService } from './agent-task.service'
 import { AiCreateTaskController } from './ai-create-task.controller'
@@ -23,6 +24,7 @@ import { AgentServiceIdentityGuard } from './agent-service-identity.guard'
 import { AiOperationDelegationGuard } from './ai-operation-delegation.guard'
 import { DepartureMaterialService } from './departure-material.service'
 import { DepartureAgentTaskAdapter } from './departure-agent-task.adapter'
+import { ReviewCollaborationService } from './review-collaboration.service'
 import { AGENT_TASK_DOMAIN_ADAPTER } from './agent-task-domain.adapter'
 import { PageLocatorResolver } from './page-locator.resolver'
 import { ParseWorkerClient } from './parse-worker.client'
@@ -41,6 +43,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AgentConversationController,
     AgentTaskController,
     AgentReviewController,
+    AgentCollaborationController,
   ],
   providers: [
     AiCreateTaskService,
@@ -59,6 +62,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AiOperationDelegationGuard,
     DepartureMaterialService,
     DepartureAgentTaskAdapter,
+    ReviewCollaborationService,
     {
       provide: AGENT_TASK_DOMAIN_ADAPTER,
       useExisting: DepartureAgentTaskAdapter,

@@ -186,7 +186,10 @@ function useCreateDepartureWizardController() {
   )
 
   const applySavedDraft = useCallback(
-    (result: { id: string; draft: { version: number } }, options?: { keepDirty?: boolean }) => {
+    (result: AiCreateTaskSummary, options?: { keepDirty?: boolean }) => {
+      if (!result.draft) {
+        return
+      }
       setTaskId(result.id)
       setDraftVersion(result.draft.version)
       taskIdRef.current = result.id
@@ -414,6 +417,9 @@ function useCreateDepartureWizardController() {
             replace: true,
           })
           return
+        }
+        if (!task.draft) {
+          throw new Error('发团创建草稿不存在')
         }
 
         const nextRoute = applyDraftSnapshotToRoute(task.draft.snapshot)
@@ -776,6 +782,9 @@ function useCreateDepartureWizardController() {
 
   const applyConfirmedTask = useCallback(
     (summary: AiCreateTaskSummary) => {
+      if (!summary.draft) {
+        return
+      }
       applySavedDraft(summary)
       const nextRoute = applyDraftSnapshotToRoute(summary.draft.snapshot)
       setRouteValues(nextRoute)
@@ -790,7 +799,7 @@ function useCreateDepartureWizardController() {
     if (!taskReview || draftVersion == null || initializingForm || restorePhase === 'loading') {
       return
     }
-    if (taskReview.draft.version <= draftVersion) {
+    if (!taskReview.draft || taskReview.draft.version <= draftVersion) {
       return
     }
     applyConfirmedTask(taskReview)
@@ -806,6 +815,7 @@ function useCreateDepartureWizardController() {
       }
       correctTimerRef.current = setTimeout(() => {
         void patchAiReviewPackage(taskId, pendingReview.id, {
+          expectedPackageVersion: pendingReview.version,
           corrections: { ...pendingCorrectionsRef.current },
         })
           .then((summary) => {

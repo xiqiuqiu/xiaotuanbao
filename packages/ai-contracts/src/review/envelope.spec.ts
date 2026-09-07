@@ -4,8 +4,10 @@ import {
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
+  reviewItemIdentity,
   reviewPackageEnvelopeSchema,
   reviewProposalIdentitySchema,
+  sameReviewItemIdentity,
   sameReviewProposalIdentity,
 } from './envelope'
 
@@ -49,6 +51,35 @@ describe('generic Review Package envelope', () => {
         inputBatchId: 'batch-b',
       }),
     ).toBe(false)
+  })
+
+  it('keeps item identity independent from the content hash', () => {
+    expect(reviewItemIdentity(0)).toBe('item:0')
+    expect(reviewItemIdentity(1)).toBe('item:1')
+    expect(
+      sameReviewItemIdentity(
+        { inputBatchId: 'batch-a', itemIdentity: 'item:0' },
+        { inputBatchId: 'batch-a', itemIdentity: 'item:1' },
+      ),
+    ).toBe(false)
+    expect(
+      sameReviewProposalIdentity(
+        {
+          inputBatchId: 'batch-a',
+          capabilityVersion: 1,
+          targetKind: DEPARTURE_REVIEW_TARGET_KIND,
+          targetId: 'draft-1',
+          proposalHash: HASH,
+        },
+        {
+          inputBatchId: 'batch-a',
+          capabilityVersion: 1,
+          targetKind: DEPARTURE_REVIEW_TARGET_KIND,
+          targetId: 'draft-1',
+          proposalHash: HASH,
+        },
+      ),
+    ).toBe(true)
   })
 
   it('treats any target version change as stale without field-level merge', () => {

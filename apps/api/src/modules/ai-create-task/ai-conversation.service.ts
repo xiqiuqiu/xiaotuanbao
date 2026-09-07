@@ -28,6 +28,7 @@ import {
   AiConversationStatus,
   AiConversationTitleSource,
   AgentTaskStatus,
+  AgentTaskType,
   AiAgentAttemptStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
@@ -112,6 +113,8 @@ import {
 } from './departure-material.service'
 import { discardLiveOutputAfterUserStop } from './discard-stopped-live-output'
 import { PageLocatorResolver } from './page-locator.resolver'
+import { reviewBatchFollowUp } from './review-batch-disposition'
+import { ensureDepartureCollaborationTaskInTx } from './ensure-departure-collaboration-task'
 
 const TASK_INCLUDE = {
   draft: true,
@@ -328,6 +331,33 @@ export class AiConversationService {
         await lockConversationRuntime(tx, organizationId, conversation.id)
       }
 
+      if (resolvedPage?.locator.kind === 'departure') {
+        await tx.conversationDepartureLink.upsert({
+          where: {
+            conversationId_departureId: {
+              conversationId: conversation.id,
+              departureId: resolvedPage.locator.objectId,
+            },
+          },
+          create: {
+            organizationId,
+            conversationId: conversation.id,
+            departureId: resolvedPage.locator.objectId,
+            linkedByUserId: userId,
+          },
+          update: {},
+        })
+      }
+      const collaborationTask =
+        resolvedPage?.locator.kind === 'departure' && !requestedPrimaryTaskId
+          ? await ensureDepartureCollaborationTaskInTx(tx, {
+              organizationId,
+              userId,
+              departureId: resolvedPage.locator.objectId,
+              conversationId: conversation.id,
+            })
+          : null
+
       const record = await tx.aiCreateIdempotencyRecord.upsert({
         where: {
           organizationId_operation_idempotencyKey: {
@@ -423,13 +453,15 @@ export class AiConversationService {
       const batchStatus = waitingForMaterials
         ? AiInputBatchStatus.waiting_for_materials
         : AiInputBatchStatus.ready_for_agent
-      const primaryTask = await this.resolvePrimaryDepartureTask(
-        tx,
-        organizationId,
-        userId,
-        conversation.id,
-        requestedPrimaryTaskId,
-      )
+      const primaryTask =
+        collaborationTask ??
+        (await this.resolvePrimaryDepartureTask(
+          tx,
+          organizationId,
+          userId,
+          conversation.id,
+          requestedPrimaryTaskId,
+        ))
       const batch = await tx.aiInputBatch.create({
         data: {
           organizationId,
@@ -1996,14 +2028,24 @@ export class AiConversationService {
       return []
     }
 
-    await tx.aiInputBatch.update({
-      where: { id: batch.id },
-      data: { status: AiInputBatchStatus.completed },
+    const remainingPending = await tx.aiReviewPackage.count({
+      where: {
+        inputBatchId: batch.id,
+        organizationId: params.organizationId,
+        status: 'pending',
+        id: { not: params.reviewPackageId },
+      },
     })
-    await tx.agentTask.updateMany({
-      where: { id: params.taskId, status: AgentTaskStatus.waiting },
-      data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+    const task = await tx.agentTask.findFirst({
+      where: { id: params.taskId, organizationId: params.organizationId },
+      select: { type: true },
     })
+    const followUp = reviewBatchFollowUp({
+      remainingPendingCount: remainingPending,
+      taskType: task?.type ?? AgentTaskType.departure_creation,
+      disposition: params.disposition,
+    })
+
     await tx.taskActivity.create({
       data: {
         organizationId: params.organizationId,
@@ -2014,6 +2056,34 @@ export class AiConversationService {
           params.disposition === 'confirmed' ? 'User 已确认审核项' : 'User 已拒绝审核项',
         payload: { reviewPackageId: params.reviewPackageId },
       },
+    })
+
+    if (followUp === 'keep_awaiting_review') {
+      const statusEvent = await this.appendEvent(tx, {
+        organizationId: params.organizationId,
+        conversationId: batch.conversationId,
+        kind: AiConversationEventKind.batch_status,
+        payload: {
+          batchId: batch.id,
+          status: AiInputBatchStatus.awaiting_review,
+          reviewPackageId: params.reviewPackageId,
+          disposition: params.disposition,
+        },
+      })
+      await tx.aiConversation.update({
+        where: { id: batch.conversationId },
+        data: { updatedAt: new Date() },
+      })
+      return [statusEvent]
+    }
+
+    await tx.aiInputBatch.update({
+      where: { id: batch.id },
+      data: { status: AiInputBatchStatus.completed },
+    })
+    await tx.agentTask.updateMany({
+      where: { id: params.taskId, status: AgentTaskStatus.waiting },
+      data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
     })
     const statusEvent = await this.appendEvent(tx, {
       organizationId: params.organizationId,
@@ -2027,7 +2097,7 @@ export class AiConversationService {
       },
     })
     const events = [statusEvent]
-    if (params.disposition !== 'confirmed') {
+    if (followUp !== 'complete_with_continuation') {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
         data: { updatedAt: new Date() },
@@ -2628,14 +2698,18 @@ export class AiConversationService {
     const eligible = links
       .map((link) => link.task)
       .filter((task) => {
-        const extension = task.departureCreationTask
-        return (
+        const owned =
           task.organizationId === organizationId &&
           task.ownerUserId === userId &&
-          (task.status === AgentTaskStatus.active || task.status === AgentTaskStatus.waiting) &&
-          extension != null &&
-          extension.draft != null
-        )
+          (task.status === AgentTaskStatus.active || task.status === AgentTaskStatus.waiting)
+        if (!owned) {
+          return false
+        }
+        if (task.type === AgentTaskType.departure_collaboration && task.departureId) {
+          return true
+        }
+        const extension = task.departureCreationTask
+        return extension != null && extension.draft != null
       })
     if (!requestedPrimaryTaskId) {
       return null

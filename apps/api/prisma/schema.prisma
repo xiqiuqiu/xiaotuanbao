@@ -330,6 +330,7 @@ model Organization {
   bookingNoticeTemplates BookingNoticeTemplate[]
   agentTasks                   AgentTask[]
   conversationTaskLinks        ConversationTaskLink[]
+  conversationDepartureLinks   ConversationDepartureLink[]
   inputBatchTaskLinks          InputBatchTaskLink[]
   taskActivities               TaskActivity[]
   aiCreateIdempotencyRecords AiCreateIdempotencyRecord[]
@@ -427,10 +428,12 @@ model User {
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
   ownedAgentTasks               AgentTask[]                  @relation("AgentTaskOwner")
+  linkedConversationDepartures  ConversationDepartureLink[]  @relation("ConversationDepartureLinkUser")
   linkedConversationTasks       ConversationTaskLink[]       @relation("ConversationTaskLinkUser")
   taskActivities                TaskActivity[]               @relation("TaskActivityActor")
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
   aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
+  aiCreateIdempotencyOperations AiCreateIdempotencyRecord[] @relation("AiCreateIdempotencyOperator")
   createdAiConversations AiConversation[] @relation("AiConversationCreator")
   aiConversationDrafts AiConversationDraft[]
   createdAiInputBatches AiInputBatch[] @relation("AiInputBatchCreator")
@@ -646,6 +649,8 @@ model Departure {
   archiveHistories    DepartureArchiveHistory[]
   settlementHistories DepartureSettlementHistory[]
   aiCreateTask        AiCreateTask?
+  collaborationTasks  AgentTask[]
+  conversationLinks   ConversationDepartureLink[]
   formalAttachments   DepartureMaterial[]
 
   @@unique([organizationId, departureNo])
@@ -1088,6 +1093,7 @@ model ProductSchedule {
 
 enum AgentTaskType {
   departure_creation
+  departure_collaboration
 
   @@map("agent_task_type")
 }
@@ -1151,6 +1157,8 @@ model AgentTask {
   goalVersion           Int                         @default(1) @map("goal_version")
   status                AgentTaskStatus             @default(proposed)
   statusVersion         Int                         @default(1) @map("status_version")
+  departureId           String?                     @map("departure_id")
+  departure             Departure?                  @relation(fields: [departureId], references: [id], onDelete: SetNull)
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   departureCreationTask AiCreateTask?
@@ -1166,7 +1174,27 @@ model AgentTask {
   aiActions AiAction[]
 
   @@index([organizationId, ownerUserId, status, updatedAt])
+  @@index([organizationId, departureId])
   @@map("agent_tasks")
+}
+
+/// 会话与已有发团的定位关联：用于尚无任务/审核包时找回相关会话。不授权、不独占会话。
+model ConversationDepartureLink {
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String         @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  departureId    String         @map("departure_id")
+  departure      Departure      @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  linkedByUserId String         @map("linked_by_user_id")
+  linkedByUser   User           @relation("ConversationDepartureLinkUser", fields: [linkedByUserId], references: [id])
+  linkedAt       DateTime       @default(now()) @map("linked_at")
+
+  @@unique([conversationId, departureId])
+  @@index([departureId, linkedAt])
+  @@index([organizationId, linkedAt])
+  @@map("conversation_departure_links")
 }
 
 /// 会话与任务的可审计多对多关联。
@@ -1262,13 +1290,18 @@ model AiCreateIdempotencyRecord {
   operation      String
   idempotencyKey String       @map("idempotency_key")
   requestHash    String       @map("request_hash")
+  requestSnapshot Json?       @map("request_snapshot")
+  operatorUserId String?      @map("operator_user_id")
+  operator       User?        @relation("AiCreateIdempotencyOperator", fields: [operatorUserId], references: [id], onDelete: SetNull)
   resultJson     Json?        @map("result_json")
   completedAt    DateTime?    @map("completed_at")
   createdAt      DateTime     @default(now()) @map("created_at")
+  workflowJobs   AiWorkflowJob[]
 
   @@unique([organizationId, operation, idempotencyKey])
   @@index([taskId])
   @@index([organizationId, createdAt])
+  @@index([operatorUserId])
   @@map("ai_create_idempotency_records")
 }
 
@@ -1309,6 +1342,7 @@ enum AiReviewRecordAction {
   confirm
   reject
   cancel
+  revise
 
   @@map("ai_review_record_action")
 }
@@ -1347,6 +1381,7 @@ model AiReviewPackage {
   targetKind         String                @default("departure_creation_draft") @map("target_kind")
   targetId           String                @default("") @map("target_id")
   proposalHash       String                @default("") @map("proposal_hash")
+  itemIdentity       String                @default("item:0") @map("item_identity")
   baseObjectVersion  Int                   @map("base_object_version")
   baselineSnapshot   Json                  @map("baseline_snapshot")
   candidates         Json
@@ -1354,10 +1389,12 @@ model AiReviewPackage {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
   records            AiReviewRecord[]
+  confirmJobs        AiWorkflowJob[]
   sourceActionId     String?               @map("source_action_id")
   sourceAction       AiAction?             @relation("ReviewPackageSourceAction", fields: [sourceActionId], references: [id], onDelete: SetNull)
 
-  @@unique([inputBatchId, capabilityVersion, targetKind, targetId, proposalHash], map: "ai_review_packages_proposal_identity_key")
+  @@unique([inputBatchId, itemIdentity], map: "ai_review_packages_item_identity_key")
+  @@index([inputBatchId, proposalHash])
   @@index([taskId, status])
   @@index([conversationId, status])
   @@index([organizationId, targetKind, targetId, status], map: "ai_review_packages_target_status_idx")
@@ -1379,9 +1416,12 @@ model AiReviewRecord {
   operator           User                @relation("AiReviewRecordOperator", fields: [operatorUserId], references: [id])
   action             AiReviewRecordAction
   decisionCommandId  String?             @map("decision_command_id")
+  packageVersion     Int                 @default(0) @map("package_version")
   originalCandidates Json                @map("original_candidates")
   userCorrections    Json                @map("user_corrections")
   submittedValues    Json                @map("submitted_values")
+  beforeSnapshot     Json?               @map("before_snapshot")
+  afterSnapshot      Json?               @map("after_snapshot")
   evidence           Json
   objectVersion      Int                 @map("object_version")
   writeResult        AiReviewWriteResult @map("write_result")
@@ -1520,6 +1560,7 @@ enum AiInputBatchStatus {
 enum AiWorkflowJobType {
   agent_batch
   material_parse
+  review_confirm
 
   @@map("ai_workflow_job_type")
 }
@@ -1575,6 +1616,7 @@ model AiConversation {
   aiActions        AiAction[]
   reviewPackages   AiReviewPackage[]
   taskLinks        ConversationTaskLink[]
+  departureLinks   ConversationDepartureLink[]
   sources          ConversationSource[]
 
   @@index([organizationId, creatorUserId, lastActivityAt], map: "ai_conversations_org_creator_activity_idx")
@@ -1711,6 +1753,10 @@ model AiWorkflowJob {
   inputBatch     AiInputBatch        @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
   sourceId       String?             @map("source_id")
   source         ConversationSource? @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  reviewPackageId String?            @map("review_package_id")
+  reviewPackage   AiReviewPackage?   @relation(fields: [reviewPackageId], references: [id], onDelete: SetNull)
+  idempotencyRecordId String?        @map("idempotency_record_id")
+  idempotencyRecord   AiCreateIdempotencyRecord? @relation(fields: [idempotencyRecordId], references: [id], onDelete: SetNull)
   type           AiWorkflowJobType   @default(agent_batch)
   jobKey         String              @unique @map("job_key")
   status         AiWorkflowJobStatus @default(pending)
@@ -1729,6 +1775,8 @@ model AiWorkflowJob {
   @@index([taskId, status])
   @@index([organizationId, createdAt])
   @@index([sourceId])
+  @@index([reviewPackageId, status])
+  @@index([idempotencyRecordId])
   @@map("ai_workflow_jobs")
 }
 

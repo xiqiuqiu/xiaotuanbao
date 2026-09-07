@@ -102,6 +102,7 @@ import { LiveOutputFlusher } from './live-output-flusher'
 import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 import { DepartureMaterialService } from './departure-material.service'
 import { PageLocatorResolver, type ResolvedPageContext } from './page-locator.resolver'
+import { ReviewCollaborationService } from './review-collaboration.service'
 import {
   PARSE_FAILED_ERROR_CODE,
   materialProgressFromDeps,
@@ -142,6 +143,7 @@ export class AiWorkflowProcessor {
     private readonly materialService: DepartureMaterialService,
     private readonly pageLocatorResolver: PageLocatorResolver,
     @Inject(AGENT_LIVE_OUTPUT) private readonly liveOutput: AgentLiveOutput,
+    private readonly reviewCollaboration: ReviewCollaborationService,
   ) {}
 
   async processDueJobs(limit = 10): Promise<number> {
@@ -193,6 +195,16 @@ export class AiWorkflowProcessor {
           const parseJob = await this.claimNextParse()
           if (parseJob) {
             startJob(parseJob)
+            started = true
+          }
+        }
+        if (
+          this.agentInFlight < this.agentConcurrency() &&
+          processed + running.size < limit
+        ) {
+          const reviewJob = await this.claimNextReviewConfirm()
+          if (reviewJob) {
+            startJob(reviewJob)
             started = true
           }
         }
@@ -428,10 +440,73 @@ export class AiWorkflowProcessor {
     }
   }
 
+  private async claimNextReviewConfirm(): Promise<ClaimedJob | null> {
+    try {
+      const claimed = await this.prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          SELECT j.id
+          FROM ai_workflow_jobs j
+          WHERE j.type = 'review_confirm'::ai_workflow_job_type
+            AND (
+              (
+                j.status = 'pending'::ai_workflow_job_status
+                AND j.next_attempt_at <= NOW()
+              )
+              OR (
+                j.status = 'claimed'::ai_workflow_job_status
+                AND j.lease_expires_at IS NOT NULL
+                AND j.lease_expires_at <= NOW()
+              )
+            )
+          ORDER BY j.created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        `
+        if (rows.length === 0) {
+          return null
+        }
+        const job = await tx.aiWorkflowJob.findUniqueOrThrow({
+          where: { id: rows[0].id },
+          include: { inputBatch: true },
+        })
+        if (job.status === AiWorkflowJobStatus.claimed) {
+          this.workflowLog('recovered', {
+            job: job.id,
+            type: job.type,
+            previousWorker: job.claimedBy,
+            attempt: job.attemptCount + 1,
+          })
+        }
+        const claimedJob = await tx.aiWorkflowJob.update({
+          where: { id: job.id },
+          data: {
+            status: AiWorkflowJobStatus.claimed,
+            claimedAt: new Date(),
+            claimedBy: this.workerId,
+            leaseExpiresAt: this.leaseUntil(),
+            attemptCount: { increment: 1 },
+            generation: { increment: 1 },
+          },
+        })
+        return { ...job, ...claimedJob, inputBatch: job.inputBatch }
+      })
+      return claimed
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return null
+      }
+      throw error
+    }
+  }
+
   private async executeClaimed(job: ClaimedJob): Promise<void> {
     const startedAt = Date.now()
     if (job.type === AiWorkflowJobType.material_parse) {
       await this.executeParse(job)
+      return
+    }
+    if (job.type === AiWorkflowJobType.review_confirm) {
+      await this.executeReviewConfirm(job)
       return
     }
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
@@ -552,6 +627,56 @@ export class AiWorkflowProcessor {
         return
       }
       await this.scheduleRetry(job, errorCode)
+    }
+  }
+
+  private async executeReviewConfirm(job: ClaimedJob): Promise<void> {
+    if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
+      await this.reviewCollaboration.failConfirmedItem(job.id, 'AGENT_UNAVAILABLE', true)
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: 'AGENT_UNAVAILABLE',
+        attempt: job.attemptCount,
+      })
+      return
+    }
+    try {
+      await this.reviewCollaboration.executeConfirmedItem(job.id)
+      this.workflowLog('succeeded', {
+        job: job.id,
+        type: job.type,
+        attempt: job.attemptCount,
+      })
+    } catch (error: unknown) {
+      const errorCode = workflowErrorCode(error)
+      if (job.attemptCount >= WORKFLOW_MAX_ATTEMPTS) {
+        await this.reviewCollaboration.failConfirmedItem(job.id, errorCode, true)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: errorCode,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+      await this.prisma.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          status: AiWorkflowJobStatus.pending,
+          lastErrorCode: errorCode,
+          leaseExpiresAt: null,
+          claimedAt: null,
+          claimedBy: null,
+          nextAttemptAt: new Date(Date.now() + workflowBackoffMs(job.attemptCount)),
+        },
+      })
+      this.workflowLog('retry_scheduled', {
+        job: job.id,
+        type: job.type,
+        reason: errorCode,
+        attempt: job.attemptCount,
+      })
     }
   }
 

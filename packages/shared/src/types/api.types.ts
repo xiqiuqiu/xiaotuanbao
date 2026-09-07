@@ -853,7 +853,7 @@ export interface AiCreateTaskSummary {
   statusVersion: number
   createdAt: string
   updatedAt: string
-  draft: DepartureCreationDraftView
+  draft?: DepartureCreationDraftView
   /**
    * Convenience alias when exactly one package is pending.
    * Ambiguous when multiple conversations await review; use `pendingReviews`.
@@ -1150,6 +1150,7 @@ export interface AiReviewPackageView {
   targetKind: string
   targetId: string
   proposalHash: string
+  itemIdentity?: string
   candidates: AiReviewCandidateView[]
   /** 候选提交时的发团创建草稿快照；确认前自动保存不得覆盖这些候选字段。 */
   baselineSnapshot: DepartureCreationDraftSnapshot
@@ -1171,7 +1172,66 @@ export interface CancelAiReviewPackageDto {
 }
 
 export interface PatchAiReviewPackageDto {
+  expectedPackageVersion: number
   corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+}
+
+export type ReviewConfirmationItemStatus =
+  | 'accepted'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'conflict'
+  | 'skipped'
+
+export interface ReviewConfirmationItemInput {
+  packageId: string
+  expectedPackageVersion: number
+}
+
+export interface AcceptReviewConfirmationDto {
+  decisionCommandId: string
+  items: ReviewConfirmationItemInput[]
+}
+
+export interface ReviewConfirmationItemResult {
+  packageId: string
+  itemIdentity?: string
+  status: ReviewConfirmationItemStatus
+  retryable?: boolean
+  reason?: string
+  resultRef?: { objectKind: string; objectId: string }
+}
+
+export interface ReviewConfirmationView {
+  decisionCommandId: string
+  accepted: boolean
+  items: ReviewConfirmationItemResult[]
+}
+
+export interface DepartureCollaborationConversationView {
+  id: string
+  title: string
+  lastActivityAt: string
+}
+
+export interface DepartureCollaborationView {
+  departureId: string
+  conversations: DepartureCollaborationConversationView[]
+  items: AiReviewPackageView[]
+  confirmations: ReviewConfirmationView[]
+}
+
+export interface ReviewRevisionView {
+  id: string
+  packageId: string
+  packageVersion: number
+  action: string
+  operatorUserId: string
+  createdAt: string
+  beforeSnapshot: unknown
+  afterSnapshot: unknown
 }
 
 export interface UpdateDepartureDto {

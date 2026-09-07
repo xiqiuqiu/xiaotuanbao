@@ -103,6 +103,13 @@ describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440',
     const businessWrite = jest.fn()
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId: 'user-1',
+          status: AgentTaskStatus.active,
+        }),
+      },
       aiCreateIdempotencyRecord: {
         upsert: jest.fn().mockImplementation(({ create }) =>
           Promise.resolve({ ...create, completedAt: null }),
@@ -147,6 +154,14 @@ describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440',
     const reviewWrite = jest.fn()
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId: 'user-1',
+          status: AgentTaskStatus.active,
+        }),
+      },
+      aiWorkflowJob: { findFirst: jest.fn().mockResolvedValue(null) },
       aiCreateTask: {
         findFirst: jest.fn().mockResolvedValue({
           agentTask: { ownerUserId: 'user-1', status: AgentTaskStatus.active },
@@ -189,7 +204,7 @@ describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440',
         'user-1',
         'task-1',
         'pkg-1',
-        { corrections: { startDate: 'not-a-date' } },
+        { corrections: { startDate: 'not-a-date' }, expectedPackageVersion: 1 },
       ),
     ).rejects.toThrow('审核修正值无效：出团日期')
     expect(reviewWrite).not.toHaveBeenCalled()
@@ -238,6 +253,16 @@ describe('AiCreateTaskService review disposition #440', () => {
       : task
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId: 'user-1',
+          status: AgentTaskStatus.active,
+          type: 'departure_creation',
+          departureId: null,
+        }),
+      },
+      aiWorkflowJob: { findFirst: jest.fn().mockResolvedValue(null) },
       aiCreateTask: {
         findFirst: jest.fn().mockResolvedValue(currentTask),
         findFirstOrThrow: jest.fn().mockResolvedValue(currentTask),
@@ -331,6 +356,70 @@ describe('AiCreateTaskService review disposition #440', () => {
       })
     },
   )
+
+  it('rejects a stale review revision and does not overwrite corrections', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-stale-patch',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      version: 2,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '候选团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名' }],
+        },
+      ],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.patchReviewPackage('org-1', 'user-1', 'task-1', pkg.id, {
+        corrections: { name: '过期修订' },
+        expectedPackageVersion: 1,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException)
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiReviewRecord.create).not.toHaveBeenCalled()
+  })
+
+  it('increments the package version and writes a revise record', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-revise',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      version: 1,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '候选团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名' }],
+        },
+      ],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.patchReviewPackage('org-1', 'user-1', 'task-1', pkg.id, {
+        corrections: { name: '人工修订团名' },
+        expectedPackageVersion: 1,
+      }),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: { id: pkg.id, status: AiReviewPackageStatus.pending, version: 1 },
+      data: expect.objectContaining({ version: { increment: 1 } }),
+    })
+    expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'revise',
+        packageVersion: 2,
+      }),
+    })
+  })
 
   it('applies a valid registered proposal to the draft on confirm', async () => {
     const modelCandidate = {
@@ -750,6 +839,13 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
     )
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId: 'user-1',
+          status: AgentTaskStatus.active,
+        }),
+      },
       aiCreateTask: { findFirst },
       departureCreationDraft: {
         updateMany: jest.fn().mockResolvedValue({ count: options?.updateCount ?? 1 }),
@@ -916,7 +1012,7 @@ describe('AiCreateTaskService.saveDraft defaults #442', () => {
       draft: { mode: DepartureCreationDraftMode.MANUAL, routeName: '川西' },
     })
 
-    expect(result.draft.snapshot).toMatchObject({
+    expect(result.draft?.snapshot).toMatchObject({
       ownerUserId: 'user-1',
       departureType: DepartureType.COMBINED,
     })
@@ -1208,6 +1304,13 @@ describe('AiCreateTaskService.regenerateReviewPackage owner check', () => {
     }
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId,
+          status: AgentTaskStatus.active,
+        }),
+      },
       aiCreateTask: {
         findFirst: jest.fn().mockResolvedValue(task),
         findFirstOrThrow: jest.fn().mockResolvedValue(task),
