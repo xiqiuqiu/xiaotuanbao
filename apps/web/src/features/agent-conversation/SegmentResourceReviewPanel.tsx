@@ -21,7 +21,6 @@ import {
   getReviewConfirmation,
 } from '@/services/agent-collaboration.service'
 import { patchAiReviewPackage, rejectAiReviewPackage } from '@/services/ai-create-task.service'
-import { useAgentConversationStore } from './agent-conversation.store'
 import styles from './SegmentResourceReviewPanel.module.css'
 
 const KIND_OPTIONS = RESOURCE_KIND_OPTIONS.map((option) => ({
@@ -46,12 +45,13 @@ function confirmationForPackage(confirmations: ReviewConfirmationView[], package
 export function SegmentResourceReviewPanel({
   departureId,
   conversationId,
+  focusedReviewPackageId,
 }: {
   departureId: string
   conversationId: string
+  focusedReviewPackageId?: string | null
 }) {
   const canEdit = canEditDeparture(useAuthStore((state) => state.actionKeys))
-  const focusedReviewPackageId = useAgentConversationStore((state) => state.focusedReviewPackageId)
   const collaborationQuery = useQuery({
     queryKey: ['departure-collaboration', departureId, conversationId],
     queryFn: () => getDepartureCollaboration(departureId, conversationId),

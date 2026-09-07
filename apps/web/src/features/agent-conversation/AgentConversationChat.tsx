@@ -484,6 +484,7 @@ function mergeEvents(
 }
 
 function useAgentConversationChatController() {
+  const [focusedReviewPackageId, setFocusedReviewPackageId] = useState<string | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const location = useRouterState({
@@ -942,7 +943,7 @@ function useAgentConversationChatController() {
       if (taskType === DEPARTURE_COLLABORATION_TASK_TYPE) {
         useUiStore.getState().setAssistPaneCollapsed(false)
         if (extras?.reviewPackageId) {
-          useAgentConversationStore.getState().focusReviewPackage(extras.reviewPackageId)
+          setFocusedReviewPackageId(extras.reviewPackageId)
         }
         if (alreadyOnTask) {
           return
@@ -958,7 +959,13 @@ function useAgentConversationChatController() {
       }
       void navigate(agentTaskWorkspaceNavigation(taskId, taskType))
     },
-    [closeGlobalForBusinessNavigation, location.pathname, location.searchStr, navigate, queryClient],
+    [
+      closeGlobalForBusinessNavigation,
+      location.pathname,
+      location.searchStr,
+      navigate,
+      queryClient,
+    ],
   )
   openAgentTaskRef.current = openAgentTask
   const activityRenderers = useMemo(
@@ -997,6 +1004,7 @@ function useAgentConversationChatController() {
     stoppableBatchId,
     updateDraft,
     composerEpoch,
+    focusedReviewPackageId,
   }
 }
 
@@ -1113,6 +1121,7 @@ export function AgentConversationChat() {
     stoppableBatchId,
     updateDraft,
     composerEpoch,
+    focusedReviewPackageId,
   } = useAgentConversationChatController()
   const queuedMessagesContextValue = useMemo(
     () => ({
@@ -1130,10 +1139,19 @@ export function AgentConversationChat() {
   )
 
   return (
-    <div className={chatStyles.root}>
+    <div
+      className={chatStyles.root}
+      {...(focusedReviewPackageId
+        ? { 'data-focused-review-package-id': focusedReviewPackageId }
+        : {})}
+    >
       {errorText ? <Alert type="error" showIcon title={errorText} /> : null}
       {departureId && conversationId ? (
-        <SegmentResourceReviewPanel departureId={departureId} conversationId={conversationId} />
+        <SegmentResourceReviewPanel
+          departureId={departureId}
+          conversationId={conversationId}
+          focusedReviewPackageId={focusedReviewPackageId}
+        />
       ) : null}
       {attachedPageAttachment ? (
         <div className={chatStyles.pageContext}>

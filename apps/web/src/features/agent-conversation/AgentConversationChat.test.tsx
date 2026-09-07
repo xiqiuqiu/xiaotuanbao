@@ -766,7 +766,7 @@ describe('AgentConversationChat task and review activities', () => {
 
     await user.click(await screen.findByRole('button', { name: '查看审核内容' }))
     expect(routerState.navigate).not.toHaveBeenCalled()
-    expect(useAgentConversationStore.getState().focusedReviewPackageId).toBe('pkg-seg')
+    expect(document.querySelector('[data-focused-review-package-id="pkg-seg"]')).toBeTruthy()
   })
 
   it('同一会话并列展示多条未处置追问，普通输入框保持独立', async () => {
