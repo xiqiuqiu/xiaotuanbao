@@ -7,19 +7,24 @@ import type { AiReviewCandidateView, AiReviewPackageView } from '@xiaotuanbao/sh
 
 export interface StoredReviewCandidate<FieldKey extends string = string> {
   fieldKey: FieldKey
-  proposedValue: string | number
-  userCorrectedValue?: string | number | null
+  proposedValue: unknown
+  userCorrectedValue?: unknown
   clarity: 'clear' | 'needs_confirmation' | 'undetermined'
   status: 'pending' | 'confirmed' | 'rejected' | 'superseded'
   evidence: AiReviewCandidateView['evidence']
 }
 
 export function toStoredCandidates(
-  candidates: readonly ReviewSchemaCandidate[],
+  candidates: readonly {
+    fieldKey: string
+    proposedValue?: unknown
+    clarity: StoredReviewCandidate['clarity']
+    evidence: StoredReviewCandidate['evidence']
+  }[],
 ): StoredReviewCandidate[] {
   return candidates.map((candidate) => ({
     fieldKey: candidate.fieldKey,
-    proposedValue: candidate.proposedValue,
+    proposedValue: candidate.proposedValue ?? null,
     clarity: candidate.clarity,
     status: 'pending',
     evidence: candidate.evidence,
@@ -68,7 +73,7 @@ export function parseStoredCandidates(
 
 export function effectiveCandidateValue(
   candidate: StoredReviewCandidate,
-): string | number | null {
+): unknown {
   return candidate.userCorrectedValue !== undefined
     ? candidate.userCorrectedValue
     : candidate.proposedValue
@@ -77,18 +82,18 @@ export function effectiveCandidateValue(
 export function reviewConfirmValues<FieldKey extends string>(
   candidates: StoredReviewCandidate<FieldKey>[],
 ): {
-  corrections: Partial<Record<FieldKey, string | number | null>>
-  submissions: Partial<Record<FieldKey, string | number | null>>
+  corrections: Partial<Record<FieldKey, unknown>>
+  submissions: Partial<Record<FieldKey, unknown>>
 } {
   return {
     corrections: Object.fromEntries(
       candidates
         .filter((candidate) => candidate.userCorrectedValue !== undefined)
         .map((candidate) => [candidate.fieldKey, candidate.userCorrectedValue]),
-    ) as Partial<Record<FieldKey, string | number | null>>,
+    ) as Partial<Record<FieldKey, unknown>>,
     submissions: Object.fromEntries(
       candidates.map((candidate) => [candidate.fieldKey, effectiveCandidateValue(candidate)]),
-    ) as Partial<Record<FieldKey, string | number | null>>,
+    ) as Partial<Record<FieldKey, unknown>>,
   }
 }
 
@@ -96,15 +101,15 @@ function parseUserCorrections(
   raw: unknown,
   schema: ReviewSchema,
   confirmationUnit: string,
-): Partial<Record<string, string | number | null>> {
+): Partial<Record<string, unknown>> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const unit = schema.confirmationUnits.find((candidate) => candidate.key === confirmationUnit)
   if (!unit) return {}
-  const corrections: Partial<Record<string, string | number | null>> = {}
+  const corrections: Partial<Record<string, unknown>> = {}
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     const field = unit.fields.find((candidate) => candidate.key === key)
     if (!field || (value !== null && !field.valueSchema.safeParse(value).success)) continue
-    corrections[key] = value as string | number | null
+    corrections[key] = value
   }
   return corrections
 }

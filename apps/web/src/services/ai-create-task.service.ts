@@ -8,6 +8,9 @@ import type {
   DepartureMaterialView,
   DepartureSummary,
   PatchAiReviewPackageDto,
+  AcceptReviewConfirmationDto,
+  ReviewConfirmationView,
+  DepartureCollaborationView,
   SaveDepartureCreationDraftDto,
   AiCreateAssistAvailability,
   AiCreateAssistTaskState,
@@ -271,6 +274,27 @@ export async function previewDepartureMaterial(
   materialId: string,
 ): Promise<{ blob: Blob; filename: string | null }> {
   return downloadBinary(`/agent/conversations/${conversationId}/sources/${materialId}/preview`)
+}
+
+export async function listDepartureCollaboration(
+  departureId: string,
+  conversationId?: string,
+): Promise<DepartureCollaborationView> {
+  return request.get<DepartureCollaborationView>(`/agent/departures/${departureId}/collaboration`, {
+    params: conversationId ? { conversationId } : undefined,
+  })
+}
+
+export async function acceptReviewConfirmation(
+  payload: AcceptReviewConfirmationDto,
+): Promise<ReviewConfirmationView> {
+  return request.post<ReviewConfirmationView>('/agent/review-decisions', payload)
+}
+
+export async function getReviewConfirmation(
+  decisionCommandId: string,
+): Promise<ReviewConfirmationView> {
+  return request.get<ReviewConfirmationView>(`/agent/review-decisions/${decisionCommandId}`)
 }
 
 export async function patchAiReviewPackage(

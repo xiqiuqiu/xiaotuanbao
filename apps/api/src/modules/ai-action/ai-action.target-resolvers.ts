@@ -126,6 +126,30 @@ async function resolveDepartureDraft(
     return deny('TARGET_MISSING', { kind: 'departure_creation_draft', id: null })
   }
   const task = await authority.findTask(actor.taskId)
+  if (task?.departureId && task.departureVersion != null && !task.draftId) {
+    const targetRef = { kind: 'departure', id: task.departureId }
+    const mismatch = denyClaimedMismatch(actor, input, targetRef)
+    if (mismatch) {
+      return mismatch
+    }
+    const scoped = taskScope(actor, task, targetRef)
+    if (!scoped.ok) {
+      return scoped
+    }
+    const claimedVersion = claimedPositiveIntField(input, 'objectVersion')
+    if (claimedVersion === null || claimedVersion !== task.departureVersion) {
+      return deny('TARGET_VERSION_MISMATCH', targetRef)
+    }
+    return {
+      ok: true,
+      target: {
+        kind: 'departure',
+        id: task.departureId,
+        organizationId: task.organizationId,
+        version: task.departureVersion,
+      },
+    }
+  }
   const targetRef = {
     kind: 'departure_creation_draft',
     id: task?.draftId ?? actor.taskId,

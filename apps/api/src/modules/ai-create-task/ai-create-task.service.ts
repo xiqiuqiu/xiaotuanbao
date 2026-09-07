@@ -36,7 +36,6 @@ import {
   searchSuppliersOutputSchema,
   searchPartnersInputSchema,
   searchPartnersOutputSchema,
-  submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
@@ -78,6 +77,7 @@ import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { projectPendingReviewPackage } from './review-package.projection'
+import { parseSubmitReviewPackageInput } from './source-order-review.mapper'
 import { DepartureMaterialService } from './departure-material.service'
 import {
   parseStoredCandidates,
@@ -534,9 +534,9 @@ export class AiCreateTaskService {
     },
     rawInput: unknown,
   ): Promise<ProposeReviewPackageOutput> {
-    let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
+    let input: ReturnType<typeof parseSubmitReviewPackageInput>
     try {
-      input = submitReviewPackageInputSchema.parse(rawInput)
+      input = parseSubmitReviewPackageInput(rawInput)
     } catch {
       throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
     }
@@ -547,27 +547,40 @@ export class AiCreateTaskService {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
-    const task = await this.prisma.aiCreateTask.findFirst({
-      where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
-      include: TASK_WITH_PENDING_INCLUDE,
+    const agentTask = await this.prisma.agentTask.findFirst({
+      where: { id: caller.taskId, organizationId: caller.organizationId },
     })
-    if (!task || !task.draft) {
-      throw new NotFoundException('AI 建团任务不存在')
+    if (!agentTask) {
+      throw new NotFoundException('任务不存在')
     }
-    if (task.agentTask.ownerUserId !== caller.userId) {
+    if (agentTask.ownerUserId !== caller.userId) {
       throw new ForbiddenException('仅任务创建者可提交审核包')
     }
     if (
-      (task.agentTask.status !== AgentTaskStatus.active &&
-        task.agentTask.status !== AgentTaskStatus.waiting) ||
-      task.departureId
+      agentTask.status !== AgentTaskStatus.active &&
+      agentTask.status !== AgentTaskStatus.waiting
     ) {
-      throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+      throw new BadRequestException('仅进行中的任务可提交审核包')
+    }
+    const createTask =
+      agentTask.type === AgentTaskType.departure_collaboration
+        ? null
+        : await this.prisma.aiCreateTask.findFirst({
+            where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
+            include: TASK_WITH_PENDING_INCLUDE,
+          })
+    if (agentTask.type !== AgentTaskType.departure_collaboration) {
+      if (!createTask?.draft) {
+        throw new NotFoundException('AI 建团任务不存在')
+      }
+      if (createTask.departureId) {
+        throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+      }
+      if (createTask.draft.version !== input.objectVersion) {
+        throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      }
     }
     await this.requireRunningAttempt(caller)
-    if (task.draft.version !== input.objectVersion) {
-      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
-    }
 
     const authority = await loadEvidenceAuthority(this.prisma, {
       organizationId: caller.organizationId,
@@ -596,7 +609,7 @@ export class AiCreateTaskService {
       confirmationUnit: input.confirmationUnit,
       candidates: input.candidates,
       normalizedProposal: validated.normalizedProposal,
-    }
+    } as ProposeReviewPackageOutput
   }
 
   async submitReviewPackageForAgent(
@@ -612,9 +625,9 @@ export class AiCreateTaskService {
     rawInput: unknown,
     options: { sourceActionId: string },
   ): Promise<SubmitReviewPackageOutput> {
-    let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
+    let input: ReturnType<typeof parseSubmitReviewPackageInput>
     try {
-      input = submitReviewPackageInputSchema.parse(rawInput)
+      input = parseSubmitReviewPackageInput(rawInput)
     } catch {
       throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
     }
@@ -631,29 +644,41 @@ export class AiCreateTaskService {
     return this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, caller.organizationId, caller.taskId)
 
-      const task = await tx.aiCreateTask.findFirst({
-        where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
-        include: TASK_WITH_PENDING_INCLUDE,
+      const agentTask = await tx.agentTask.findFirst({
+        where: { id: caller.taskId, organizationId: caller.organizationId },
       })
-      if (!task || !task.draft) {
-        throw new NotFoundException('AI 建团任务不存在')
+      if (!agentTask) {
+        throw new NotFoundException('任务不存在')
       }
-      if (task.agentTask.ownerUserId !== caller.userId) {
+      if (agentTask.ownerUserId !== caller.userId) {
         throw new ForbiddenException('仅任务创建者可提交审核包')
       }
       if (
-        (task.agentTask.status !== AgentTaskStatus.active &&
-          task.agentTask.status !== AgentTaskStatus.waiting) ||
-        task.departureId
+        agentTask.status !== AgentTaskStatus.active &&
+        agentTask.status !== AgentTaskStatus.waiting
       ) {
-        throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+        throw new BadRequestException('仅进行中的任务可提交审核包')
+      }
+      const task =
+        agentTask.type === AgentTaskType.departure_collaboration
+          ? null
+          : await tx.aiCreateTask.findFirst({
+              where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
+              include: TASK_WITH_PENDING_INCLUDE,
+            })
+      if (agentTask.type !== AgentTaskType.departure_collaboration) {
+        if (!task?.draft) {
+          throw new NotFoundException('AI 建团任务不存在')
+        }
+        if (task.departureId) {
+          throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+        }
+        if (task.draft.version !== input.objectVersion) {
+          throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+        }
       }
 
       await this.requireRunningAttempt(caller)
-
-      if (task.draft.version !== input.objectVersion) {
-        throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
-      }
       if (!caller.attemptId) {
         throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
       }
@@ -697,17 +722,21 @@ export class AiCreateTaskService {
         attemptId: caller.attemptId,
         sourceActionId: options.sourceActionId,
         reviewPackage: validated.reviewPackage,
-        target: {
-          kind: DEPARTURE_REVIEW_TARGET_KIND,
-          id: task.draft.id,
-          version: task.draft.version,
-          snapshot: task.draft.snapshot as Prisma.InputJsonValue,
-        },
+        ...(task?.draft
+          ? {
+              target: {
+                kind: DEPARTURE_REVIEW_TARGET_KIND,
+                id: task.draft.id,
+                version: task.draft.version,
+                snapshot: task.draft.snapshot as Prisma.InputJsonValue,
+              },
+            }
+          : {}),
       })
       return submitReviewPackageOutputSchema.parse({
         reviewPackageId,
         status: 'pending',
-        objectVersion: task.draft.version,
+        objectVersion: input.objectVersion,
         fieldKeys: stored.map((candidate) => candidate.fieldKey),
       })
     })
@@ -735,7 +764,7 @@ export class AiCreateTaskService {
       }
       const originalCandidates = this.parsePackageCandidates(pkg)
       const beforeCorrections = this.parseCorrections(
-        (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+        (pkg.userCorrections as Record<string, unknown> | undefined) ?? undefined,
         pkg,
       )
       const corrections = this.parseCorrections(dto.corrections, pkg)
@@ -880,7 +909,7 @@ export class AiCreateTaskService {
         corrections:
           candidates.length > 0
             ? this.parseCorrections(
-                (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+                (pkg.userCorrections as Record<string, unknown> | undefined) ?? undefined,
                 pkg,
               )
             : {},
@@ -1013,7 +1042,7 @@ export class AiCreateTaskService {
       }
 
       const storedCorrections = this.parseCorrections(
-        (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+        (pkg.userCorrections as Record<string, unknown> | undefined) ?? undefined,
         pkg,
       )
       const candidates = this.applyCorrections(originalCandidates, {
@@ -2003,7 +2032,7 @@ export class AiCreateTaskService {
           corrections:
             candidates.length > 0
               ? this.parseCorrections(
-                  (pkg.userCorrections as Record<string, string | number | null> | undefined) ?? undefined,
+                  (pkg.userCorrections as Record<string, unknown> | undefined) ?? undefined,
                   pkg,
                 )
               : {},
@@ -2107,12 +2136,12 @@ export class AiCreateTaskService {
   }
 
   private parseCorrections(
-    raw: Record<string, string | number | null> | undefined,
+    raw: Record<string, unknown> | undefined,
     pkg: { payloadSchema: string; confirmationUnit: string; targetKind: string },
-  ): Partial<Record<AiReviewableBasicInfoField, string | number | null>> {
+  ): Partial<Record<string, unknown>> {
     if (!raw) return {}
     const { unit } = this.requirePackageSchema(pkg)
-    const corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>> = {}
+    const corrections: Partial<Record<string, unknown>> = {}
     for (const [key, value] of Object.entries(raw)) {
       const field = unit.fields.find((candidate) => candidate.key === key)
       if (!field) {
@@ -2124,21 +2153,20 @@ export class AiCreateTaskService {
       ) {
         throw new BadRequestException(`审核修正值无效：${field.label}`)
       }
-      corrections[key as AiReviewableBasicInfoField] = value
+      corrections[key] = value
     }
     return corrections
   }
 
   private applyCorrections(
     candidates: StoredReviewCandidate[],
-    corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>,
+    corrections: Partial<Record<string, unknown>>,
   ): StoredReviewCandidate[] {
     return candidates.map((candidate) => {
-      const fieldKey = candidate.fieldKey as AiReviewableBasicInfoField
-      if (!(fieldKey in corrections)) return candidate
+      if (!(candidate.fieldKey in corrections)) return candidate
       return {
         ...candidate,
-        userCorrectedValue: corrections[fieldKey] ?? null,
+        userCorrectedValue: corrections[candidate.fieldKey] ?? null,
       }
     })
   }
@@ -2152,8 +2180,8 @@ export class AiCreateTaskService {
       action: AiReviewRecordAction
       decisionCommandId?: string
       candidates: StoredReviewCandidate[]
-      corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
-      submittedValues: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+      corrections: Partial<Record<string, unknown>>
+      submittedValues: Partial<Record<string, unknown>>
       objectVersion: number
       writeResult: AiReviewWriteResult
       conflictFields?: string[]

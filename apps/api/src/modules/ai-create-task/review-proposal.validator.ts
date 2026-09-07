@@ -6,8 +6,18 @@ import {
   type AiReviewCandidateInput,
   type EvidenceProposalV1,
   type NormalizedEvidenceProposalV1,
-  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
+
+type AnyReviewPackageProposal = {
+  objectVersion: number
+  confirmationUnit: string
+  candidates: Array<{
+    fieldKey: string
+    proposedValue?: unknown
+    clarity: AiReviewCandidateInput['clarity']
+    evidence: AiReviewCandidateInput['evidence']
+  }>
+}
 import {
   validateEvidenceProposal,
   type EvidenceAuthority,
@@ -32,14 +42,14 @@ export type ReviewProposalValidationResult =
   | {
       success: true
       normalizedProposal: NormalizedEvidenceProposalV1
-      reviewPackage: SubmitReviewPackageModelInput
+      reviewPackage: AnyReviewPackageProposal
     }
   | { success: false; errors: ReviewProposalError[] }
 
 const EMPTY_RULES: EvidenceSystemRuleRegistry = {}
 
 export function validateReviewProposal(input: {
-  proposal: SubmitReviewPackageModelInput
+  proposal: AnyReviewPackageProposal
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): ReviewProposalValidationResult {
@@ -68,7 +78,7 @@ export function validateReviewProposal(input: {
   }
 }
 
-function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProposalError | null {
+function proposalLimitError(proposal: AnyReviewPackageProposal): ReviewProposalError | null {
   if (proposal.candidates.length > AI_EVIDENCE_CANDIDATE_LIMIT) {
     return {
       candidateIndex: 0,
@@ -100,14 +110,14 @@ function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProp
 }
 
 function toEvidenceProposal(
-  proposal: SubmitReviewPackageModelInput,
+  proposal: AnyReviewPackageProposal,
   authority: EvidenceAuthority,
 ): EvidenceProposalV1 {
   return {
     schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
     candidates: proposal.candidates.map((candidate) => ({
       candidateId: candidate.fieldKey,
-      proposedValue: candidate.proposedValue,
+      proposedValue: (candidate.proposedValue ?? null) as EvidenceProposalV1['candidates'][number]['proposedValue'],
       evidence: candidate.evidence.map((evidence) => toEvidenceItem(evidence, authority)),
     })),
   }

@@ -8,6 +8,8 @@ export type AiActionTaskFact = {
   ownerUserId: string
   draftId: string | null
   draftVersion: number | null
+  departureId?: string | null
+  departureVersion?: number | null
 }
 
 export type AiActionMaterialFact = {

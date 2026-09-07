@@ -27,6 +27,8 @@ export function createPrismaAiActionTargetAuthority(client: TargetAuthorityDb): 
           id: true,
           organizationId: true,
           ownerUserId: true,
+          departureId: true,
+          departure: { select: { updatedAt: true } },
           departureCreationTask: {
             select: {
               draft: { select: { id: true, version: true } },
@@ -135,14 +137,21 @@ function toTaskFact(task: {
   id: string
   organizationId: string
   ownerUserId: string
+  departureId: string | null
+  departure: { updatedAt: Date } | null
   departureCreationTask: { draft: { id: string; version: number } | null } | null
 }): AiActionTaskFact {
+  const departureVersion = task.departure?.updatedAt
+    ? task.departure.updatedAt.getTime()
+    : null
   return {
     id: task.id,
     organizationId: task.organizationId,
     ownerUserId: task.ownerUserId,
     draftId: task.departureCreationTask?.draft?.id ?? null,
     draftVersion: task.departureCreationTask?.draft?.version ?? null,
+    departureId: task.departureId,
+    departureVersion,
   }
 }
 

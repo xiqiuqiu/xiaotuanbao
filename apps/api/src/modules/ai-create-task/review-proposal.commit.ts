@@ -4,7 +4,10 @@ import {
   type ReviewProposalError,
   type ReviewProposalValidationResult,
 } from './review-proposal.validator'
-import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
+import type {
+  SubmitReviewPackageModelInput,
+  SubmitSourceOrderReviewPackageModelInput,
+} from '@xiaotuanbao/ai-contracts'
 
 export class ReviewProposalRejectedError extends Error {
   readonly errors: ReviewProposalError[]
@@ -17,7 +20,11 @@ export class ReviewProposalRejectedError extends Error {
 }
 
 export function requireValidReviewProposal(input: {
-  proposal: SubmitReviewPackageModelInput
+  proposal: {
+    objectVersion: number
+    confirmationUnit: string
+    candidates: SubmitReviewPackageModelInput['candidates'] | SubmitSourceOrderReviewPackageModelInput['candidates']
+  }
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): Extract<ReviewProposalValidationResult, { success: true }> {

@@ -11,6 +11,7 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureDetailWorkspace } from '../components/DepartureDetailWorkspace'
+import { DepartureSourceOrderReview } from '../components/DepartureSourceOrderReview'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
@@ -146,6 +147,7 @@ export function DepartureDetailPage() {
         onRefresh={handleRefreshDetail}
       />
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
+      <DepartureSourceOrderReview departureId={departure.id} canEdit={canEdit} />
       <DepartureDetailWorkspace
         departure={departure}
         activeTab={activeTab}

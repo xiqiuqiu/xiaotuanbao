@@ -283,28 +283,48 @@ export class SourceOrderService {
     departureId: string,
     dto: CreateSourceOrderDto,
   ): Promise<SourceOrderSummary> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
-    this.ensureDepartureEditable(departure)
+    return this.createWithSelectedGuests(organizationId, departureId, dto, [])
+  }
 
-    const partner = await this.ensureSelectablePartner(organizationId, dto.partnerId)
-    const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
-    const normalized = this.normalizeInput({ ...dto, fareAdjustments })
+  async createWithSelectedGuests(
+    organizationId: string,
+    departureId: string,
+    dto: CreateSourceOrderDto,
+    guests: CreateSourceOrderGuestDto[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<SourceOrderSummary> {
+    const write = async (client: Prisma.TransactionClient) => {
+      const departure = await this.findDepartureOrThrow(organizationId, departureId, client)
+      this.ensureDepartureEditable(departure)
 
-    validateSourceOrderInput({
-      partnerId: partner.id,
-      ...normalized,
-    })
+      const partner = await this.ensureSelectablePartner(organizationId, dto.partnerId, client)
+      const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
+      const normalized = this.normalizeInput({ ...dto, fareAdjustments })
 
-    const amounts = computeSourceOrderAmounts(normalized)
-    const guestCount = normalized.adultGuestCount + normalized.childGuestCount
-    const displayName = await this.generateDisplayName(
-      departure,
-      partner.name,
-      partner.id,
-    )
+      validateSourceOrderInput({
+        partnerId: partner.id,
+        ...normalized,
+      })
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const order = await tx.sourceOrder.create({
+      const amounts = computeSourceOrderAmounts(normalized)
+      const guestCount = normalized.adultGuestCount + normalized.childGuestCount
+      const displayName = await this.generateDisplayName(
+        departure,
+        partner.name,
+        partner.id,
+        undefined,
+        client,
+      )
+      const selectedGuests = guests
+        .map((guest) => ({
+          name: guest.name.trim(),
+          phone: guest.phone?.trim() || null,
+          gender: guest.gender ?? 'unknown',
+          notes: guest.notes?.trim() || null,
+        }))
+        .filter((guest) => guest.name.length > 0)
+
+      const order = await client.sourceOrder.create({
         data: {
           departureId: departure.id,
           partnerId: partner.id,
@@ -331,12 +351,21 @@ export class SourceOrderService {
       })
 
       if (fareAdjustments.length > 0) {
-        await tx.sourceOrderFareAdjustment.createMany({
+        await client.sourceOrderFareAdjustment.createMany({
           data: toFareAdjustmentCreateRows(order.id, fareAdjustments),
         })
       }
 
-      return tx.sourceOrder.findFirstOrThrow({
+      if (selectedGuests.length > 0) {
+        await client.sourceOrderGuest.createMany({
+          data: selectedGuests.map((guest) => ({
+            sourceOrderId: order.id,
+            ...guest,
+          })),
+        })
+      }
+
+      return client.sourceOrder.findFirstOrThrow({
         where: { id: order.id },
         include: {
           partner: true,
@@ -344,7 +373,9 @@ export class SourceOrderService {
           guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
         },
       })
-    })
+    }
+
+    const created = tx ? await write(tx) : await this.prisma.$transaction(write)
 
     return this.toSourceOrderSummary(created, {
       hasSchedule: false,
@@ -800,8 +831,9 @@ export class SourceOrderService {
     partnerName: string,
     partnerId: string,
     excludeId?: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<string> {
-    const existingCount = await this.prisma.sourceOrder.count({
+    const existingCount = await client.sourceOrder.count({
       where: {
         departureId: departure.id,
         partnerId,
@@ -824,8 +856,12 @@ export class SourceOrderService {
     return map
   }
 
-  private async findDepartureOrThrow(organizationId: string, departureId: string) {
-    const departure = await this.prisma.departure.findFirst({
+  private async findDepartureOrThrow(
+    organizationId: string,
+    departureId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const departure = await client.departure.findFirst({
       where: { id: departureId, organizationId },
     })
 
@@ -869,8 +905,12 @@ export class SourceOrderService {
     return guest
   }
 
-  private async ensureSelectablePartner(organizationId: string, partnerId: string) {
-    const partner = await this.prisma.partner.findFirst({
+  private async ensureSelectablePartner(
+    organizationId: string,
+    partnerId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const partner = await client.partner.findFirst({
       where: { id: partnerId, organizationId },
     })
 

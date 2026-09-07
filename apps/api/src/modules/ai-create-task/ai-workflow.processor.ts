@@ -2356,7 +2356,11 @@ export class AiWorkflowProcessor {
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
     attemptId: string,
-    reviewPackage: SubmitReviewPackageModelInput,
+    reviewPackage: {
+      objectVersion: number
+      confirmationUnit: string
+      candidates: SubmitReviewPackageModelInput['candidates']
+    },
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
@@ -2408,7 +2412,7 @@ export class AiWorkflowProcessor {
           .array()
           .parse(attempt.grantedCapabilities),
       },
-      input: validated.reviewPackage,
+      input: validated.reviewPackage as SubmitReviewPackageModelInput,
       persist: async ({ action, target }) => {
         if (!action?.id) {
           throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
