@@ -40,6 +40,7 @@ import {
   submitReviewPackageOutputSchema,
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
+  DEPARTURE_REVIEW_TARGET_KIND,
   registeredReviewSchemas,
   isTargetVersionStale,
   reviewConflictChangeSummary,
@@ -76,6 +77,7 @@ import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
+import { projectPendingReviewPackage } from './review-package.projection'
 import { DepartureMaterialService } from './departure-material.service'
 import {
   parseStoredCandidates,
@@ -98,7 +100,6 @@ import { validateReviewProposal } from './review-proposal.validator'
 import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 import {
   reviewDecisionRequestHash,
-  reviewPackageCreateData,
   reviewProposalHash,
 } from './review-package.envelope'
 
@@ -688,22 +689,23 @@ export class AiCreateTaskService {
       }
 
       const stored = toStoredCandidates(validated.reviewPackage.candidates)
-      const created = await tx.aiReviewPackage.create({
-        data: reviewPackageCreateData({
-          organizationId: caller.organizationId,
-          taskId: caller.taskId,
-          conversationId: caller.conversationId,
-          inputBatchId: caller.inputBatchId,
-          attemptId: caller.attemptId,
-          sourceActionId: options.sourceActionId,
-          targetId: task.draft.id,
-          baseObjectVersion: task.draft.version,
-          baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-          reviewPackage: validated.reviewPackage,
-        }),
+      const reviewPackageId = await projectPendingReviewPackage(tx, {
+        organizationId: caller.organizationId,
+        taskId: caller.taskId,
+        conversationId: caller.conversationId,
+        inputBatchId: caller.inputBatchId,
+        attemptId: caller.attemptId,
+        sourceActionId: options.sourceActionId,
+        reviewPackage: validated.reviewPackage,
+        target: {
+          kind: DEPARTURE_REVIEW_TARGET_KIND,
+          id: task.draft.id,
+          version: task.draft.version,
+          snapshot: task.draft.snapshot as Prisma.InputJsonValue,
+        },
       })
       return submitReviewPackageOutputSchema.parse({
-        reviewPackageId: created.id,
+        reviewPackageId,
         status: 'pending',
         objectVersion: task.draft.version,
         fieldKeys: stored.map((candidate) => candidate.fieldKey),
