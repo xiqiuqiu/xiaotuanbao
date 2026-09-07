@@ -23,6 +23,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
+import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiConversationService } from './ai-conversation.service'
 import { reviewDecisionRequestHash } from './review-package.envelope'
@@ -101,9 +102,6 @@ export class ReviewCollaborationService {
         if (pkg.task.ownerUserId !== userId) {
           throw new ForbiddenException('仅事项所有者可确认')
         }
-        if (pkg.status !== AiReviewPackageStatus.pending) {
-          throw new ConflictException('仅待审核事项可确认')
-        }
       }
       const record = await tx.aiCreateIdempotencyRecord.upsert({
         where: {
@@ -127,7 +125,7 @@ export class ReviewCollaborationService {
       if (record.requestHash !== requestHash) {
         throw new ConflictException('幂等键已用于不同的确认选择')
       }
-      if (record.completedAt && record.resultJson) {
+      if (record.resultJson) {
         return record.resultJson as unknown as ReviewConfirmationView
       }
       const items = []
@@ -137,10 +135,27 @@ export class ReviewCollaborationService {
           throw new BadRequestException('审核事项缺少来源会话，无法受理确认')
         }
         await lockAiCreateTask(tx, organizationId, pkg.taskId)
-        if (pkg.version !== item.expectedPackageVersion) {
+        const current = await tx.aiReviewPackage.findFirst({
+          where: { id: pkg.id, organizationId, taskId: pkg.taskId },
+        })
+        if (!current) {
+          throw new NotFoundException('审核事项不存在')
+        }
+        if (current.status !== AiReviewPackageStatus.pending) {
+          throw new ConflictException('仅待审核事项可确认')
+        }
+        if (current.version !== item.expectedPackageVersion) {
           throw new ConflictException('审核包版本已变化，请刷新后重试')
         }
-        const itemKey = reviewConfirmItemKey(dto.decisionCommandId, pkg.id)
+        if (!current.conversationId || !current.inputBatchId || !current.taskId) {
+          throw new BadRequestException('审核事项缺少来源会话，无法受理确认')
+        }
+        const jobKey = reviewConfirmJobKey(dto.decisionCommandId, current.id)
+        const inFlight = await findInFlightReviewConfirmJob(tx, current.id, jobKey)
+        if (inFlight) {
+          throw new ConflictException('该事项正在确认中，暂不可重复确认')
+        }
+        const itemKey = reviewConfirmItemKey(dto.decisionCommandId, current.id)
         await tx.aiCreateIdempotencyRecord.upsert({
           where: {
             organizationId_operation_idempotencyKey: {
@@ -156,7 +171,7 @@ export class ReviewCollaborationService {
             requestHash,
             requestSnapshot: item as unknown as Prisma.InputJsonValue,
             operatorUserId: userId,
-            taskId: pkg.taskId,
+            taskId: current.taskId,
           },
           update: {},
         })
@@ -170,23 +185,23 @@ export class ReviewCollaborationService {
           },
         })
         await tx.aiWorkflowJob.upsert({
-          where: { jobKey: reviewConfirmJobKey(dto.decisionCommandId, pkg.id) },
+          where: { jobKey },
           create: {
             organizationId,
-            taskId: pkg.taskId,
-            conversationId: pkg.conversationId,
-            inputBatchId: pkg.inputBatchId,
-            reviewPackageId: pkg.id,
+            taskId: current.taskId,
+            conversationId: current.conversationId,
+            inputBatchId: current.inputBatchId,
+            reviewPackageId: current.id,
             idempotencyRecordId: itemRecord.id,
             type: AiWorkflowJobType.review_confirm,
-            jobKey: reviewConfirmJobKey(dto.decisionCommandId, pkg.id),
+            jobKey,
             status: AiWorkflowJobStatus.pending,
           },
           update: {},
         })
         items.push({
-          packageId: pkg.id,
-          itemIdentity: pkg.itemIdentity,
+          packageId: current.id,
+          itemIdentity: current.itemIdentity,
           status: 'accepted' as const,
         })
       }
@@ -197,7 +212,10 @@ export class ReviewCollaborationService {
       }
       await tx.aiCreateIdempotencyRecord.update({
         where: { id: record.id },
-        data: { resultJson: view as unknown as Prisma.InputJsonValue },
+        data: {
+          resultJson: view as unknown as Prisma.InputJsonValue,
+          completedAt: new Date(),
+        },
       })
       return view
     })

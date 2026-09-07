@@ -36,14 +36,26 @@ describe('ReviewCollaborationService #447', () => {
     batchRecord?: Record<string, unknown>
     packages?: Array<Record<string, unknown>>
   }) {
-    const packages = options?.packages ?? [pendingPackage]
+    const packages = (options?.packages ?? [pendingPackage]).map((pkg) => ({ ...pkg }))
     const jobs: Array<Record<string, unknown>> = []
     const itemRecords = new Map<string, Record<string, unknown>>()
+    const batchRecords = new Map<string, Record<string, unknown>>()
+    if (options?.batchRecord) {
+      batchRecords.set(
+        String(options.batchRecord.idempotencyKey ?? 'decision-1'),
+        { id: 'idem-batch', ...options.batchRecord },
+      )
+    }
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
       aiReviewPackage: {
-        findMany: jest.fn().mockResolvedValue(packages),
-        findFirst: jest.fn().mockResolvedValue(pendingPackage),
+        findMany: jest.fn().mockImplementation(() => Promise.resolve(packages.map((pkg) => ({ ...pkg })))),
+        findFirst: jest.fn().mockImplementation(
+          ({ where }: { where?: { id?: string } }) => {
+            const current = packages.find((pkg) => pkg.id === where?.id) ?? packages[0]
+            return Promise.resolve(current ? { ...current } : null)
+          },
+        ),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       aiCreateIdempotencyRecord: {
@@ -56,17 +68,31 @@ describe('ReviewCollaborationService #447', () => {
             where: { organizationId_operation_idempotencyKey: { idempotencyKey: string; operation: string } }
           }) => {
             const key = `${where.organizationId_operation_idempotencyKey.operation}:${where.organizationId_operation_idempotencyKey.idempotencyKey}`
-            if (
-              where.organizationId_operation_idempotencyKey.operation === REVIEW_CONFIRM_BATCH_OPERATION &&
-              options?.batchRecord
-            ) {
-              return Promise.resolve(options.batchRecord)
+            if (where.organizationId_operation_idempotencyKey.operation === REVIEW_CONFIRM_BATCH_OPERATION) {
+              const batchKey = where.organizationId_operation_idempotencyKey.idempotencyKey
+              const existingBatch = batchRecords.get(batchKey)
+              if (existingBatch) {
+                return Promise.resolve(existingBatch)
+              }
+              const createdBatch = {
+                id: `idem-batch-${batchKey}`,
+                completedAt: null,
+                resultJson: null,
+                ...create,
+              }
+              batchRecords.set(batchKey, createdBatch)
+              return Promise.resolve(createdBatch)
             }
-            const created = { id: `idem-${key}`, completedAt: null, ...create }
             if (where.organizationId_operation_idempotencyKey.operation === REVIEW_CONFIRM_ITEM_OPERATION) {
+              const existing = itemRecords.get(where.organizationId_operation_idempotencyKey.idempotencyKey)
+              if (existing) {
+                return Promise.resolve(existing)
+              }
+              const created = { id: `idem-${key}`, completedAt: null, resultJson: null, ...create }
               itemRecords.set(where.organizationId_operation_idempotencyKey.idempotencyKey, created)
+              return Promise.resolve(created)
             }
-            return Promise.resolve(created)
+            return Promise.resolve({ id: `idem-${key}`, completedAt: null, resultJson: null, ...create })
           },
         ),
         findUniqueOrThrow: jest.fn().mockImplementation(
@@ -76,12 +102,55 @@ describe('ReviewCollaborationService #447', () => {
             where: { organizationId_operation_idempotencyKey: { idempotencyKey: string } }
           }) => itemRecords.get(where.organizationId_operation_idempotencyKey.idempotencyKey),
         ),
-        update: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockImplementation(
+          ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+            for (const record of batchRecords.values()) {
+              if (record.id === where.id) {
+                Object.assign(record, data)
+                return Promise.resolve(record)
+              }
+            }
+            return Promise.resolve(data)
+          },
+        ),
       },
       aiWorkflowJob: {
+        findFirst: jest.fn().mockImplementation(
+          ({
+            where,
+          }: {
+            where?: {
+              reviewPackageId?: string
+              status?: { in?: AiWorkflowJobStatus[] }
+              jobKey?: { not?: string }
+              NOT?: { jobKey?: string }
+            }
+          }) => {
+            const match = jobs.find((job) => {
+              if (job.reviewPackageId !== where?.reviewPackageId) {
+                return false
+              }
+              const allowed = where?.status?.in
+              if (allowed && !allowed.includes(job.status as AiWorkflowJobStatus)) {
+                return false
+              }
+              const excludedJobKey = where?.jobKey?.not ?? where?.NOT?.jobKey
+              if (excludedJobKey && job.jobKey === excludedJobKey) {
+                return false
+              }
+              return true
+            })
+            return Promise.resolve(match ?? null)
+          },
+        ),
         upsert: jest.fn().mockImplementation(({ create }: { create: Record<string, unknown> }) => {
-          jobs.push(create)
-          return Promise.resolve({ id: `job-${jobs.length}`, ...create })
+          const existing = jobs.find((job) => job.jobKey === create.jobKey)
+          if (existing) {
+            return Promise.resolve({ id: existing.id, ...existing })
+          }
+          const created = { id: `job-${jobs.length + 1}`, ...create }
+          jobs.push(created)
+          return Promise.resolve(created)
         }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -115,7 +184,7 @@ describe('ReviewCollaborationService #447', () => {
       conversations as never,
       { getById: jest.fn().mockResolvedValue({ id: 'departure-1' }) } as never,
     )
-    return { service, prisma, tx, tasks, conversations, jobs }
+    return { service, prisma, tx, tasks, conversations, jobs, packages }
   }
 
   it('accepts a multi-item confirmation and enqueues one job per item', async () => {
@@ -154,15 +223,12 @@ describe('ReviewCollaborationService #447', () => {
         reviewPackageId: 'pkg-2',
       }),
     ])
-    expect(tx.aiCreateIdempotencyRecord.upsert).toHaveBeenCalledWith(
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          organizationId_operation_idempotencyKey: {
-            organizationId,
-            operation: REVIEW_CONFIRM_BATCH_OPERATION,
-            idempotencyKey: 'decision-1',
-          },
-        },
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({ accepted: true }),
+          completedAt: expect.any(Date),
+        }),
       }),
     )
   })
@@ -206,6 +272,54 @@ describe('ReviewCollaborationService #447', () => {
     })
 
     await expect(service.acceptReviewConfirmation(organizationId, userId, dto)).resolves.toEqual(saved)
+    expect(jobs).toHaveLength(0)
+  })
+
+  it('replays the same decisionCommandId after jobs have already confirmed the packages', async () => {
+    const dto = {
+      decisionCommandId: 'decision-1',
+      items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+    }
+    const { service, jobs, packages } = createService()
+
+    const first = await service.acceptReviewConfirmation(organizationId, userId, dto)
+    expect(first).toEqual({
+      decisionCommandId: 'decision-1',
+      accepted: true,
+      items: [{ packageId: 'pkg-1', itemIdentity: 'item:0', status: 'accepted' }],
+    })
+    packages[0].status = AiReviewPackageStatus.confirmed
+
+    await expect(service.acceptReviewConfirmation(organizationId, userId, dto)).resolves.toEqual(first)
+    expect(jobs).toHaveLength(1)
+  })
+
+  it('rejects a second decisionCommandId while a confirm job is already in flight', async () => {
+    const { service, jobs } = createService()
+    await service.acceptReviewConfirmation(organizationId, userId, {
+      decisionCommandId: 'decision-1',
+      items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+    })
+
+    await expect(
+      service.acceptReviewConfirmation(organizationId, userId, {
+        decisionCommandId: 'decision-2',
+        items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException)
+    expect(jobs).toHaveLength(1)
+  })
+
+  it('compares expectedPackageVersion against the package row after taking the task lock', async () => {
+    const { service, tx, jobs } = createService()
+    tx.aiReviewPackage.findFirst.mockResolvedValue({ ...pendingPackage, version: 2 })
+
+    await expect(
+      service.acceptReviewConfirmation(organizationId, userId, {
+        decisionCommandId: 'decision-1',
+        items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException)
     expect(jobs).toHaveLength(0)
   })
 

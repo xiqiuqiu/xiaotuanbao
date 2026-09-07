@@ -54,7 +54,7 @@ import {
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
 import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, Departure, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, AiWorkflowJobStatus, AiWorkflowJobType, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
@@ -75,6 +75,7 @@ import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
+import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { DepartureMaterialService } from './departure-material.service'
 import {
   parseStoredCandidates,
@@ -726,14 +727,7 @@ export class AiCreateTaskService {
         packageId,
         dto.expectedPackageVersion,
       )
-      const inFlight = await tx.aiWorkflowJob.findFirst({
-        where: {
-          reviewPackageId: pkg.id,
-          type: AiWorkflowJobType.review_confirm,
-          status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
-        },
-        select: { id: true },
-      })
+      const inFlight = await findInFlightReviewConfirmJob(tx, pkg.id)
       if (inFlight) {
         throw new ConflictException('该事项正在确认中，暂不可修订')
       }
