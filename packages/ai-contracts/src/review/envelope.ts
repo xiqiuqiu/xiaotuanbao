@@ -59,6 +59,25 @@ export function reviewItemIdentity(ordinal: number): string {
   return `item:${ordinal}`
 }
 
+export function parseReviewItemOrdinal(identity: string): number | null {
+  const matched = /^item:(\d+)$/.exec(identity)
+  if (!matched) {
+    return null
+  }
+  return Number(matched[1])
+}
+
+export function nextReviewItemIdentity(existing: readonly string[]): string {
+  let max = -1
+  for (const identity of existing) {
+    const ordinal = parseReviewItemOrdinal(identity)
+    if (ordinal != null && ordinal > max) {
+      max = ordinal
+    }
+  }
+  return reviewItemIdentity(max + 1)
+}
+
 export const reviewDecisionIdentitySchema = z
   .object({
     reviewPackageId: z.string().min(1),

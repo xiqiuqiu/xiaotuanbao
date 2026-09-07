@@ -227,6 +227,8 @@ export {
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
   reviewItemIdentity,
+  nextReviewItemIdentity,
+  parseReviewItemOrdinal,
   reviewItemIdentitySchema,
   reviewPackageEnvelopeSchema,
   reviewProposalIdentitySchema,

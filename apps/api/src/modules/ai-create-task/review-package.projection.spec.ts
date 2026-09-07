@@ -24,6 +24,7 @@ const racedPackage = {
   id: 'pkg-raced',
   sourceActionId: 'action-first',
   candidates: [{ fieldKey: 'name' }],
+  itemIdentity: 'item:0',
 }
 
 function createTx(options?: {
@@ -36,47 +37,85 @@ function createTx(options?: {
   existingCount?: number
   draftVersion?: number
   uniqueOnCreate?: boolean
-  raced?: { id: string; sourceActionId: string | null; candidates: unknown } | null
+  uniqueOnFirstCreateOnly?: boolean
+  raced?: { id: string; sourceActionId: string | null; candidates: unknown; itemIdentity?: string } | null
+  departureUpdatedAt?: Date
 }) {
-  const created = { id: 'pkg-new' }
+  const packages: Array<{
+    id: string
+    sourceActionId: string | null
+    itemIdentity: string
+    candidates: unknown
+  }> = options?.existing
+    ? [
+        {
+          id: options.existing.id,
+          sourceActionId: options.existing.sourceActionId,
+          itemIdentity: options.existing.itemIdentity ?? 'item:0',
+          candidates: options.existing.candidates,
+        },
+      ]
+    : []
+  let createCalls = 0
+  const created = { id: 'pkg-new-0' }
   const draftUpdate = jest.fn()
-  const reviewCreate = jest.fn().mockImplementation(async () => {
-    if (options?.uniqueOnCreate) {
+  const reviewCreate = jest.fn().mockImplementation(async ({ data }: { data: { itemIdentity: string; sourceAction: { connect: { id: string } } } }) => {
+    createCalls += 1
+    if (options?.uniqueOnCreate || (options?.uniqueOnFirstCreateOnly && createCalls === 1)) {
       const error = Object.assign(new Error('Unique constraint'), { code: 'P2002' })
       throw error
     }
-    return created
+    const row = {
+      id: `pkg-new-${packages.filter((pkg) => pkg.id.startsWith('pkg-new-')).length}`,
+      sourceActionId: data.sourceAction.connect.id,
+      itemIdentity: data.itemIdentity,
+      candidates: reviewPackage.candidates,
+    }
+    packages.push(row)
+    return { id: row.id }
   })
   const reviewFindFirst = jest.fn().mockImplementation(
     ({ where }: { where?: { sourceActionId?: string; inputBatchId?: string; itemIdentity?: string } }) => {
-      if (options?.uniqueOnCreate) {
+      if (options?.uniqueOnCreate || options?.uniqueOnFirstCreateOnly) {
+        if (where?.sourceActionId && where.itemIdentity) {
+          const stored = packages.find(
+            (pkg) => pkg.sourceActionId === where.sourceActionId && pkg.itemIdentity === where.itemIdentity,
+          )
+          return Promise.resolve(stored ?? null)
+        }
         if (where?.sourceActionId) {
           return Promise.resolve(null)
         }
         if (where?.itemIdentity) {
-          return Promise.resolve(
+          const stored = packages.find((pkg) => pkg.itemIdentity === where.itemIdentity)
+          if (stored) {
+            return Promise.resolve(stored)
+          }
+          const racedRow = options.raced === undefined ? racedPackage : options.raced
+          if (
+            racedRow &&
+            (racedRow.itemIdentity ?? 'item:0') === where.itemIdentity &&
             reviewCreate.mock.calls.length > 0
-              ? (options.raced === undefined ? racedPackage : options.raced)
-              : null,
-          )
+          ) {
+            return Promise.resolve(racedRow)
+          }
+          return Promise.resolve(null)
         }
         return Promise.resolve(null)
       }
-      const existing = options?.existing
-      if (!existing) {
-        return Promise.resolve(null)
-      }
       if (where?.sourceActionId) {
-        return Promise.resolve(
-          existing.sourceActionId === where.sourceActionId ? existing : null,
+        const found = packages.find(
+          (pkg) =>
+            pkg.sourceActionId === where.sourceActionId &&
+            (where.itemIdentity == null || pkg.itemIdentity === where.itemIdentity),
         )
+        return Promise.resolve(found ?? null)
       }
       if (where?.itemIdentity) {
-        return Promise.resolve(
-          (existing.itemIdentity ?? 'item:0') === where.itemIdentity ? existing : null,
-        )
+        const found = packages.find((pkg) => pkg.itemIdentity === where.itemIdentity)
+        return Promise.resolve(found ?? null)
       }
-      return Promise.resolve(existing)
+      return Promise.resolve(null)
     },
   )
   const tx = {
@@ -94,10 +133,24 @@ function createTx(options?: {
     aiReviewPackage: {
       create: reviewCreate,
       findFirst: reviewFindFirst,
-      count: jest.fn().mockResolvedValue(options?.existingCount ?? (options?.existing ? 1 : 0)),
+      findMany: jest.fn().mockImplementation(() => {
+        const identities = packages.map((pkg) => ({ itemIdentity: pkg.itemIdentity }))
+        if (
+          (options?.uniqueOnCreate || options?.uniqueOnFirstCreateOnly) &&
+          reviewCreate.mock.calls.length > 0 &&
+          options.raced !== null
+        ) {
+          const racedIdentity = (options.raced ?? racedPackage).itemIdentity ?? 'item:0'
+          if (!identities.some((row) => row.itemIdentity === racedIdentity)) {
+            identities.push({ itemIdentity: racedIdentity })
+          }
+        }
+        return Promise.resolve(identities)
+      }),
+      count: jest.fn().mockResolvedValue(options?.existingCount ?? packages.length),
     },
   }
-  return { tx, reviewCreate, draftUpdate }
+  return { tx, reviewCreate, draftUpdate, created, packages }
 }
 
 describe('projectPendingReviewPackage', () => {
@@ -114,7 +167,7 @@ describe('projectPendingReviewPackage', () => {
       sourceActionId: 'action-first',
     })
 
-    expect(id).toBe('pkg-new')
+    expect(id).toBe('pkg-new-0')
     expect(reviewCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         status: AiReviewPackageStatus.pending,
@@ -172,7 +225,7 @@ describe('projectPendingReviewPackage', () => {
       sourceActionId: 'action-later',
     })
 
-    expect(id).toBe('pkg-new')
+    expect(id).toBe('pkg-new-0')
     expect(reviewCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ itemIdentity: 'item:1', sourceAction: { connect: { id: 'action-later' } } }),
     })
@@ -190,7 +243,7 @@ describe('projectPendingReviewPackage', () => {
       sourceActionId: 'action-b',
     })
 
-    expect(id).toBe('pkg-new')
+    expect(id).toBe('pkg-new-0')
     expect(reviewCreate).toHaveBeenCalled()
   })
 
@@ -211,8 +264,16 @@ describe('projectPendingReviewPackage', () => {
     expect(reviewCreate).not.toHaveBeenCalled()
   })
 
-  it('replays the existing package when concurrent creates race the proposal identity unique index', async () => {
-    const { tx, reviewCreate } = createTx({ uniqueOnCreate: true })
+  it('replays the existing package when concurrent creates race the same action identity', async () => {
+    const { tx, reviewCreate } = createTx({
+      uniqueOnCreate: true,
+      raced: {
+        id: 'pkg-raced',
+        sourceActionId: 'action-later',
+        candidates: [{ fieldKey: 'name' }],
+        itemIdentity: 'item:0',
+      },
+    })
 
     const id = await projectPendingReviewPackage(tx as never, {
       organizationId: 'org-1',
@@ -225,6 +286,25 @@ describe('projectPendingReviewPackage', () => {
 
     expect(id).toBe('pkg-raced')
     expect(reviewCreate).toHaveBeenCalled()
+  })
+
+  it('does not reuse another action package when concurrent creates race the item identity', async () => {
+    const { tx, reviewCreate } = createTx({ uniqueOnFirstCreateOnly: true })
+
+    const id = await projectPendingReviewPackage(tx as never, {
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      reviewPackage,
+      sourceActionId: 'action-later',
+    })
+
+    expect(id).toBe('pkg-new-0')
+    expect(reviewCreate).toHaveBeenCalledTimes(2)
+    expect(reviewCreate).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ itemIdentity: 'item:1' }),
+    })
   })
 
   it('rethrows the unique violation when the raced package cannot be found by identity', async () => {
@@ -260,11 +340,7 @@ describe('projectPendingReviewPackage', () => {
   })
 
   it('assigns distinct item identities to two same-content packages in one batch', async () => {
-    const createdIds = ['pkg-a', 'pkg-b']
     const { tx, reviewCreate } = createTx()
-    reviewCreate
-      .mockResolvedValueOnce({ id: createdIds[0] })
-      .mockResolvedValueOnce({ id: createdIds[1] })
 
     const ids = await projectPendingReviewPackages(tx as never, {
       organizationId: 'org-1',
@@ -275,12 +351,41 @@ describe('projectPendingReviewPackage', () => {
       reviewPackages: [reviewPackage, reviewPackage],
     })
 
-    expect(ids).toEqual(createdIds)
+    expect(ids).toEqual(['pkg-new-0', 'pkg-new-1'])
     expect(reviewCreate).toHaveBeenNthCalledWith(1, {
       data: expect.objectContaining({ itemIdentity: 'item:0' }),
     })
     expect(reviewCreate).toHaveBeenNthCalledWith(2, {
       data: expect.objectContaining({ itemIdentity: 'item:1' }),
+    })
+  })
+
+  it('does not reuse another action package when count-based identity is stale', async () => {
+    const { tx, reviewCreate } = createTx({
+      existing: {
+        id: 'pkg-existing',
+        sourceActionId: 'action-first',
+        candidates: [{ fieldKey: 'name' }],
+        itemIdentity: 'item:0',
+      },
+      existingCount: 0,
+    })
+
+    const id = await projectPendingReviewPackage(tx as never, {
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      reviewPackage,
+      sourceActionId: 'action-later',
+    })
+
+    expect(id).toBe('pkg-new-0')
+    expect(reviewCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        itemIdentity: 'item:1',
+        sourceAction: { connect: { id: 'action-later' } },
+      }),
     })
   })
 
@@ -299,7 +404,7 @@ describe('projectPendingReviewPackage', () => {
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
       reviewPackage,
-      sourceActionId: 'action-later',
+      sourceActionId: 'action-first',
       itemIdentity: 'item:0',
     })
     expect(replayed).toBe('pkg-item-0')
@@ -315,13 +420,14 @@ describe('projectPendingReviewPackage', () => {
       sourceActionId: 'action-first',
       itemIdentity: 'item:1',
     })
-    expect(sibling).toBe('pkg-new')
+    expect(sibling).toBe('pkg-new-0')
     expect(siblingCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ itemIdentity: 'item:1' }),
     })
   })
 
   it('projects collaboration packages onto an existing departure without a creation draft', async () => {
+    const updatedAt = new Date('2026-01-15T08:00:00.000Z')
     const { tx, reviewCreate } = createTx()
     tx.agentTask.findFirst.mockResolvedValue({
       id: 'task-collab',
@@ -331,6 +437,7 @@ describe('projectPendingReviewPackage', () => {
         departureNo: 'AB001',
         name: '川西团',
         status: 'editing',
+        updatedAt,
       },
       departureCreationTask: null,
     })
@@ -340,17 +447,46 @@ describe('projectPendingReviewPackage', () => {
       taskId: 'task-collab',
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
-      reviewPackage,
+      reviewPackage: { ...reviewPackage, objectVersion: updatedAt.getTime() },
       sourceActionId: 'action-first',
     })
 
-    expect(id).toBe('pkg-new')
+    expect(id).toBe('pkg-new-0')
     expect(reviewCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         targetKind: 'departure',
         targetId: 'departure-1',
         itemIdentity: 'item:0',
+        baseObjectVersion: updatedAt.getTime(),
       }),
     })
+  })
+
+  it('does not project a collaboration package when the departure object version is stale', async () => {
+    const { tx, reviewCreate } = createTx()
+    tx.agentTask.findFirst.mockResolvedValue({
+      id: 'task-collab',
+      type: 'departure_collaboration',
+      departure: {
+        id: 'departure-1',
+        departureNo: 'AB001',
+        name: '川西团',
+        status: 'editing',
+        updatedAt: new Date('2026-01-15T08:00:00.000Z'),
+      },
+      departureCreationTask: null,
+    })
+
+    await expect(
+      projectPendingReviewPackage(tx as never, {
+        organizationId: 'org-1',
+        taskId: 'task-collab',
+        conversationId: 'conv-1',
+        inputBatchId: 'batch-1',
+        reviewPackage,
+        sourceActionId: 'action-first',
+      }),
+    ).rejects.toThrow('VERSION_CONFLICT')
+    expect(reviewCreate).not.toHaveBeenCalled()
   })
 })

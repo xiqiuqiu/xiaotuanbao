@@ -473,6 +473,10 @@ export class ReviewCollaborationService {
     }
   }
 
+  /**
+   * #447 底座：协作事项确认只关闭待审包并写回执，不改 Departure / 客源 / 资源。
+   * 领域写入留给 #446、#449、#450。
+   */
   private async confirmIndependentItem(
     organizationId: string,
     userId: string,

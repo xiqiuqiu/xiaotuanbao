@@ -359,6 +359,45 @@ describe('ReviewCollaborationService #447', () => {
     expect(prisma.aiWorkflowJob.findUnique).toHaveBeenCalled()
   })
 
+  it('returns live confirmation item statuses from jobs rather than the frozen accept snapshot', async () => {
+    const { service, prisma } = createService({
+      batchRecord: {
+        idempotencyKey: 'decision-1',
+        operatorUserId: userId,
+        resultJson: {
+          decisionCommandId: 'decision-1',
+          accepted: true,
+          items: [{ packageId: 'pkg-1', itemIdentity: 'item:0', status: 'accepted' }],
+        },
+        completedAt: new Date(),
+      },
+    })
+    prisma.aiCreateIdempotencyRecord.findUnique.mockResolvedValue({
+      operatorUserId: userId,
+      resultJson: {
+        decisionCommandId: 'decision-1',
+        accepted: true,
+        items: [{ packageId: 'pkg-1', itemIdentity: 'item:0', status: 'accepted' }],
+      },
+    })
+    prisma.aiWorkflowJob.findMany.mockResolvedValue([
+      {
+        reviewPackageId: 'pkg-1',
+        status: AiWorkflowJobStatus.claimed,
+        reviewPackage: pendingPackage,
+        lastErrorCode: null,
+      },
+    ])
+
+    await expect(
+      service.getReviewConfirmation(organizationId, userId, 'decision-1'),
+    ).resolves.toEqual({
+      decisionCommandId: 'decision-1',
+      accepted: true,
+      items: [{ packageId: 'pkg-1', itemIdentity: 'item:0', status: 'running' }],
+    })
+  })
+
   it('does not rewrite an already confirmed independent item', async () => {
     const { service, conversations, prisma, tx } = createService()
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({

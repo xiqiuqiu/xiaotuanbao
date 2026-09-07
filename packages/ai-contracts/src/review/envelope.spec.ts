@@ -4,6 +4,8 @@ import {
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
+  nextReviewItemIdentity,
+  parseReviewItemOrdinal,
   reviewItemIdentity,
   reviewPackageEnvelopeSchema,
   reviewProposalIdentitySchema,
@@ -56,6 +58,8 @@ describe('generic Review Package envelope', () => {
   it('keeps item identity independent from the content hash', () => {
     expect(reviewItemIdentity(0)).toBe('item:0')
     expect(reviewItemIdentity(1)).toBe('item:1')
+    expect(parseReviewItemOrdinal('item:3')).toBe(3)
+    expect(nextReviewItemIdentity(['item:0', 'item:2'])).toBe('item:3')
     expect(
       sameReviewItemIdentity(
         { inputBatchId: 'batch-a', itemIdentity: 'item:0' },

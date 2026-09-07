@@ -2,10 +2,13 @@ import { AgentTaskType, type Prisma } from '@prisma/client'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
   DEPARTURE_REVIEW_TARGET_KIND,
+  nextReviewItemIdentity,
   reviewItemIdentity,
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { reviewPackageCreateData } from './review-package.envelope'
+
+const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 
 export type ReviewPackageTarget = {
   kind: string
@@ -37,7 +40,10 @@ export async function projectPendingReviewPackage(
   }
 
   const byAction = await tx.aiReviewPackage.findFirst({
-    where: { sourceActionId: params.sourceActionId },
+    where: {
+      sourceActionId: params.sourceActionId,
+      ...(params.itemIdentity ? { itemIdentity: params.itemIdentity } : {}),
+    },
     select: { id: true },
   })
   if (byAction) {
@@ -49,51 +55,64 @@ export async function projectPendingReviewPackage(
     throw new Error('VERSION_CONFLICT')
   }
 
-  const itemIdentity =
-    params.itemIdentity ??
-    reviewItemIdentity(
-      await tx.aiReviewPackage.count({
-        where: { inputBatchId: params.inputBatchId },
-      }),
-    )
-  const identity = {
-    inputBatchId: params.inputBatchId,
-    itemIdentity,
-  }
-  const existing = await findReviewPackageByItemIdentity(tx, identity)
-  if (existing) {
-    return existing.id
-  }
+  let itemIdentity = params.itemIdentity ?? (await allocateNextItemIdentity(tx, params.inputBatchId))
+  for (let attempt = 0; attempt < MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS; attempt += 1) {
+    const identity = {
+      inputBatchId: params.inputBatchId,
+      itemIdentity,
+    }
+    const existing = await findReviewPackageByItemIdentity(tx, identity)
+    if (existing) {
+      if (existing.sourceActionId === params.sourceActionId) {
+        return existing.id
+      }
+      if (params.itemIdentity) {
+        throw new Error('REVIEW_ITEM_IDENTITY_TAKEN')
+      }
+      itemIdentity = await allocateNextItemIdentity(tx, params.inputBatchId, [itemIdentity])
+      continue
+    }
 
-  try {
-    const created = await tx.aiReviewPackage.create({
-      data: reviewPackageCreateData({
-        organizationId: params.organizationId,
-        taskId: params.taskId,
-        conversationId: params.conversationId,
-        inputBatchId: params.inputBatchId,
-        attemptId: params.attemptId,
-        sourceActionId: params.sourceActionId,
-        targetKind: target.kind,
-        targetId: target.id,
+    try {
+      const created = await tx.aiReviewPackage.create({
+        data: reviewPackageCreateData({
+          organizationId: params.organizationId,
+          taskId: params.taskId,
+          conversationId: params.conversationId,
+          inputBatchId: params.inputBatchId,
+          attemptId: params.attemptId,
+          sourceActionId: params.sourceActionId,
+          targetKind: target.kind,
+          targetId: target.id,
+          itemIdentity,
+          payloadSchema: target.payloadSchema,
+          baseObjectVersion: target.version,
+          baselineSnapshot: target.snapshot,
+          reviewPackage: params.reviewPackage,
+        }),
+      })
+      return created.id
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error
+      }
+      const raced = await findReviewPackageByItemIdentity(tx, identity)
+      if (!raced) {
+        throw error
+      }
+      if (raced.sourceActionId === params.sourceActionId) {
+        return raced.id
+      }
+      if (params.itemIdentity) {
+        throw error
+      }
+      itemIdentity = await allocateNextItemIdentity(tx, params.inputBatchId, [
         itemIdentity,
-        payloadSchema: target.payloadSchema,
-        baseObjectVersion: target.version,
-        baselineSnapshot: target.snapshot,
-        reviewPackage: params.reviewPackage,
-      }),
-    })
-    return created.id
-  } catch (error) {
-    if (!isUniqueViolation(error)) {
-      throw error
+        raced.itemIdentity,
+      ])
     }
-    const raced = await findReviewPackageByItemIdentity(tx, identity)
-    if (!raced) {
-      throw error
-    }
-    return raced.id
   }
+  throw new Error('REVIEW_ITEM_IDENTITY_EXHAUSTED')
 }
 
 export async function projectPendingReviewPackages(
@@ -153,7 +172,7 @@ async function resolveReviewPackageTarget(
     return {
       kind: DEPARTURE_OBJECT_TARGET_KIND,
       id: agentTask.departure.id,
-      version: params.reviewPackage.objectVersion,
+      version: departureObjectVersion(agentTask.departure.updatedAt),
       snapshot: {
         departureId: agentTask.departure.id,
         departureNo: agentTask.departure.departureNo,
@@ -240,4 +259,24 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code: string }).code === 'P2002'
   )
+}
+
+async function allocateNextItemIdentity(
+  tx: Prisma.TransactionClient,
+  inputBatchId: string,
+  extraIdentities: readonly string[] = [],
+): Promise<string> {
+  const rows = await tx.aiReviewPackage.findMany({
+    where: { inputBatchId },
+    select: { itemIdentity: true },
+  })
+  return nextReviewItemIdentity([...rows.map((row) => row.itemIdentity), ...extraIdentities])
+}
+
+function departureObjectVersion(updatedAt: Date | string): number {
+  const value = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt)
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error('REVIEW_PACKAGE_TASK_MISSING')
+  }
+  return value
 }
