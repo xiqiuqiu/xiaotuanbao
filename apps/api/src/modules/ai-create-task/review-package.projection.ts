@@ -6,10 +6,9 @@ import {
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   nextReviewItemIdentity,
   reviewItemIdentity,
-  type SubmitReviewPackageModelInput,
-  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { reviewPackageCreateData } from './review-package.envelope'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 
@@ -29,7 +28,7 @@ export async function projectPendingReviewPackage(
     conversationId: string
     inputBatchId: string
     attemptId?: string | null
-    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
+    reviewPackage: ReviewPackageProposal
     sourceActionId: string
     itemIdentity?: string
     target?: ReviewPackageTarget
@@ -127,7 +126,7 @@ export async function projectPendingReviewPackages(
     inputBatchId: string
     attemptId?: string | null
     sourceActionId: string
-    reviewPackages: readonly (SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput)[]
+    reviewPackages: readonly ReviewPackageProposal[]
     target?: ReviewPackageTarget
   },
 ): Promise<string[]> {
@@ -155,7 +154,7 @@ async function resolveReviewPackageTarget(
   params: {
     organizationId: string
     taskId: string
-    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
+    reviewPackage: ReviewPackageProposal
   },
 ): Promise<ReviewPackageTarget> {
   const agentTask = await tx.agentTask.findFirst({

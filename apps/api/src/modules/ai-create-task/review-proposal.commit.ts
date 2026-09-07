@@ -2,9 +2,9 @@ import type { EvidenceAuthority, EvidenceSystemRuleRegistry } from './evidence-v
 import {
   validateReviewProposal,
   type ReviewProposalError,
-  type ReviewProposalInput,
   type ReviewProposalValidationResult,
 } from './review-proposal.validator'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 export class ReviewProposalRejectedError extends Error {
   readonly errors: ReviewProposalError[]
@@ -17,7 +17,7 @@ export class ReviewProposalRejectedError extends Error {
 }
 
 export function requireValidReviewProposal(input: {
-  proposal: ReviewProposalInput
+  proposal: ReviewPackageProposal
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): Extract<ReviewProposalValidationResult, { success: true }> {

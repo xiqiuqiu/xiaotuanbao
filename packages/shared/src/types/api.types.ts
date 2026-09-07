@@ -1125,8 +1125,8 @@ export type AiCandidateEvidence =
 
 export interface AiReviewCandidateView {
   fieldKey: string
-  proposedValue: string | number
-  userCorrectedValue?: string | number | null
+  proposedValue: unknown
+  userCorrectedValue?: unknown
   clarity: AiCandidateClarity
   status: 'pending' | 'confirmed' | 'rejected' | 'superseded'
   evidence: AiCandidateEvidence[]
@@ -1160,7 +1160,7 @@ export interface ConfirmAiReviewPackageDto {
   expectedVersion: number
   expectedPackageVersion: number
   decisionCommandId?: string
-  corrections?: Record<string, string | number | null>
+  corrections?: Record<string, unknown>
 }
 
 export interface RejectAiReviewPackageDto {
@@ -1173,7 +1173,7 @@ export interface CancelAiReviewPackageDto {
 
 export interface PatchAiReviewPackageDto {
   expectedPackageVersion: number
-  corrections: Record<string, string | number | null>
+  corrections: Record<string, unknown>
 }
 
 export type ReviewConfirmationItemStatus =

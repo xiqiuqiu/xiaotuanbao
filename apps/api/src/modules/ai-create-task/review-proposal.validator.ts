@@ -3,11 +3,8 @@ import {
   AI_EVIDENCE_PER_CANDIDATE_LIMIT,
   AI_EVIDENCE_PROPOSAL_JSON_MAX_BYTES,
   AI_EVIDENCE_SCHEMA_VERSION,
-  type AiReviewCandidateInput,
   type EvidenceProposalV1,
   type NormalizedEvidenceProposalV1,
-  type SubmitReviewPackageModelInput,
-  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
   validateEvidenceProposal,
@@ -15,6 +12,7 @@ import {
   type EvidenceSystemRuleRegistry,
   type EvidenceValidationErrorCode,
 } from './evidence-validator'
+import type { ReviewPackageProposal } from './review-package.mapper'
 
 export type ReviewProposalErrorCode =
   | EvidenceValidationErrorCode
@@ -29,20 +27,18 @@ export type ReviewProposalError = {
   message: string
 }
 
-export type ReviewProposalInput = SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
-
 export type ReviewProposalValidationResult =
   | {
       success: true
       normalizedProposal: NormalizedEvidenceProposalV1
-      reviewPackage: ReviewProposalInput
+      reviewPackage: ReviewPackageProposal
     }
   | { success: false; errors: ReviewProposalError[] }
 
 const EMPTY_RULES: EvidenceSystemRuleRegistry = {}
 
 export function validateReviewProposal(input: {
-  proposal: ReviewProposalInput
+  proposal: ReviewPackageProposal
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): ReviewProposalValidationResult {
@@ -67,7 +63,7 @@ export function validateReviewProposal(input: {
   }
 }
 
-function proposalLimitError(proposal: ReviewProposalInput): ReviewProposalError | null {
+function proposalLimitError(proposal: ReviewPackageProposal): ReviewProposalError | null {
   if (proposal.candidates.length > AI_EVIDENCE_CANDIDATE_LIMIT) {
     return {
       candidateIndex: 0,
@@ -99,31 +95,21 @@ function proposalLimitError(proposal: ReviewProposalInput): ReviewProposalError 
 }
 
 function toEvidenceProposal(
-  proposal: ReviewProposalInput,
+  proposal: ReviewPackageProposal,
   authority: EvidenceAuthority,
 ): EvidenceProposalV1 {
   return {
     schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
     candidates: proposal.candidates.map((candidate) => ({
       candidateId: candidate.fieldKey,
-      proposedValue: evidenceLayerProposedValue(candidate.proposedValue),
+      proposedValue: (candidate.proposedValue ?? null) as EvidenceProposalV1['candidates'][number]['proposedValue'],
       evidence: candidate.evidence.map((evidence) => toEvidenceItem(evidence, authority)),
     })),
   }
 }
 
-/** #447 证据层 proposedValue 只接受 200 字或 0–9999 整数；段资源总价（分）等业务值需降级为字符串。 */
-function evidenceLayerProposedValue(value: string | number): string | number {
-  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 9999) {
-    return value
-  }
-  const text = String(value).trim()
-  if (text.length === 0) return '未填写'
-  return text.length > 200 ? text.slice(0, 200) : text
-}
-
 function toEvidenceItem(
-  evidence: AiReviewCandidateInput['evidence'][number],
+  evidence: ReviewPackageProposal['candidates'][number]['evidence'][number],
   authority: EvidenceAuthority,
 ): EvidenceProposalV1['candidates'][number]['evidence'][number] {
   if (evidence.kind === 'user_message') {

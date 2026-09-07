@@ -68,6 +68,7 @@ import { RouteLedgerExportService } from './route-ledger-export.service'
   exports: [
     RouteTemplateService,
     DepartureService,
+    SourceOrderService,
     DepartureDataGapService,
     DepartureSettlementReadinessService,
     SourceOrderReceivableGapService,

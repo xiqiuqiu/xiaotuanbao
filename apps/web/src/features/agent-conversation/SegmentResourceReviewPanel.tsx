@@ -30,8 +30,10 @@ const KIND_OPTIONS = RESOURCE_KIND_OPTIONS.map((option) => ({
 
 function candidateValue(candidate: AiReviewCandidateView | undefined): string | number | null {
   if (!candidate) return null
-  if (candidate.userCorrectedValue !== undefined) return candidate.userCorrectedValue
-  return candidate.proposedValue
+  const value = candidate.userCorrectedValue !== undefined
+    ? candidate.userCorrectedValue
+    : candidate.proposedValue
+  return typeof value === 'string' || typeof value === 'number' ? value : null
 }
 
 function confirmationForPackage(confirmations: ReviewConfirmationView[], packageId: string) {
@@ -230,7 +232,9 @@ function SegmentResourceReviewItem({
       resolveSegmentResourceReviewDraft(
         pkg.candidates.map((candidate) => ({
           fieldKey: candidate.fieldKey,
-          proposedValue: candidateValue(candidate) ?? candidate.proposedValue,
+          proposedValue: candidate.userCorrectedValue !== undefined
+            ? candidate.userCorrectedValue
+            : candidate.proposedValue,
         })),
       ),
     [pkg.candidates],

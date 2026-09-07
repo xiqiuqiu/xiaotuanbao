@@ -26,7 +26,6 @@ import {
   type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
   type SubmitReviewPackageModelInput,
-  type SubmitSegmentResourceReviewModelInput,
   DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
   DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
   DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
@@ -127,6 +126,7 @@ import {
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage, departureObjectVersion } from './review-package.projection'
+import type { ReviewPackageProposal } from './review-package.mapper'
 import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
@@ -2720,7 +2720,7 @@ export class AiWorkflowProcessor {
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
     attemptId: string,
-    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput,
+    reviewPackage: ReviewPackageProposal,
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
@@ -2772,7 +2772,7 @@ export class AiWorkflowProcessor {
           .array()
           .parse(attempt.grantedCapabilities),
       },
-      input: validated.reviewPackage,
+      input: validated.reviewPackage as SubmitReviewPackageModelInput,
       persist: async ({ action, target }) => {
         if (!action?.id) {
           throw new Error('REVIEW_PACKAGE_MISSING_ACTION')

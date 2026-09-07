@@ -220,6 +220,8 @@ export {
   DEPARTURE_OBJECT_TARGET_KIND,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   REVIEW_ITEM_IDENTITY_FIELDS,
   REVIEW_PROPOSAL_IDENTITY_FIELDS,
   canonicalizeReviewValue,
@@ -272,6 +274,14 @@ export {
   type SubmitSegmentResourceReviewInput,
   type SubmitSegmentResourceReviewModelInput,
 } from './review/segment-resource-schema'
+export {
+  SOURCE_ORDER_REVIEW_GROUPS,
+  SOURCE_ORDER_REVIEW_GROUP_LABELS,
+  sourceOrderFareAdjustmentCandidateSchema,
+  sourceOrderGuestCandidateSchema,
+  submitSourceOrderReviewPackageInputSchema,
+  type SourceOrderReviewGroup,
+} from './review/source-order-schema'
 export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,

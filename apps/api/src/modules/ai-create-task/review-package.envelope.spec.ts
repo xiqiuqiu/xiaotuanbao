@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   departureReviewProposalHash,
   reviewProposalHash,
+  reviewPackageCreateData,
 } from './review-package.envelope'
 import { toStoredCandidates } from './review-package.mapper'
 
@@ -56,6 +57,21 @@ describe('reviewProposalHash', () => {
     expect(reconstructed).toBe(CANONICAL_NAME_PROPOSAL_HASH)
     expect(naiveStoredTextHash).not.toBe(CANONICAL_NAME_PROPOSAL_HASH)
     expect(naiveStoredTextHash).toHaveLength(64)
+  })
+})
+
+describe('collaboration package routing', () => {
+  it.each([
+    ['source_order_create', 'source_order.create@v1'],
+    ['segment_resource', 'departure.segment_resource@v1'],
+  ])('preserves the schema for %s after combining business flows', (confirmationUnit, payloadSchema) => {
+    const data = reviewPackageCreateData({
+      organizationId: 'org-1', taskId: 'task-1', conversationId: 'conv-1',
+      inputBatchId: 'batch-1', sourceActionId: 'action-1', targetId: 'departure-1',
+      baseObjectVersion: 1, baselineSnapshot: {},
+      reviewPackage: { ...payload, objectVersion: 1, confirmationUnit },
+    })
+    expect(data.payloadSchema).toBe(payloadSchema)
   })
 })
 

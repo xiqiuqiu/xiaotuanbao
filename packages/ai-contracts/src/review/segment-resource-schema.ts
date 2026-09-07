@@ -249,10 +249,10 @@ const REQUIRED_WRITE_FIELDS = [
 ] as const satisfies readonly SegmentResourceReviewField[]
 
 function effectiveValue(
-  candidates: readonly { fieldKey: string; proposedValue: string | number }[],
-  corrections: Partial<Record<string, string | number | null>> | undefined,
+  candidates: readonly { fieldKey: string; proposedValue: unknown }[],
+  corrections: Partial<Record<string, unknown>> | undefined,
   fieldKey: SegmentResourceReviewField,
-): string | number | null | undefined {
+): unknown {
   if (corrections && fieldKey in corrections) {
     return corrections[fieldKey]
   }
@@ -261,8 +261,8 @@ function effectiveValue(
 }
 
 export function resolveSegmentResourceReviewDraft(
-  candidates: readonly { fieldKey: string; proposedValue: string | number }[],
-  corrections?: Partial<Record<string, string | number | null>>,
+  candidates: readonly { fieldKey: string; proposedValue: unknown }[],
+  corrections?: Partial<Record<string, unknown>>,
 ): SegmentResourceReviewResolution {
   const itinerarySegmentId = effectiveValue(candidates, corrections, 'itinerarySegmentId')
   const resourceKind = effectiveValue(candidates, corrections, 'resourceKind')

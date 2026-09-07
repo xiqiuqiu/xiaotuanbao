@@ -141,6 +141,9 @@ function toTaskFact(task: {
   departure: { updatedAt: Date } | null
   departureCreationTask: { draft: { id: string; version: number } | null } | null
 }): AiActionTaskFact {
+  const departureVersion = task.departure?.updatedAt
+    ? task.departure.updatedAt.getTime()
+    : null
   return {
     id: task.id,
     organizationId: task.organizationId,
@@ -148,16 +151,8 @@ function toTaskFact(task: {
     draftId: task.departureCreationTask?.draft?.id ?? null,
     draftVersion: task.departureCreationTask?.draft?.version ?? null,
     departureId: task.departureId,
-    departureVersion: objectVersionFromUpdatedAt(task.departure?.updatedAt),
+    departureVersion,
   }
-}
-
-function objectVersionFromUpdatedAt(updatedAt: Date | undefined): number | null {
-  if (!updatedAt) {
-    return null
-  }
-  const value = updatedAt.getTime()
-  return Number.isFinite(value) && value > 0 ? value : null
 }
 
 function toMaterialFact(source: { id: string; organizationId: string }): AiActionMaterialFact {

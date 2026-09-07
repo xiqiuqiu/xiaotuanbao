@@ -185,4 +185,18 @@ describe('行程段资源审核 Schema #449', () => {
       },
     })
   })
+  it.each([null, { amount: 880000 }, ['880000']])(
+    'does not fall back to the original amount for invalid corrected value %p',
+    (amountCents) => {
+      const result = resolveSegmentResourceReviewDraft([
+        candidate('itinerarySegmentId', 'seg-1'),
+        candidate('resourceKind', 'hotel'),
+        candidate('supplierId', 'sup-1'),
+        candidate('title', '住宿'),
+        candidate('amountCents', 880000),
+      ], { amountCents })
+      expect(result.status).not.toBe('ready')
+    },
+  )
+
 })

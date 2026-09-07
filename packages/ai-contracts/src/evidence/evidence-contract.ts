@@ -215,7 +215,13 @@ export function adaptStoredParsePage(page: unknown): MaterialParsePageV1 | null 
 export const evidenceCandidateProposalSchemaV1 = z
   .object({
     candidateId: z.string().min(1).max(100),
-    proposedValue: z.union([z.string().trim().min(1).max(200), z.number().int().min(0).max(9999)]),
+    proposedValue: z.union([
+      z.string().trim().min(1).max(2000),
+      z.number(),
+      z.null(),
+      z.array(z.unknown()),
+      z.record(z.unknown()),
+    ]),
     evidence: z
       .array(
         z.discriminatedUnion('kind', [
@@ -397,7 +403,13 @@ export const normalizedEvidenceProposalSchemaV1 = z
         .object({
           candidateIndex: z.number().int().nonnegative(),
           candidateId: z.string().min(1).max(100),
-          proposedValue: z.union([z.string().min(1).max(200), z.number().int().min(0).max(9999)]),
+          proposedValue: z.union([
+            z.string().min(1).max(2000),
+            z.number(),
+            z.null(),
+            z.array(z.unknown()),
+            z.record(z.unknown()),
+          ]),
           evidenceIds: z.array(z.string().min(1)).min(1),
         })
         .strict(),

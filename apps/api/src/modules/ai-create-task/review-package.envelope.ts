@@ -8,13 +8,11 @@ import {
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
-  type SubmitReviewPackageModelInput,
-  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
-import { toStoredCandidates } from './review-package.mapper'
-
-type ReviewPackageProposalInput = SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
+import { toStoredCandidates, type ReviewPackageProposal } from './review-package.mapper'
 
 export function reviewProposalHash(payload: unknown): string {
   return createHash('sha256')
@@ -23,7 +21,7 @@ export function reviewProposalHash(payload: unknown): string {
 }
 
 export function departureReviewProposalHash(
-  reviewPackage: ReviewPackageProposalInput,
+  reviewPackage: ReviewPackageProposal,
 ): string {
   return reviewProposalHash({
     confirmationUnit: reviewPackage.confirmationUnit,
@@ -55,7 +53,7 @@ export function reviewPackageCreateData(params: {
   payloadSchema?: string
   baseObjectVersion: number
   baselineSnapshot: Prisma.InputJsonValue
-  reviewPackage: ReviewPackageProposalInput
+  reviewPackage: ReviewPackageProposal
 }): Prisma.AiReviewPackageCreateInput {
   const stored = toStoredCandidates(params.reviewPackage.candidates)
   const capability = capabilityRefForReviewPackage(params.reviewPackage.confirmationUnit)
@@ -93,6 +91,9 @@ function capabilityRefForReviewPackage(confirmationUnit: string) {
 function payloadSchemaForConfirmationUnit(confirmationUnit: string) {
   if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
     return SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+  }
+  if (confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT) {
+    return SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA
   }
   return DEPARTURE_REVIEW_PAYLOAD_SCHEMA
 }
