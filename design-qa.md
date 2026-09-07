@@ -1,3 +1,5 @@
+> 2026-09-07：本文为历次检查记录，不代表当前原型全量验收。最新设计见 `docs/prd/2026-09-07-business-object-agent-collaboration.md`，本轮回归见 `docs/design/prototypes/wf-03-create-departure/current-design-qa.md`。旧字段、全局入口和容量阻断结论不再有效。
+
 # 发团线路视图 Design QA
 
 ## 对照信息
@@ -69,3 +71,56 @@ Post-fix evidence:
 - [P3] “新建发团”按当前登录角色权限显示；QA 账号无该权限，因此实现截图中未显示主按钮。
 
 final result: passed
+
+---
+
+# Design QA — WF-04 客源单与游客
+
+## Evidence
+
+- Source visual truth: `docs/design/wireframes/wf-01-business-collaboration-workspace.png`（1487 × 1058）
+- Before fix: `docs/design/prototypes/wf-03-create-departure/wf-04-implementation.png`（1440 × 900）
+- Before fix comparison: `docs/design/prototypes/wf-03-create-departure/wf-04-comparison.png`（2880 × 900）
+- After fix: Codex In-app Browser 当前页面截图与无障碍树
+- CSS viewport / density: 1440 × 900 / 1×；源图按高度缩放并居中填充到 1440 × 900 后同屏比较
+- State: 客源单提案 v2 待审核
+
+## Full-view comparison
+
+三栏结构、对象—会话—产物上下文、审核内容层级与固定底部操作均保持基线关系。对象、会话和产物分别由其所在栏表达，中栏不再增加关系条或进度式顶栏。
+
+## Focused regions
+
+右侧审核面单独检查了判断区、金额摘要、名单表格和固定 footer；信息可读且滚动边界正确。中栏单独检查了附件、产物卡片和输入区；无重复确认操作。
+
+## Findings
+
+- 无剩余 P0/P1/P2。
+
+## Comparison history
+
+- Pass 1：发现 P1——中栏顶部关系条重复表达三栏关系并压缩会话工作面。
+- Fix：删除关系条和全部对应 CSS；同步修正 ADR、需求文档、交互模型与 `CONTEXT.md`，避免后续原型再次引入。
+- Pass 2：中栏标题后直接进入会话内容，三栏边界和顶部对齐恢复，无剩余 P0/P1/P2。
+
+## Interaction and runtime checks
+
+- 已测试：相关会话切换、精确编辑、保存回审与版本递增、确认写入、正式客源列表承接。
+- `npm run build`：通过。
+- `npm run test:sites`：4/4 通过。
+- 浏览器页面可正常渲染；未观察到应用脚本错误。Headless Chrome 仅报告 macOS 无头显示环境日志，不影响页面运行。
+
+final result: passed
+
+
+## WF-05 日程资源（2026-09-05）
+
+交互原型 QA：passed。已验证独立资源组分批确认、冲突阻断、局部材料修订、精确编辑、结果态及正式资源列表承接。构建与 5 项检查通过。详细范围与限制见 `docs/design/prototypes/wf-03-create-departure/wf-05-design-qa.md`。
+
+### 原型串联导航复核（2026-09-05）
+
+构建通过，现有 5 项检查通过。In-app Browser 验证资源左栏进入客源、客源左栏返回资源、浏览器返回与顶部创建发团入口；返回资源后已勾选酒店及巴士 v2 保留。已在创建结果、客源记录、资源记录加入跨页面入口；财务及尚未制作的关西概览明确禁用。刷新仍重置内存状态。
+
+## 业务与 Agent 融合调整（2026-09-05）
+
+移除原型切换导航，业务列表作为起点。已浏览器验证建团→客源→资源写入→手工新增→财务查询的共同数据与会话连续性。详细验证与限制见 `docs/design/prototypes/wf-03-create-departure/business-integration-qa.md`；此前独立原型导航记录已被本轮替代。
