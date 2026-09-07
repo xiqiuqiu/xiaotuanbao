@@ -209,6 +209,65 @@ describe('AiCreateTaskService.confirmDepartureReviewPackage schema safety #440',
     ).rejects.toThrow('审核修正值无效：出团日期')
     expect(reviewWrite).not.toHaveBeenCalled()
   })
+
+  it('refuses corrections to non-editable segment ownership #449', async () => {
+    const reviewWrite = jest.fn()
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      agentTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'task-1',
+          ownerUserId: 'user-1',
+          status: AgentTaskStatus.active,
+        }),
+      },
+      aiWorkflowJob: { findFirst: jest.fn().mockResolvedValue(null) },
+      aiCreateTask: {
+        findFirst: jest.fn().mockResolvedValue({
+          agentTask: { ownerUserId: 'user-1', status: AgentTaskStatus.active },
+        }),
+      },
+      aiReviewPackage: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'pkg-1',
+          status: AiReviewPackageStatus.pending,
+          version: 1,
+          payloadSchema: 'departure.segment_resource@v1',
+          confirmationUnit: 'segment_resource',
+          targetKind: 'departure',
+          candidates: [
+            {
+              fieldKey: 'itinerarySegmentId',
+              proposedValue: 'seg-1',
+              clarity: 'clear',
+              status: 'pending',
+              evidence: [{ kind: 'user_message', sequence: 1, excerpt: '4月2日住宿' }],
+            },
+          ],
+        }),
+        update: reviewWrite,
+        updateMany: jest.fn(),
+      },
+    }
+    const service = new AiCreateTaskService(
+      { $transaction: (callback: (client: typeof tx) => Promise<unknown>) => callback(tx) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    await expect(
+      service.patchReviewPackage('org-1', 'user-1', 'task-1', 'pkg-1', {
+        corrections: { itinerarySegmentId: 'seg-other' },
+        expectedPackageVersion: 1,
+      }),
+    ).rejects.toThrow('行程段不可修订')
+    expect(reviewWrite).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+  })
 })
 
 describe('AiCreateTaskService review disposition #440', () => {

@@ -178,13 +178,22 @@ describe('ReviewCollaborationService #447', () => {
       finalizeReviewDisposition: jest.fn().mockResolvedValue([]),
       publish: jest.fn(),
     }
+    const segmentResources = {
+      createInTx: jest.fn().mockResolvedValue({
+        id: 'resource-1',
+        segmentId: 'seg-1',
+        payableStatus: 'not_generated',
+        paymentScheduleId: null,
+      }),
+    }
     const service = new ReviewCollaborationService(
       prisma as never,
       tasks as never,
       conversations as never,
       { getById: jest.fn().mockResolvedValue({ id: 'departure-1' }) } as never,
+      segmentResources as never,
     )
-    return { service, prisma, tx, tasks, conversations, jobs, packages }
+    return { service, prisma, tx, tasks, conversations, jobs, packages, segmentResources }
   }
 
   it('accepts a multi-item confirmation and enqueues one job per item', async () => {
@@ -448,5 +457,157 @@ describe('ReviewCollaborationService #447', () => {
       { id: 'pkg-1', status: 'pending' },
       { id: 'pkg-done', status: 'confirmed' },
     ])
+  })
+
+  it('writes a confirmed segment resource without generating payable', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.segment_resource@v1',
+      confirmationUnit: 'segment_resource',
+      candidates: [
+        { fieldKey: 'itinerarySegmentId', proposedValue: 'seg-1' },
+        { fieldKey: 'resourceKind', proposedValue: 'hotel' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '希尔顿' },
+        { fieldKey: 'amountCents', proposedValue: 128_000 },
+        { fieldKey: 'notes', proposedValue: '含早' },
+        { fieldKey: 'capacityWarning', proposedValue: '该晚库存偏紧，仅作提醒' },
+      ],
+    }
+    const { service, prisma, tx, segmentResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-1',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(segmentResources.createInTx).toHaveBeenCalledWith(
+      tx,
+      organizationId,
+      'seg-1',
+      expect.objectContaining({
+        resourceKind: 'hotel',
+        supplierId: 'sup-1',
+        title: '希尔顿',
+        amountCents: 128_000,
+        notes: '含早',
+      }),
+      { expectedDepartureId: 'departure-1' },
+    )
+    expect(segmentResources.createInTx.mock.calls[0][3]).not.toHaveProperty('quantity')
+    expect(segmentResources.createInTx.mock.calls[0][3]).not.toHaveProperty('unitPriceCents')
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'pkg-1',
+        status: AiReviewPackageStatus.pending,
+        version: 1,
+      },
+      data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }),
+    })
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'idem-item-1' },
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' },
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('keeps a segment resource package pending when itinerary segment is missing', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.segment_resource@v1',
+      confirmationUnit: 'segment_resource',
+      candidates: [
+        { fieldKey: 'resourceKind', proposedValue: 'hotel' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '希尔顿' },
+        { fieldKey: 'amountCents', proposedValue: 128_000 },
+      ],
+    }
+    const { service, prisma, tx, segmentResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(segmentResources.createInTx).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '材料未确定对应行程段，请核实归属，不能凭当前页面日期默认挂靠',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('replays an already confirmed segment resource without creating a second row', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.segment_resource@v1',
+      confirmationUnit: 'segment_resource',
+      status: AiReviewPackageStatus.confirmed,
+      candidates: [
+        { fieldKey: 'itinerarySegmentId', proposedValue: 'seg-1' },
+        { fieldKey: 'resourceKind', proposedValue: 'hotel' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '希尔顿' },
+        { fieldKey: 'amountCents', proposedValue: 128_000 },
+      ],
+    }
+    const { service, prisma, tx, segmentResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+        resultJson: { resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' } },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(segmentResources.createInTx).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' },
+          }),
+        }),
+      }),
+    )
   })
 })

@@ -2,9 +2,12 @@ import { AgentTaskType, type Prisma } from '@prisma/client'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
   DEPARTURE_REVIEW_TARGET_KIND,
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   nextReviewItemIdentity,
   reviewItemIdentity,
   type SubmitReviewPackageModelInput,
+  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { reviewPackageCreateData } from './review-package.envelope'
 
@@ -26,7 +29,7 @@ export async function projectPendingReviewPackage(
     conversationId: string
     inputBatchId: string
     attemptId?: string | null
-    reviewPackage: SubmitReviewPackageModelInput
+    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
     sourceActionId: string
     itemIdentity?: string
     target?: ReviewPackageTarget
@@ -124,7 +127,7 @@ export async function projectPendingReviewPackages(
     inputBatchId: string
     attemptId?: string | null
     sourceActionId: string
-    reviewPackages: readonly SubmitReviewPackageModelInput[]
+    reviewPackages: readonly (SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput)[]
     target?: ReviewPackageTarget
   },
 ): Promise<string[]> {
@@ -152,7 +155,7 @@ async function resolveReviewPackageTarget(
   params: {
     organizationId: string
     taskId: string
-    reviewPackage: SubmitReviewPackageModelInput
+    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
   },
 ): Promise<ReviewPackageTarget> {
   const agentTask = await tx.agentTask.findFirst({
@@ -179,6 +182,10 @@ async function resolveReviewPackageTarget(
         name: agentTask.departure.name,
         status: agentTask.departure.status,
       } as Prisma.InputJsonValue,
+      payloadSchema:
+        params.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+          ? SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+          : undefined,
     }
   }
   const draft = agentTask.departureCreationTask?.draft
@@ -273,7 +280,7 @@ async function allocateNextItemIdentity(
   return nextReviewItemIdentity([...rows.map((row) => row.itemIdentity), ...extraIdentities])
 }
 
-function departureObjectVersion(updatedAt: Date | string): number {
+export function departureObjectVersion(updatedAt: Date | string): number {
   const value = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt)
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error('REVIEW_PACKAGE_TASK_MISSING')

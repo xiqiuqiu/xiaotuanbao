@@ -1,4 +1,5 @@
 import {
+  DEPARTURE_COLLABORATION_TASK_TYPE,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   buildTaskCompletedHref,
   buildTaskWorkspaceHref,
@@ -28,8 +29,22 @@ export function resolveRegisteredTaskDescriptor(taskType?: string) {
   return descriptorFor(taskType)
 }
 
-export function agentTaskWorkspaceNavigation(taskId: string, taskType?: string) {
-  const href = buildTaskWorkspaceHref(requireDescriptor(taskType), taskId)
+export function agentTaskWorkspaceNavigation(
+  taskId: string,
+  taskType?: string,
+  extras?: { departureId?: string },
+) {
+  const descriptor = requireDescriptor(taskType)
+  if (descriptor.taskType === DEPARTURE_COLLABORATION_TASK_TYPE) {
+    if (!extras?.departureId) {
+      throw new Error('发团协作审核需要 departureId')
+    }
+    return {
+      to: '/departure/$departureId' as DepartureCompletedTo,
+      params: { departureId: extras.departureId },
+    }
+  }
+  const href = buildTaskWorkspaceHref(descriptor, taskId)
   return {
     to: href.pathname as DepartureWorkspaceTo,
     search: href.search as { taskId: string },
@@ -45,15 +60,27 @@ export function agentTaskCompletedNavigation(objectId: string, taskType?: string
   }
 }
 
+export function departureIdFromPathname(pathname: string): string | undefined {
+  const match = pathname.match(/^\/departure\/(?!new$)([^/]+)$/)
+  return match?.[1]
+}
+
 export function isCurrentAgentTaskWorkspace(
   pathname: string,
   search: string,
   taskId: string,
   taskType?: string,
+  extras?: { departureId?: string },
 ): boolean {
   const descriptor = descriptorFor(taskType)
   if (!descriptor) {
     return false
+  }
+  if (descriptor.taskType === DEPARTURE_COLLABORATION_TASK_TYPE) {
+    if (extras?.departureId) {
+      return pathname === `/departure/${extras.departureId}`
+    }
+    return departureIdFromPathname(pathname) != null
   }
   const currentTaskId = new URLSearchParams(search.replace(/^\?/, '')).get(
     descriptor.workspace.taskIdSearchParam,

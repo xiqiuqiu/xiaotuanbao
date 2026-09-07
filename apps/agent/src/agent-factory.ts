@@ -22,6 +22,7 @@ import {
   createSearchUsersTool,
 } from './search-related-objects.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
+import { createProposeSegmentResourceReviewTool } from './propose-segment-resource-review.tool'
 import { createConversationRoutingTool } from './conversation-routing.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
 import { wrapAgentExecutionWithoutInboundAuth } from './sanitize-model-headers'
@@ -62,6 +63,7 @@ function createMastra(
     searchSuppliers: createSearchSuppliersTool(config),
     searchPartners: createSearchPartnersTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
+    proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),

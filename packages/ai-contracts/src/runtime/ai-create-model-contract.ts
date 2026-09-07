@@ -1,6 +1,7 @@
 import { uniqueCapabilityDefinitions } from './capability-catalog'
 import { AI_CREATE_CAPABILITY_DEFINITIONS } from './ai-create-definitions'
 import { CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS } from './conversation-general-definitions'
+import { DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS } from './departure-collaboration-definitions'
 import { AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS } from './ai-create-tool-model-schemas.generated'
 
 export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
@@ -59,6 +60,8 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
     '按当前 Organization 用关键词查询已启用 Partner。只返回消歧所需的最小字段，不写草稿，不披露联系电话或结算备注。hasMore=true 表示结果被截断，必须缩小关键词继续消歧。空关键词结果为空。',
   proposeReviewPackage:
     '提出发团基础信息的待审核候选（团名、路线、出团/结束日期、发团类型、预计人数提示、备注、司机、导游、车牌、联系电话）。关联对象 ID 必须来自受控查询结果。只做无副作用预校验，不写入发团创建草稿，也不创建审核包；须由 Worker 复验后投影，再由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。证据错误会返回当前 Attempt 供修正重提。',
+  proposeSegmentResourceReviewPackage:
+    '提出已有发团行程段资源的待审核候选（行程段、种类、供应商、资源名称、正总价、备注、容量提醒）。itinerarySegmentId 必须来自当前业务事实中的正式行程段，不能凭页面日期默认挂靠。供应商 ID 必须来自 searchSuppliers。只做预校验，不写入资源，也不提交应付。',
   getMaterialParseResult:
     '按冻结投影【本批资料】或【本会话来源】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。本批未固定但属于本会话的已解析来源也可以读取。不要用文件名、预览或未固定版本编造候选。',
   readConversationHistory:
@@ -72,6 +75,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
 const MODEL_TOOL_CAPABILITY_DEFINITIONS = uniqueCapabilityDefinitions([
   ...AI_CREATE_CAPABILITY_DEFINITIONS,
   ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  ...DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
 ])
 
 export function aiCreateModelContractForTools(toolNames: readonly string[]): AiCreateModelContract {

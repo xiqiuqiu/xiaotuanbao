@@ -1160,7 +1160,7 @@ export interface ConfirmAiReviewPackageDto {
   expectedVersion: number
   expectedPackageVersion: number
   decisionCommandId?: string
-  corrections?: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+  corrections?: Record<string, string | number | null>
 }
 
 export interface RejectAiReviewPackageDto {
@@ -1173,7 +1173,7 @@ export interface CancelAiReviewPackageDto {
 
 export interface PatchAiReviewPackageDto {
   expectedPackageVersion: number
-  corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+  corrections: Record<string, string | number | null>
 }
 
 export type ReviewConfirmationItemStatus =

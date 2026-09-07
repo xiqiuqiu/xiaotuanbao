@@ -1,6 +1,7 @@
 import type { CapabilityDefinition } from './agent-platform'
 import { AI_CREATE_CAPABILITY_DEFINITIONS } from './ai-create-definitions'
 import { CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS } from './conversation-general-definitions'
+import { DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS } from './departure-collaboration-definitions'
 
 export function uniqueCapabilityDefinitions<T extends { key: string; version: number }>(
   definitions: readonly T[],
@@ -21,6 +22,7 @@ export function uniqueCapabilityDefinitions<T extends { key: string; version: nu
 export const REGISTERED_CAPABILITY_DEFINITIONS = uniqueCapabilityDefinitions([
   ...AI_CREATE_CAPABILITY_DEFINITIONS,
   ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  ...DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
 ]) satisfies readonly CapabilityDefinition[]
 
 export function registeredCapabilityDefinitionForTool(toolName: string) {

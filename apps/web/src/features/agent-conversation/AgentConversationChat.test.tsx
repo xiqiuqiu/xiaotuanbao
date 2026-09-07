@@ -151,12 +151,24 @@ vi.mock('@/services/agent-conversation.service', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => routerState.navigate,
+  useParams: () => ({}),
   useRouterState: (options?: {
     select?: (state: { location: { pathname: string; searchStr: string; hash: string } }) => unknown
   }) => {
     const state = routerState
     return options?.select ? options.select(state) : state
   },
+}))
+
+vi.mock('@/services/agent-collaboration.service', () => ({
+  getDepartureCollaboration: vi.fn().mockResolvedValue({
+    departureId: 'dep-1',
+    conversations: [],
+    items: [],
+    confirmations: [],
+  }),
+  acceptReviewConfirmation: vi.fn(),
+  getReviewConfirmation: vi.fn(),
 }))
 
 let capturedActivityRenderers: Array<{
@@ -617,6 +629,7 @@ describe('AgentConversationChat task and review activities', () => {
   beforeEach(() => {
     lastEventSource = null
     routerState.navigate.mockReset()
+    routerState.location = { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' }
     vi.mocked(listAgentConversationEvents).mockResolvedValue({
       conversationId: 'c-1',
       events: [],
@@ -719,6 +732,41 @@ describe('AgentConversationChat task and review activities', () => {
 
     await user.click(await screen.findByRole('button', { name: '查看审核内容' }))
     expect(routerState.navigate).not.toHaveBeenCalled()
+  })
+
+  it('opens the current departure assist pane for segment-resource review #449', async () => {
+    const user = userEvent.setup()
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-3',
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在右侧审核确认。',
+            taskId: 'task-collab',
+            taskType: 'departure_collaboration',
+            reviewPackageId: 'pkg-seg',
+            fieldKeys: ['title', 'amountCents'],
+            payloadSchema: 'departure.segment_resource@v1',
+            confirmationUnit: 'segment_resource',
+            departureId: 'dep-1',
+          },
+          createdAt: '2026-09-07T00:00:03.000Z',
+        },
+      ],
+    })
+    routerState.location = {
+      pathname: '/departure/dep-1',
+      searchStr: '',
+      hash: '',
+    }
+    renderChat()
+
+    await user.click(await screen.findByRole('button', { name: '查看审核内容' }))
+    expect(routerState.navigate).not.toHaveBeenCalled()
+    expect(useAgentConversationStore.getState().focusedReviewPackageId).toBe('pkg-seg')
   })
 
   it('同一会话并列展示多条未处置追问，普通输入框保持独立', async () => {

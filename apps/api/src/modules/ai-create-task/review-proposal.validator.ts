@@ -7,6 +7,7 @@ import {
   type EvidenceProposalV1,
   type NormalizedEvidenceProposalV1,
   type SubmitReviewPackageModelInput,
+  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
   validateEvidenceProposal,
@@ -28,18 +29,20 @@ export type ReviewProposalError = {
   message: string
 }
 
+export type ReviewProposalInput = SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
+
 export type ReviewProposalValidationResult =
   | {
       success: true
       normalizedProposal: NormalizedEvidenceProposalV1
-      reviewPackage: SubmitReviewPackageModelInput
+      reviewPackage: ReviewProposalInput
     }
   | { success: false; errors: ReviewProposalError[] }
 
 const EMPTY_RULES: EvidenceSystemRuleRegistry = {}
 
 export function validateReviewProposal(input: {
-  proposal: SubmitReviewPackageModelInput
+  proposal: ReviewProposalInput
   authority: EvidenceAuthority
   systemRules?: EvidenceSystemRuleRegistry
 }): ReviewProposalValidationResult {
@@ -60,15 +63,11 @@ export function validateReviewProposal(input: {
   return {
     success: true,
     normalizedProposal: evidenceResult.normalizedProposal,
-    reviewPackage: {
-      objectVersion: input.proposal.objectVersion,
-      confirmationUnit: input.proposal.confirmationUnit,
-      candidates: input.proposal.candidates,
-    },
+    reviewPackage: input.proposal,
   }
 }
 
-function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProposalError | null {
+function proposalLimitError(proposal: ReviewProposalInput): ReviewProposalError | null {
   if (proposal.candidates.length > AI_EVIDENCE_CANDIDATE_LIMIT) {
     return {
       candidateIndex: 0,
@@ -100,17 +99,27 @@ function proposalLimitError(proposal: SubmitReviewPackageModelInput): ReviewProp
 }
 
 function toEvidenceProposal(
-  proposal: SubmitReviewPackageModelInput,
+  proposal: ReviewProposalInput,
   authority: EvidenceAuthority,
 ): EvidenceProposalV1 {
   return {
     schemaVersion: AI_EVIDENCE_SCHEMA_VERSION,
     candidates: proposal.candidates.map((candidate) => ({
       candidateId: candidate.fieldKey,
-      proposedValue: candidate.proposedValue,
+      proposedValue: evidenceLayerProposedValue(candidate.proposedValue),
       evidence: candidate.evidence.map((evidence) => toEvidenceItem(evidence, authority)),
     })),
   }
+}
+
+/** #447 证据层 proposedValue 只接受 200 字或 0–9999 整数；段资源总价（分）等业务值需降级为字符串。 */
+function evidenceLayerProposedValue(value: string | number): string | number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 9999) {
+    return value
+  }
+  const text = String(value).trim()
+  if (text.length === 0) return '未填写'
+  return text.length > 200 ? text.slice(0, 200) : text
 }
 
 function toEvidenceItem(

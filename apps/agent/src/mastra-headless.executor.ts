@@ -1,11 +1,13 @@
 import {
   AI_CREATE_CAPABILITY_DEFINITIONS,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
   AiCollaborationError,
   CONVERSATION_ROUTING_TOOL,
   conversationRoutingOutputSchema,
   registeredTaskDescriptors,
   submitReviewPackageModelInputSchema,
+  submitSegmentResourceReviewModelInputSchema,
   uniqueCapabilityDefinitions,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
@@ -263,6 +265,7 @@ function capabilityForToolName(toolName: string) {
   return uniqueCapabilityDefinitions([
     ...AI_CREATE_CAPABILITY_DEFINITIONS,
     ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+    ...DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
   ]).find((definition) => definition.toolName === toolName)
 }
 
@@ -293,7 +296,15 @@ function acceptedReviewPackageFromGenerate(output: MastraGenerateLike) {
     confirmationUnit: accepted.confirmationUnit,
     candidates: accepted.candidates,
   })
-  return parsed.success ? parsed.data : null
+  if (parsed.success) {
+    return parsed.data
+  }
+  const segmentResource = submitSegmentResourceReviewModelInputSchema.safeParse({
+    objectVersion: accepted.objectVersion,
+    confirmationUnit: accepted.confirmationUnit,
+    candidates: accepted.candidates,
+  })
+  return segmentResource.success ? segmentResource.data : null
 }
 
 function acceptedConversationRoutingFromGenerate(output: MastraGenerateLike) {
@@ -353,7 +364,7 @@ function lastAcceptedProposeResult(toolResults: unknown[] | undefined) {
         : typeof candidate.payload?.toolName === 'string'
           ? candidate.payload.toolName
           : null
-    if (toolName !== 'proposeReviewPackage') {
+    if (toolName !== 'proposeReviewPackage' && toolName !== 'proposeSegmentResourceReviewPackage') {
       continue
     }
     const result = candidate.result ?? candidate.payload?.result

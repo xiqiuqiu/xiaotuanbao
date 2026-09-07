@@ -254,6 +254,25 @@ export {
   type ReviewSchemaCandidate,
 } from './review/review-schema'
 export {
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SEGMENT_RESOURCE_REVIEW_FIELDS,
+  SEGMENT_RESOURCE_REVIEW_KINDS,
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  SEGMENT_RESOURCE_REVIEW_SCHEMA,
+  resolveSegmentResourceReviewDraft,
+  segmentResourceReviewCandidateSchema,
+  submitSegmentResourceReviewInputSchema,
+  submitSegmentResourceReviewModelInputSchema,
+  type SegmentResourceReviewCandidate,
+  type SegmentResourceReviewDraft,
+  type SegmentResourceReviewField,
+  type SegmentResourceReviewKind,
+  type SegmentResourceReviewResolution,
+  type SegmentResourceReviewWarning,
+  type SubmitSegmentResourceReviewInput,
+  type SubmitSegmentResourceReviewModelInput,
+} from './review/segment-resource-schema'
+export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,
   aiCollaborationErrorSchema,
@@ -430,6 +449,21 @@ export {
   CONVERSATION_ROUTING_CAPABILITY_REF,
   conversationGeneralCapabilityDefinitionRegistry,
 } from './runtime/conversation-general-definitions'
+export {
+  DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
+  DEPARTURE_COLLABORATION_AGENT_DEFINITION,
+  DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+  DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
+  DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL,
+  DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
+  DEPARTURE_COLLABORATION_INSTRUCTIONS,
+  DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
+  DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
+  PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL,
+  departureCollaborationCapabilityDefinitionRegistry,
+  proposeSegmentResourceReviewPackageOutputSchema,
+  type ProposeSegmentResourceReviewPackageOutput,
+} from './runtime/departure-collaboration-definitions'
 export { sanitizeVisibleReasoning } from './runtime/visible-reasoning'
 export {
   AI_EVIDENCE_SCHEMA_VERSION,

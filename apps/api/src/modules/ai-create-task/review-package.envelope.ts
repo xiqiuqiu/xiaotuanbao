@@ -5,10 +5,16 @@ import {
   DEFAULT_REVIEW_ITEM_IDENTITY,
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
+  DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
   type SubmitReviewPackageModelInput,
+  type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { toStoredCandidates } from './review-package.mapper'
+
+type ReviewPackageProposalInput = SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
 
 export function reviewProposalHash(payload: unknown): string {
   return createHash('sha256')
@@ -17,7 +23,7 @@ export function reviewProposalHash(payload: unknown): string {
 }
 
 export function departureReviewProposalHash(
-  reviewPackage: SubmitReviewPackageModelInput,
+  reviewPackage: ReviewPackageProposalInput,
 ): string {
   return reviewProposalHash({
     confirmationUnit: reviewPackage.confirmationUnit,
@@ -49,10 +55,10 @@ export function reviewPackageCreateData(params: {
   payloadSchema?: string
   baseObjectVersion: number
   baselineSnapshot: Prisma.InputJsonValue
-  reviewPackage: SubmitReviewPackageModelInput
+  reviewPackage: ReviewPackageProposalInput
 }): Prisma.AiReviewPackageCreateInput {
   const stored = toStoredCandidates(params.reviewPackage.candidates)
-  const capability = AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage
+  const capability = capabilityRefForReviewPackage(params.reviewPackage.confirmationUnit)
   return {
     organization: { connect: { id: params.organizationId } },
     task: { connect: { id: params.taskId } },
@@ -62,7 +68,8 @@ export function reviewPackageCreateData(params: {
     sourceAction: { connect: { id: params.sourceActionId } },
     status: 'pending',
     confirmationUnit: params.reviewPackage.confirmationUnit,
-    payloadSchema: params.payloadSchema ?? DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+    payloadSchema:
+      params.payloadSchema ?? payloadSchemaForConfirmationUnit(params.reviewPackage.confirmationUnit),
     capabilityKey: capability.key,
     capabilityVersion: capability.version,
     targetKind: params.targetKind ?? DEPARTURE_REVIEW_TARGET_KIND,
@@ -74,4 +81,18 @@ export function reviewPackageCreateData(params: {
     candidates: stored as unknown as Prisma.InputJsonValue,
     version: 1,
   }
+}
+
+function capabilityRefForReviewPackage(confirmationUnit: string) {
+  if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
+    return DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF
+  }
+  return AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage
+}
+
+function payloadSchemaForConfirmationUnit(confirmationUnit: string) {
+  if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
+    return SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+  }
+  return DEPARTURE_REVIEW_PAYLOAD_SCHEMA
 }

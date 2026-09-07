@@ -60,6 +60,7 @@ import {
 } from './page-locator-attachment'
 import {
   agentTaskWorkspaceNavigation,
+  departureIdFromPathname,
   isCurrentAgentTaskWorkspace,
   resolveRegisteredTaskDescriptor,
 } from './task-descriptor-navigation'
@@ -72,6 +73,9 @@ import {
   MATERIAL_ACCEPT,
   useConversationComposerAttachments,
 } from '@/features/ai-assist/conversation-composer-attachments'
+import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
+import { DEPARTURE_COLLABORATION_TASK_TYPE } from '@xiaotuanbao/ai-contracts'
+import { useUiStore } from '@/app/store/ui.store'
 
 /** CopilotKit runtime 注册名（apps/agent）；不是 conversation-general 领域指令版本。 */
 const COPILOTKIT_RUNTIME_AGENT_ID = 'ai-create-readonly-assist'
@@ -266,7 +270,11 @@ function createAgentTaskActivityRenderer(
 }
 
 function createReviewPackageActivityRenderer(
-  openTask: (taskId: string, taskType?: string) => void,
+  openTask: (
+    taskId: string,
+    taskType?: string,
+    extras?: { departureId?: string; reviewPackageId?: string },
+  ) => void,
 ): ReactActivityMessageRenderer<ReviewPackageActivityContent> {
   return {
     activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
@@ -312,9 +320,14 @@ function createReviewPackageActivityRenderer(
           <div className={chatStyles.activityActions}>
             {content.taskId ? (
               <Button
-                type="primary"
+                type={content.taskType === DEPARTURE_COLLABORATION_TASK_TYPE ? 'default' : 'primary'}
                 size="small"
-                onClick={() => openTask(content.taskId!, content.taskType)}
+                onClick={() =>
+                  openTask(content.taskId!, content.taskType, {
+                    departureId: content.departureId,
+                    reviewPackageId: content.reviewPackageId,
+                  })
+                }
               >
                 查看审核内容
               </Button>
@@ -874,7 +887,13 @@ function useAgentConversationChatController() {
   const pendingInteractionIdRef = useRef(pendingInteractionId)
   const replyToInteractionRef = useRef(replyToInteraction)
   const cancelInteractionRef = useRef(cancelInteraction)
-  const openAgentTaskRef = useRef<(taskId: string, taskType?: string) => void>(() => undefined)
+  const openAgentTaskRef = useRef<
+    (
+      taskId: string,
+      taskType?: string,
+      extras?: { departureId?: string; reviewPackageId?: string },
+    ) => void
+  >(() => undefined)
   pendingInteractionIdRef.current = pendingInteractionId
   replyToInteractionRef.current = replyToInteraction
   cancelInteractionRef.current = cancelInteraction
@@ -902,7 +921,11 @@ function useAgentConversationChatController() {
     [],
   )
   const openAgentTask = useCallback(
-    (taskId: string, taskType?: string) => {
+    (
+      taskId: string,
+      taskType?: string,
+      extras?: { departureId?: string; reviewPackageId?: string },
+    ) => {
       if (!resolveRegisteredTaskDescriptor(taskType)) {
         return
       }
@@ -912,9 +935,24 @@ function useAgentConversationChatController() {
         location.searchStr,
         taskId,
         taskType,
+        extras,
       )
       void queryClient.invalidateQueries({ queryKey: ['ai-create-task', taskId] })
       void queryClient.invalidateQueries({ queryKey: ['ai-create-assist-state', taskId] })
+      if (taskType === DEPARTURE_COLLABORATION_TASK_TYPE) {
+        useUiStore.getState().setAssistPaneCollapsed(false)
+        if (extras?.reviewPackageId) {
+          useAgentConversationStore.getState().focusReviewPackage(extras.reviewPackageId)
+        }
+        if (alreadyOnTask) {
+          return
+        }
+        if (!extras?.departureId) {
+          return
+        }
+        void navigate(agentTaskWorkspaceNavigation(taskId, taskType, extras))
+        return
+      }
       if (alreadyOnTask) {
         return
       }
@@ -1049,6 +1087,10 @@ function AgentConversationComposer({
 }
 
 export function AgentConversationChat() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const departureId = departureIdFromPathname(pathname)
   const {
     activityRenderers,
     attachCurrentPage,
@@ -1090,6 +1132,9 @@ export function AgentConversationChat() {
   return (
     <div className={chatStyles.root}>
       {errorText ? <Alert type="error" showIcon title={errorText} /> : null}
+      {departureId && conversationId ? (
+        <SegmentResourceReviewPanel departureId={departureId} conversationId={conversationId} />
+      ) : null}
       {attachedPageAttachment ? (
         <div className={chatStyles.pageContext}>
           <Tag

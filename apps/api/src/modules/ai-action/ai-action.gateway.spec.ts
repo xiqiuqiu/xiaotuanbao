@@ -6,6 +6,8 @@ import {
   CONVERSATION_HISTORY_READ_CAPABILITY_REF,
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
   CONVERSATION_SOURCE_READ_CAPABILITY_REF,
+  DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+  DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL,
 } from '@xiaotuanbao/ai-contracts'
 import { authorityForActor, InMemoryAiActionTargetAuthority } from './ai-action.in-memory.target-authority'
 import {
@@ -1186,6 +1188,129 @@ describe('AiActionGateway.execute 权威目标解析', () => {
       name: 'proposeReviewPackage',
       actor,
       input: { objectVersion: 1, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
+      forward: async (context) => forwarded.push(context),
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.action).toMatchObject({
+      decision: 'deny',
+      reasonCode: 'TARGET_MISSING',
+    })
+  })
+
+  it('forwards proposeSegmentResourceReviewPackage onto the current departure object version', async () => {
+    const collabActor: AiActionActor = {
+      ...actor,
+      agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+      grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL),
+    }
+    const { store, gateway } = createGateway(
+      new InMemoryAiActionTargetAuthority({
+        tasks: [
+          {
+            id: 'task-1',
+            organizationId: 'org-1',
+            ownerUserId: 'user-1',
+            draftId: null,
+            draftVersion: null,
+            departureId: 'departure-1',
+            departureVersion: 1_700_000_000_000,
+          },
+        ],
+      }),
+    )
+    const seen: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'proposeSegmentResourceReviewPackage',
+      actor: collabActor,
+      input: { objectVersion: 1_700_000_000_000 },
+      forward: async ({ target }) => {
+        seen.push(target)
+        return { status: 'accepted' }
+      },
+    })
+
+    expect(seen).toEqual([
+      {
+        kind: 'departure',
+        id: 'departure-1',
+        organizationId: 'org-1',
+        version: 1_700_000_000_000,
+      },
+    ])
+    expect(result.action).toMatchObject({
+      name: 'proposeSegmentResourceReviewPackage',
+      decision: 'review',
+      targetRef: { kind: 'departure', id: 'departure-1' },
+    })
+    expect(store.records[0]?.targetRef).toEqual({ kind: 'departure', id: 'departure-1' })
+  })
+
+  it('does not forward proposeSegmentResourceReviewPackage when the claimed object version is stale', async () => {
+    const collabActor: AiActionActor = {
+      ...actor,
+      agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+      grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL),
+    }
+    const { gateway } = createGateway(
+      new InMemoryAiActionTargetAuthority({
+        tasks: [
+          {
+            id: 'task-1',
+            organizationId: 'org-1',
+            ownerUserId: 'user-1',
+            draftId: null,
+            draftVersion: null,
+            departureId: 'departure-1',
+            departureVersion: 1_700_000_000_000,
+          },
+        ],
+      }),
+    )
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'proposeSegmentResourceReviewPackage',
+      actor: collabActor,
+      input: { objectVersion: 1 },
+      forward: async (context) => forwarded.push(context),
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.action).toMatchObject({
+      decision: 'deny',
+      reasonCode: 'TARGET_VERSION_MISMATCH',
+      executionStatus: 'skipped',
+      targetRef: { kind: 'departure', id: 'departure-1' },
+    })
+  })
+
+  it('does not forward proposeSegmentResourceReviewPackage when the departure is missing', async () => {
+    const collabActor: AiActionActor = {
+      ...actor,
+      agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+      grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL),
+    }
+    const { gateway } = createGateway(
+      new InMemoryAiActionTargetAuthority({
+        tasks: [
+          {
+            id: 'task-1',
+            organizationId: 'org-1',
+            ownerUserId: 'user-1',
+            draftId: null,
+            draftVersion: null,
+          },
+        ],
+      }),
+    )
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'proposeSegmentResourceReviewPackage',
+      actor: collabActor,
+      input: { objectVersion: 1 },
       forward: async (context) => forwarded.push(context),
     })
 

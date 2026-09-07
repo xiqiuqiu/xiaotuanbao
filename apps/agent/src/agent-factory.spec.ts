@@ -18,6 +18,9 @@ jest.mock('./search-related-objects.tool', () => ({
   createSearchPartnersTool: () => 'partner-tool',
 }))
 jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool: () => 'review-tool' }))
+jest.mock('./propose-segment-resource-review.tool', () => ({
+  createProposeSegmentResourceReviewTool: () => 'segment-resource-review-tool',
+}))
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
 jest.mock('./read-conversation-history.tool', () => ({ createReadConversationHistoryTool: () => 'history-tool' }))
 jest.mock('./read-conversation-source.tool', () => ({ createReadConversationSourceTool: () => 'source-tool' }))
@@ -163,6 +166,37 @@ describe('Agent Factory', () => {
       routingContext,
     )
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
+  })
+
+  it('协作 Agent 只暴露已授权的段资源工具', () => {
+    const collaborationContext = requestContextSchema.parse({
+      ...context,
+      agentDefinition: { key: 'departure.collaboration', version: 1 },
+      grantedCapabilities: [
+        { key: 'departure.supplier.search', version: 1 },
+        { key: 'departure.segment-resource.propose', version: 1 },
+        { key: 'departure.material-parse-result.read', version: 1 },
+      ],
+      objectScopes: [
+        { organizationId: 'org-1', kind: 'agent_task', id: 'task-1' },
+        { organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' },
+      ],
+    })
+    expect(toolNamesForRequestContext(collaborationContext)).toEqual([
+      'searchSuppliers',
+      'proposeSegmentResourceReviewPackage',
+      'getMaterialParseResult',
+    ])
+
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
+      collaborationContext,
+    )
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([
+      'searchSuppliers',
+      'proposeSegmentResourceReviewPackage',
+      'getMaterialParseResult',
+    ])
   })
 
   it('拒绝上下文声明未注册的 Capability 版本', () => {

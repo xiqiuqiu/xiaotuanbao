@@ -7,6 +7,7 @@ import {
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
   DEPARTURE_CREATION_TASK_TYPE,
+  DEPARTURE_COLLABORATION_TASK_TYPE,
   registeredTaskDescriptors,
   CONVERSATION_GENERAL_INSTRUCTIONS,
   CONVERSATION_RECALL_TOOL_NAMES,
@@ -25,9 +26,17 @@ import {
   type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
   type SubmitReviewPackageModelInput,
+  type SubmitSegmentResourceReviewModelInput,
+  DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
+  DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+  DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
+  DEPARTURE_COLLABORATION_INSTRUCTIONS,
+  departureCollaborationCapabilityDefinitionRegistry,
+  SEGMENT_RESOURCE_CONFIRMATION_UNIT,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
+  AgentTaskType,
   AiAgentAttemptStatus,
   AiCreatePhase,
   AiConversationEventKind,
@@ -73,6 +82,8 @@ import { AiConversationService } from './ai-conversation.service'
 import {
   CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
   CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+  DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION,
+  DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
   WORKFLOW_AGENT_CONCURRENCY,
   WORKFLOW_CANCEL_WATCH_MS,
   WORKFLOW_HEARTBEAT_MS,
@@ -115,7 +126,7 @@ import {
 } from './attempt-terminal-commit'
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
-import { projectPendingReviewPackage } from './review-package.projection'
+import { projectPendingReviewPackage, departureObjectVersion } from './review-package.projection'
 import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
@@ -920,6 +931,9 @@ export class AiWorkflowProcessor {
     if (route.agentDefinition.key === CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key) {
       return this.prepareTasklessAttempt(job, pageAttachment)
     }
+    if (route.agentDefinition.key === DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF.key) {
+      return this.prepareCollaborationAttempt(job, permissionKeys, route, pageAttachment)
+    }
     if (!registeredTaskDescriptors.findByAgentDefinition(route.agentDefinition) || !job.taskId) {
       throw new Error(`不支持的 Agent 执行定义: ${definitionRefLog(route.agentDefinition)}`)
     }
@@ -1189,6 +1203,344 @@ export class AiWorkflowProcessor {
             return definition ? [{ key: definition.key, version: definition.version }] : []
           },
         ),
+      })
+      const requestContext = requestContextSchema.parse({
+        ...unresolvedContext,
+        grantedCapabilities: grants.granted,
+        entitlementStatus: grants.entitlementStatus,
+      })
+      await tx.aiAgentAttempt.update({
+        where: { id: attempt.id },
+        data: { grantedCapabilities: grants.granted },
+      })
+      await this.appendAgentRunningStatus(tx, job, attempt, published)
+      return {
+        runId: attempt.id,
+        attemptId: attempt.id,
+        contextManifestId: manifest.id,
+        requestContext,
+        userText: budgetedContext.userText,
+        userTextSha256: budgetedContext.userTextSha256,
+      }
+    })
+
+    for (const item of published) {
+      const event = await this.prisma.aiConversationEvent.findUnique({
+        where: { id: item.eventId },
+      })
+      if (event) {
+        this.conversationService.publish(item.conversationId, event)
+      }
+    }
+
+    const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
+    const payload: AiOperationDelegationPayload = {
+      typ: AI_OP_DELEGATION_JWT_TYP,
+      sub: job.inputBatch.creatorUserId,
+      organizationId: job.organizationId,
+      taskId,
+      runId: prepared.runId,
+      conversationId: job.conversationId,
+      inputBatchId: job.inputBatchId,
+      attemptId: prepared.attemptId,
+      contextManifestId: prepared.contextManifestId,
+      agentDefinition: prepared.requestContext.agentDefinition,
+      grantedCapabilities: prepared.requestContext.grantedCapabilities,
+      entitlementStatus: prepared.requestContext.entitlementStatus,
+      objectScopes: prepared.requestContext.objectScopes,
+    }
+    const delegationToken = await this.jwtService.signAsync(payload, {
+      expiresIn: ttlSec,
+      secret: this.configService.getOrThrow<string>('app.jwtDelegationSecret'),
+      audience: AI_OP_DELEGATION_JWT_AUD,
+    })
+
+    return {
+      request: {
+        taskId,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        attemptId: prepared.attemptId,
+        contextManifestId: prepared.contextManifestId,
+        userText: prepared.userText,
+        userTextSha256: prepared.userTextSha256,
+      },
+      attemptId: prepared.attemptId,
+      delegationToken,
+      requestContext: prepared.requestContext,
+    }
+  }
+
+  private async prepareCollaborationAttempt(
+    job: ClaimedJob,
+    permissionKeys: readonly string[],
+    route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
+    pageAttachment?: ResolvedPageContext,
+  ): Promise<{
+    request: {
+      taskId?: string
+      conversationId: string
+      inputBatchId: string
+      attemptId: string
+      contextManifestId: string
+      userText: string
+      userTextSha256: string
+    }
+    attemptId: string
+    delegationToken: string
+    requestContext: RequestContext
+  }> {
+    if (!job.taskId) {
+      throw new Error(`不支持的 Agent 执行定义: ${definitionRefLog(route.agentDefinition)}`)
+    }
+    const taskId = job.taskId
+    const userEvent = await this.prisma.aiConversationEvent.findUniqueOrThrow({
+      where: { id: job.inputBatch.userMessageEventId },
+    })
+    const originalUserText = (
+      userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
+        ? String((userEvent.payload as { text: unknown }).text ?? '')
+        : ''
+    ).trim()
+    if (!originalUserText) {
+      throw new Error('输入批次缺少 User 原文')
+    }
+    const userText = originalUserText
+    const modelId =
+      this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
+    const pinnedSources = await this.prisma.inputBatchSource.findMany({
+      where: {
+        inputBatchId: job.inputBatchId,
+        required: true,
+        parseVersion: { not: null },
+      },
+      select: { sourceId: true, parseVersion: true, contentDigest: true },
+    })
+    const parseIndex = await this.materialService.loadPinnedParseIndex(
+      job.organizationId,
+      job.inputBatchId,
+    )
+    const sourceCatalog = await this.materialService.loadConversationSourceCatalog({
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      inputBatchId: job.inputBatchId,
+    })
+    const materialVersions = pinnedSources.map((item) => ({
+      materialId: item.sourceId,
+      parseResultVersion: item.parseVersion as number,
+    }))
+    const sourceVersions = mergeFrozenSourceVersions(
+      pinnedSources.map((item) => ({
+        sourceId: item.sourceId,
+        parseVersion: item.parseVersion as number,
+        contentDigest: item.contentDigest ?? '',
+      })),
+      sourceCatalog.sourceVersions,
+    )
+    const historyEvents = await this.prisma.aiConversationEvent.findMany({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        sequence: { lte: job.inputBatch.conversationVersion },
+      },
+      orderBy: { sequence: 'asc' },
+      select: { sequence: true, kind: true, payload: true },
+    })
+    const published: { conversationId: string; eventId: string }[] = []
+    const prepared = await this.prisma.$transaction(async (tx) => {
+      await lockConversationRuntime(tx, job.organizationId, job.conversationId)
+      const task = await tx.agentTask.findUniqueOrThrow({
+        where: { id: taskId },
+        include: {
+          departure: {
+            include: {
+              itinerarySegments: {
+                orderBy: { sortOrder: 'asc' },
+                select: {
+                  id: true,
+                  name: true,
+                  startDate: true,
+                  endDate: true,
+                  sortOrder: true,
+                },
+              },
+            },
+          },
+        },
+      })
+      if (task.type !== AgentTaskType.departure_collaboration || !task.departure) {
+        throw new Error('发团协作任务缺少正式发团')
+      }
+      const departure = task.departure
+      const objectVersion = departureObjectVersion(departure.updatedAt)
+      const businessFacts = {
+        taskId: task.id,
+        status: task.status,
+        objectVersion,
+        snapshot: {
+          departureId: departure.id,
+          departureNo: departure.departureNo,
+          name: departure.name,
+          itinerarySegments: departure.itinerarySegments.map((segment) => ({
+            id: segment.id,
+            name: segment.name,
+            startDate: isoDateOnly(segment.startDate),
+            endDate: isoDateOnly(segment.endDate),
+            sortOrder: segment.sortOrder,
+          })),
+        },
+        ...(pageAttachment ? { page: pageAttachment.facts } : {}),
+      }
+      const availableToolNames = [...DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES]
+      const preparedProjection = await resolvePreparedProjection(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        conversationVersion: job.inputBatch.conversationVersion,
+        originUserMessageSequence: userEvent.sequence,
+        currentUserMessageSequence: userEvent.sequence,
+        events: excludeRetractedQueueMessages(historyEvents),
+        materials: parseIndex.materials,
+        availableSources: sourceCatalog.materials,
+        materialTruncationReasons: parseIndex.truncationReasons,
+        currentUserText: userText,
+        businessFacts,
+        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        modelId,
+        toolNames: availableToolNames,
+        systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
+        systemPromptVersion: DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
+      })
+      const modelInput = await resolveModelCurrentInput(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        origin: userMessageSourceOrigin(job.conversationId, userEvent),
+        originalText: userText,
+        plan: preparedProjection.plan,
+      })
+      const budgetedContext = buildBudgetedContext({
+        modelId,
+        toolNames: availableToolNames,
+        systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
+        systemPromptVersion: DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
+        currentUserText: modelInput.currentUserText,
+        businessFacts,
+        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        projection: withSourceIndexTruncation(
+          preparedProjection.projection,
+          modelInput.truncationReasons,
+        ),
+      })
+      const excerptDigests = excerptDigestsFor([
+        ...budgetedContext.projection.pinnedMaterials,
+        ...(budgetedContext.projection.availableSources ?? []),
+      ])
+      const manifestRecord = buildContextManifest({
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        conversationVersion: job.inputBatch.conversationVersion,
+        eventSequences: eventSequencesForModelInput(
+          budgetedContext.projection.recentTail,
+          userEvent.sequence,
+        ),
+        businessSnapshotVersion: objectVersion,
+        taskRefs: [
+          {
+            taskId,
+            role: 'primary',
+            goalVersion: task.goalVersion,
+            statusVersion: task.statusVersion,
+          },
+        ],
+        modelId,
+        materialVersions,
+        sourceVersions,
+        excerptDigests,
+        truncationReasons: budgetedContext.truncationReasons,
+        inputHash: budgetedContext.inputHash,
+        budget: budgetedContext.budget,
+        sections: budgetedContext.sections,
+        summaryVersion: preparedProjection.summaryVersion,
+        sourceIndexVersion: modelInput.sourceIndexVersion,
+      })
+      const existingManifest = await tx.aiContextManifest.findFirst({
+        where: {
+          organizationId: job.organizationId,
+          inputBatchId: job.inputBatchId,
+          conversationId: job.conversationId,
+          inputHash: manifestRecord.inputHash,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      })
+      const manifest = existingManifest
+        ? { id: existingManifest.id }
+        : await tx.aiContextManifest.create({
+            data: {
+              organizationId: job.organizationId,
+              taskId,
+              conversationId: job.conversationId,
+              inputBatchId: job.inputBatchId,
+              conversationVersion: manifestRecord.conversationVersion,
+              eventSequences: manifestRecord.eventSequences,
+              businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+              taskRefs: manifestRecord.taskRefs,
+              builderVersion: manifestRecord.builderVersion,
+              systemPromptVersion: manifestRecord.systemPromptVersion,
+              toolSchemaVersion: manifestRecord.toolSchemaVersion,
+              modelId: manifestRecord.modelId,
+              inputHash: manifestRecord.inputHash,
+              truncationReasons: manifestRecord.truncationReasons,
+              materialVersions,
+              sourceVersions,
+              summaryVersion: preparedProjection.summaryVersion,
+              sourceIndexVersion: modelInput.sourceIndexVersion,
+              excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
+              budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
+              sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
+              processorVersion: TOKEN_LIMITER_PROCESSOR_VERSION,
+            },
+          })
+      const attempt = await tx.aiAgentAttempt.create({
+        data: {
+          organizationId: job.organizationId,
+          taskId,
+          conversationId: job.conversationId,
+          inputBatchId: job.inputBatchId,
+          jobId: job.id,
+          contextManifestId: manifest.id,
+          agentDefinitionKey: route.agentDefinition.key,
+          agentDefinitionVersion: route.agentDefinition.version,
+          grantedCapabilities: [],
+          generation: job.generation,
+          status: AiAgentAttemptStatus.running,
+        },
+      })
+      const unresolvedContext = requestContextSchema.parse({
+        organizationId: job.organizationId,
+        userId: job.inputBatch.creatorUserId,
+        taskId,
+        runId: attempt.id,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        attemptId: attempt.id,
+        contextManifestId: manifest.id,
+        agentDefinition: route.agentDefinition,
+        entitlementStatus: 'unavailable',
+        objectScopes: [
+          { organizationId: job.organizationId, kind: 'agent_task', id: taskId },
+          { organizationId: job.organizationId, kind: 'agent_conversation', id: job.conversationId },
+        ],
+      })
+      const grants = capabilityGrantResolver.resolve({
+        agentDefinition: DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
+        capabilities: departureCollaborationCapabilityDefinitionRegistry,
+        requestContext: unresolvedContext,
+        user: { organizationId: job.organizationId, permissionKeys },
+        entitlements: { status: 'unavailable' },
+        riskPolicy: { allowedRisks: ['low', 'medium'] },
       })
       const requestContext = requestContextSchema.parse({
         ...unresolvedContext,
@@ -1614,7 +1966,10 @@ export class AiWorkflowProcessor {
           ? result.message
           : result.kind === 'awaiting_user_input'
             ? result.interaction.prompt
-            : '已提交待审核建议，请在中间表单确认。'
+            : result.kind === 'awaiting_review' &&
+                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+              ? '已提交待审核建议，请在右侧审核确认。'
+              : '已提交待审核建议，请在中间表单确认。'
       const interactionId =
         result.kind === 'awaiting_user_input' ? randomUUID() : null
       const interactionPayload =
@@ -1640,7 +1995,7 @@ export class AiWorkflowProcessor {
       const reviewPackageCoordinates = reviewPackageId
         ? await tx.aiReviewPackage.findUniqueOrThrow({
             where: { id: reviewPackageId },
-            select: { payloadSchema: true, confirmationUnit: true },
+            select: { payloadSchema: true, confirmationUnit: true, targetId: true },
           })
         : null
 
@@ -1653,6 +2008,10 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           attemptId,
           ...(job.taskId ? { taskId: job.taskId } : {}),
+          ...(result.kind === 'awaiting_review' &&
+          result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+            ? { taskType: DEPARTURE_COLLABORATION_TASK_TYPE }
+            : {}),
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
           ...(reviewPackageId
             ? {
@@ -1663,6 +2022,11 @@ export class AiWorkflowProcessor {
                   result.kind === 'awaiting_review'
                     ? result.reviewPackage.candidates.map((candidate) => candidate.fieldKey)
                     : undefined,
+                ...(result.kind === 'awaiting_review' &&
+                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT &&
+                reviewPackageCoordinates?.targetId
+                  ? { departureId: reviewPackageCoordinates.targetId }
+                  : {}),
               }
             : {}),
         } as Prisma.InputJsonValue,
@@ -2356,7 +2720,7 @@ export class AiWorkflowProcessor {
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
     attemptId: string,
-    reviewPackage: SubmitReviewPackageModelInput,
+    reviewPackage: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput,
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
@@ -2467,6 +2831,16 @@ function stringField(value: unknown, key: string): string | undefined {
   }
   const field = (value as Record<string, unknown>)[key]
   return typeof field === 'string' && field.length > 0 ? field : undefined
+}
+
+function isoDateOnly(value: Date | string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+  if (typeof value === 'string') {
+    return value.slice(0, 10)
+  }
+  return value.toISOString().slice(0, 10)
 }
 
 function collaborationErrorCodeForWorkflowFailure(

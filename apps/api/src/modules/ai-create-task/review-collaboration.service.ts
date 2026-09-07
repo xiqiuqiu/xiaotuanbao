@@ -22,6 +22,7 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
+import { SegmentResourceService } from '../departure/segment-resource.service'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -36,6 +37,10 @@ import {
   reviewConfirmItemKey,
   reviewConfirmJobKey,
 } from './review-collaboration.constants'
+import {
+  SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  resolveSegmentResourceReviewDraft,
+} from '@xiaotuanbao/ai-contracts'
 
 @Injectable()
 export class ReviewCollaborationService {
@@ -44,6 +49,7 @@ export class ReviewCollaborationService {
     private readonly tasks: AiCreateTaskService,
     private readonly conversations: AiConversationService,
     private readonly departures: DepartureService,
+    private readonly segmentResources: SegmentResourceService,
   ) {}
 
   async ensureDepartureCollaborationTask(
@@ -423,10 +429,7 @@ export class ReviewCollaborationService {
       throw new Error('REVIEW_CONFIRM_OPERATOR_MISSING')
     }
     if (pkg.status === AiReviewPackageStatus.confirmed) {
-      await this.completeItem(job, pkg, 'succeeded', {
-        objectKind: pkg.targetKind,
-        objectId: pkg.targetId,
-      })
+      await this.completeItem(job, pkg, 'succeeded', this.replayedResultRef(job, pkg))
       return
     }
     const snapshot = job.idempotencyRecord?.requestSnapshot as
@@ -474,8 +477,8 @@ export class ReviewCollaborationService {
   }
 
   /**
-   * #447 底座：协作事项确认只关闭待审包并写回执，不改 Departure / 客源 / 资源。
-   * 领域写入留给 #446、#449、#450。
+   * #447 底座：协作事项确认默认只关闭待审包并写回执，不改 Departure / 客源。
+   * #449：行程段资源包在同一事务写入正式 SegmentResource，不自动生成应付。
    */
   private async confirmIndependentItem(
     organizationId: string,
@@ -486,6 +489,15 @@ export class ReviewCollaborationService {
   ): Promise<void> {
     if (!pkg.taskId) {
       throw new BadRequestException('审核事项缺少任务')
+    }
+    if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
+      const resolution = resolveSegmentResourceReviewDraft(
+        reviewCandidateValues(pkg.candidates),
+        reviewCorrectionValues(pkg.userCorrections),
+      )
+      if (resolution.status !== 'ready') {
+        throw new BadRequestException(resolution.reason)
+      }
     }
     const { events } = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, pkg.taskId!)
@@ -512,6 +524,10 @@ export class ReviewCollaborationService {
       if (claimed.count !== 1) {
         throw new ConflictException('审核事项已处置')
       }
+      const writtenRef =
+        pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+          ? await this.writeConfirmedSegmentResource(tx, organizationId, pkg)
+          : { objectKind: pkg.targetKind, objectId: pkg.targetId }
       await tx.aiReviewRecord.create({
         data: {
           organizationId,
@@ -535,15 +551,51 @@ export class ReviewCollaborationService {
         inputBatchId: pkg.inputBatchId,
         disposition: 'confirmed',
       })
-      await this.completeItemInTx(tx, job, pkg, 'succeeded', {
-        objectKind: pkg.targetKind,
-        objectId: pkg.targetId,
-      })
+      await this.completeItemInTx(tx, job, pkg, 'succeeded', writtenRef)
       return { events }
     })
     for (const event of events) {
       this.conversations.publish(event.conversationId, event)
     }
+  }
+
+  private async writeConfirmedSegmentResource(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    const resolution = resolveSegmentResourceReviewDraft(
+      reviewCandidateValues(pkg.candidates),
+      reviewCorrectionValues(pkg.userCorrections),
+    )
+    if (resolution.status !== 'ready') {
+      throw new BadRequestException(resolution.reason)
+    }
+    const created = await this.segmentResources.createInTx(
+      tx,
+      organizationId,
+      resolution.draft.itinerarySegmentId,
+      {
+        resourceKind: resolution.draft.resourceKind,
+        supplierId: resolution.draft.supplierId,
+        title: resolution.draft.title,
+        amountCents: resolution.draft.amountCents,
+        notes: resolution.draft.notes ?? undefined,
+      },
+      { expectedDepartureId: pkg.targetId },
+    )
+    return { objectKind: 'segment_resource', objectId: created.id }
+  }
+
+  private replayedResultRef(
+    job: { idempotencyRecord?: { resultJson?: unknown } | null },
+    pkg: AiReviewPackage,
+  ): { objectKind: string; objectId: string } {
+    const stored = storedResultRef(job.idempotencyRecord?.resultJson)
+    if (stored) {
+      return stored
+    }
+    return { objectKind: pkg.targetKind, objectId: pkg.targetId }
   }
 
   async failConfirmedItem(jobId: string, reason: string, retryable = true): Promise<void> {
@@ -606,5 +658,52 @@ export class ReviewCollaborationService {
       })
     }
   }
+}
+
+function reviewCandidateValues(
+  raw: unknown,
+): Array<{ fieldKey: string; proposedValue: string | number }> {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+    const candidate = item as { fieldKey?: unknown; proposedValue?: unknown }
+    if (typeof candidate.fieldKey !== 'string') {
+      return []
+    }
+    if (typeof candidate.proposedValue !== 'string' && typeof candidate.proposedValue !== 'number') {
+      return []
+    }
+    return [{ fieldKey: candidate.fieldKey, proposedValue: candidate.proposedValue }]
+  })
+}
+
+function reviewCorrectionValues(
+  raw: unknown,
+): Partial<Record<string, string | number | null>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined
+  }
+  return raw as Partial<Record<string, string | number | null>>
+}
+
+function storedResultRef(
+  raw: unknown,
+): { objectKind: string; objectId: string } | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined
+  }
+  const resultRef = (raw as { resultRef?: unknown }).resultRef
+  if (!resultRef || typeof resultRef !== 'object' || Array.isArray(resultRef)) {
+    return undefined
+  }
+  const ref = resultRef as { objectKind?: unknown; objectId?: unknown }
+  if (typeof ref.objectKind !== 'string' || typeof ref.objectId !== 'string') {
+    return undefined
+  }
+  return { objectKind: ref.objectKind, objectId: ref.objectId }
 }
 

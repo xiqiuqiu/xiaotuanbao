@@ -31,9 +31,11 @@ interface AgentConversationState {
   startNewConversation: (currentAttachment?: AgentCurrentPageAttachment | null) => void
   pageContextDismissed: boolean
   composerEpoch: number
+  focusedReviewPackageId: string | null
   attachCurrentPage: (currentAttachment: AgentCurrentPageAttachment | null) => void
   detachCurrentPage: () => void
   syncDefaultPageAttachment: (currentAttachment: AgentCurrentPageAttachment | null) => void
+  focusReviewPackage: (reviewPackageId: string | null) => void
   expandToGlobal: (location: {
     pathname: string
     search?: string
@@ -58,6 +60,7 @@ const INITIAL_CONVERSATION_STATE = {
   attachedPageAttachment: null as AgentCurrentPageAttachment | null,
   pageContextDismissed: false,
   composerEpoch: 0,
+  focusedReviewPackageId: null as string | null,
 }
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
@@ -127,6 +130,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       set({ attachedPageAttachment: next })
     }
   },
+  focusReviewPackage: (reviewPackageId) => set({ focusedReviewPackageId: reviewPackageId }),
   expandToGlobal: (location) => {
     const current = get()
     const captured = captureReturnLocation(location)

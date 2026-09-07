@@ -192,6 +192,7 @@ export type ReviewPackageActivityContent = {
   confirmationUnit?: string
   taskId?: string
   taskType?: string
+  departureId?: string
 }
 
 export type AgentTaskActivityContent = {
@@ -379,6 +380,10 @@ function reviewPackageFromPayload(
     typeof payload.payloadSchema === 'string' ? payload.payloadSchema : undefined
   const confirmationUnit =
     typeof payload.confirmationUnit === 'string' ? payload.confirmationUnit : undefined
+  const departureId =
+    typeof payload.departureId === 'string' && payload.departureId.length > 0
+      ? payload.departureId
+      : undefined
   return {
     reviewPackageId,
     fieldKeys,
@@ -386,6 +391,7 @@ function reviewPackageFromPayload(
     ...(confirmationUnit ? { confirmationUnit } : {}),
     ...(taskId ? { taskId } : {}),
     ...(taskType ? { taskType } : {}),
+    ...(departureId ? { departureId } : {}),
   }
 }
 

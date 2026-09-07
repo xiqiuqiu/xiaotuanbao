@@ -53,6 +53,7 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   'POST /api/ai-tools/v1/get-task-context',
   'POST /api/ai-tools/v1/submit-review-package',
   'POST /api/ai-tools/v1/propose-review-package',
+  'POST /api/ai-tools/v1/propose-segment-resource-review-package',
   'POST /api/ai-tools/v1/search-route-templates',
   'POST /api/ai-tools/v1/search-users',
   'POST /api/ai-tools/v1/search-suppliers',

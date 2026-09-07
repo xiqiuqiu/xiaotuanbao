@@ -69,7 +69,7 @@ export class SegmentResourceService {
     segmentId: string,
     query: ListSegmentResourcesQueryDto,
   ): Promise<SegmentResourceListResult> {
-    const segment = await this.findSegmentOrThrow(organizationId, segmentId)
+    const segment = await this.findSegmentOrThrow(this.prisma, organizationId, segmentId)
     const keyword = query.keyword?.trim()
 
     const resources = await this.prisma.segmentResource.findMany({
@@ -363,7 +363,17 @@ export class SegmentResourceService {
     segmentId: string,
     dto: CreateSegmentResourceDto,
   ): Promise<SegmentResourceSummary> {
-    const segment = await this.findSegmentOrThrow(organizationId, segmentId)
+    return this.createInTx(this.prisma, organizationId, segmentId, dto)
+  }
+
+  async createInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    segmentId: string,
+    dto: CreateSegmentResourceDto,
+    options?: { expectedDepartureId?: string },
+  ): Promise<SegmentResourceSummary> {
+    const segment = await this.findSegmentOrThrow(tx, organizationId, segmentId, options)
     this.ensureDepartureEditable(segment.departure)
 
     const counterparty = resolveSegmentResourceCounterparty({
@@ -373,12 +383,13 @@ export class SegmentResourceService {
     })
 
     await this.ensureSelectableSupplier(
+      tx,
       organizationId,
       counterparty.supplierId!,
       dto.resourceKind,
     )
 
-    const created = await this.prisma.segmentResource.create({
+    const created = await tx.segmentResource.create({
       data: {
         segmentId: segment.id,
         resourceKind: dto.resourceKind,
@@ -448,6 +459,7 @@ export class SegmentResourceService {
 
     if (counterparty.supplierId) {
       await this.ensureSelectableSupplier(
+        this.prisma,
         organizationId,
         counterparty.supplierId,
         resourceKind,
@@ -543,7 +555,7 @@ export class SegmentResourceService {
     organizationId: string,
     segmentId: string,
   ): Promise<BatchFinanceGenerationResult> {
-    const segment = await this.findSegmentOrThrow(organizationId, segmentId)
+    const segment = await this.findSegmentOrThrow(this.prisma, organizationId, segmentId)
     await this.departureFinanceFacade.assertAllowsNewObligationById(
       organizationId,
       segment.departureId,
@@ -631,16 +643,29 @@ export class SegmentResourceService {
     return summarizeBatchFinanceGeneration(items)
   }
 
-  private async findSegmentOrThrow(organizationId: string, segmentId: string) {
-    const segment = await this.prisma.itinerarySegment.findFirst({
+  private async findSegmentOrThrow(
+    db: Prisma.TransactionClient | PrismaService,
+    organizationId: string,
+    segmentId: string,
+    options?: { expectedDepartureId?: string },
+  ) {
+    const segment = await db.itinerarySegment.findFirst({
       where: {
         id: segmentId,
-        departure: { organizationId },
+        departure: {
+          organizationId,
+          ...(options?.expectedDepartureId ? { id: options.expectedDepartureId } : {}),
+        },
       },
       include: { departure: true },
     })
 
     if (!segment) {
+      if (options?.expectedDepartureId) {
+        throw new BadRequestException(
+          '材料未确定对应行程段，请核实归属，不能凭当前页面日期默认挂靠',
+        )
+      }
       throw new NotFoundException('行程段不存在')
     }
 
@@ -671,11 +696,12 @@ export class SegmentResourceService {
   }
 
   private async ensureSelectableSupplier(
+    db: Prisma.TransactionClient | PrismaService,
     organizationId: string,
     supplierId: string,
     resourceKind: ResourceKind,
   ) {
-    const supplier = await this.prisma.supplier.findFirst({
+    const supplier = await db.supplier.findFirst({
       where: { id: supplierId, organizationId },
     })
 
