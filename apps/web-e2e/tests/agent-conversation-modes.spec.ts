@@ -41,7 +41,7 @@ test.describe('agent conversation modes #370', () => {
         return body.data?.draft?.text ?? ''
       })
       .toBe('未发送草稿')
-    await pane.getByRole('button', { name: '进入全局模式' }).click()
+    await pane.getByRole('button', { name: '展开协作工作区' }).click()
 
     await expect(page).toHaveURL(new RegExp(`${paths.departure}$`))
     const globalOverlay = page.getByRole('dialog', { name: '小团宝 Agent' })
@@ -75,7 +75,7 @@ test.describe('agent conversation modes #370', () => {
     await page.getByRole('button', { name: '展开电子化助理' }).click()
     const pane = page.getByRole('complementary', { name: '电子化助理' })
     await expect(pane).toBeVisible()
-    await expect(pane.getByRole('button', { name: '进入全局模式' })).toHaveCount(0)
+    await expect(pane.getByRole('button', { name: '展开协作工作区' })).toHaveCount(0)
     await expect(pane.getByRole('button', { name: '新建会话' })).toBeVisible()
     await expect(pane.getByRole('button', { name: '收起电子化助理' })).toBeVisible()
   })
@@ -106,7 +106,7 @@ test.describe('agent conversation modes #370', () => {
     const composer = pane.getByRole('textbox', { name: '询问小团宝业务' })
     await composer.fill('切换中的提问')
     await composer.press('Enter')
-    await pane.getByRole('button', { name: '进入全局模式' }).click()
+    await pane.getByRole('button', { name: '展开协作工作区' }).click()
     const overlay = page.getByRole('dialog', { name: '小团宝 Agent' })
     await expect(overlay).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`${paths.departure}$`))

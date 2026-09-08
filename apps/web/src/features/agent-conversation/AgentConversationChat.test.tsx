@@ -1256,7 +1256,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
-    ).toHaveTextContent('先核对出团日期')
+    ).toHaveTextContent('正在处理你的请求')
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1278,7 +1279,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
-    ).toHaveTextContent('再核人数')
+    ).toHaveTextContent('正在处理你的请求')
+    expect(screen.queryByText('再核人数')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1597,7 +1599,8 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       )
     })
     expect(await screen.findByText('已整理当前资料。')).toBeInTheDocument()
-    expect(screen.getByText('先核对出团日期')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onerror?.(new Event('error'))

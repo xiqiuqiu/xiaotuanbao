@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationPage } from './AgentConversationPage'
 import { useAgentConversationStore } from './agent-conversation.store'
 
+vi.mock('./conversation-materials', () => ({
+  ConversationMaterialsTrigger: () => <button type="button">会话资料</button>,
+}))
+
 vi.mock('./AgentConversationChat', () => ({
   AgentConversationChat: () => <p>当前聊天</p>,
 }))
@@ -63,6 +67,6 @@ describe('AgentConversationPage #370', () => {
     renderPage()
     expect(screen.getByRole('button', { name: '折叠历史导航' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '返回业务页面' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '进入全局模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '展开协作工作区' })).not.toBeInTheDocument()
   })
 })

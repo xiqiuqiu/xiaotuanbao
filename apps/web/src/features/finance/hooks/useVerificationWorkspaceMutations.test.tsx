@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from 'react'
-import { act, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cancelVerification, createVerification } from '@/services/finance.service'
 import { useVerificationWorkspaceMutations } from './useVerificationWorkspaceMutations'
 
@@ -46,6 +46,10 @@ describe('useVerificationWorkspaceMutations', () => {
     vi.clearAllMocks()
     vi.mocked(createVerification).mockResolvedValue({ generatedRebatePayable: null } as never)
     vi.mocked(cancelVerification).mockResolvedValue({} as never)
+  })
+
+  afterEach(() => {
+    cleanup()
   })
 
   it('创建核销未使用发团筛选时仍刷新所属发团详情', async () => {

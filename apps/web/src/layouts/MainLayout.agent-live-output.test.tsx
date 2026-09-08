@@ -65,6 +65,14 @@ vi.mock('@/services/agent-conversation.service', () => ({
   stopAgentConversationBatch: vi.fn(),
 }))
 
+vi.mock('@/features/agent-conversation/conversation-materials', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/agent-conversation/conversation-materials')>()
+  return {
+    ...actual,
+    ConversationMaterialsTrigger: () => <button type="button">会话资料</button>,
+  }
+})
+
 vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
   ConversationHistoryTrigger: () => <button type="button">打开会话历史</button>,
 }))
@@ -244,7 +252,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
     expect(within(pane).getByText('已记下路线。')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '思考过程' })).toHaveLength(1)
 
-    await user.click(within(pane).getByRole('button', { name: '进入全局模式' }))
+    await user.click(within(pane).getByRole('button', { name: '展开协作工作区' }))
 
     const overlay = screen.getByRole('dialog', { name: '小团宝 Agent' })
     expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
