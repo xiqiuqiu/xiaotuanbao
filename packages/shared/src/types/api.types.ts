@@ -1049,6 +1049,7 @@ export type ConversationSourceStatus =
   | 'isolated'
 
 export interface ConversationSourceView {
+  userMessageSequences?: number[]
   id: string
   kind: ConversationSourceKind
   originalFilename: string
@@ -1064,6 +1065,7 @@ export interface ConversationSourceView {
 export type DepartureMaterialStatus = ConversationSourceStatus
 
 export interface DepartureMaterialView {
+  userMessageSequences?: number[]
   id: string
   originalFilename: string
   contentType: string

@@ -32,8 +32,8 @@ export async function saveDepartureCreationDraft(
   return request.post<AiCreateTaskSummary>('/ai-create-tasks/draft', payload, config)
 }
 
-export async function getAiCreateTask(taskId: string): Promise<AiCreateTaskSummary> {
-  return request.get<AiCreateTaskSummary>(`/agent/tasks/${taskId}`)
+export async function getAiCreateTask(taskId: string, config?: RequestConfig): Promise<AiCreateTaskSummary> {
+  return request.get<AiCreateTaskSummary>(`/agent/tasks/${taskId}`, config)
 }
 
 export async function confirmAiCreateTask(
@@ -266,6 +266,7 @@ export async function listDepartureMaterials(
     sizeBytes: source.sizeBytes,
     createdAt: source.createdAt,
     latestResultVersion: source.latestParseVersion,
+    userMessageSequences: source.userMessageSequences,
   }))
 }
 

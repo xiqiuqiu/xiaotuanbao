@@ -26,6 +26,51 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
+  it('records streamed tool errors even when final output omits the failed result', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'tool-error', payload: { toolName: 'getMaterialParseResult', toolCallId: 'failed', error: 'private details' } }
+        })(),
+        getFullOutput: async () => ({ text: '无法读取', toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'failed' }] }),
+      }),
+    })
+    const { result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.diagnostic?.toolSteps).toMatchObject([{ status: 'failed' }])
+    expect(JSON.stringify(result)).not.toContain('private details')
+  })
+
+  it('records failed tool results by call ID, including retries of the same tool', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      generate: async () => ({ text: '已读取',
+        toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'first' }, { toolName: 'getMaterialParseResult', toolCallId: 'retry' }],
+        toolResults: [{ toolName: 'getMaterialParseResult', toolCallId: 'retry', result: { pages: [] } },
+          { toolName: 'getMaterialParseResult', toolCallId: 'first', isError: true, result: 'rejected' }],
+      }),
+    })
+    const { result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.diagnostic?.toolSteps.map((step) => step.status)).toEqual(['failed', 'succeeded'])
+  })
+
+  it('preserves source-order candidates from accepted tools through headless execution', async () => {
+    const reviewPackage = {
+      objectVersion: 1780000000000, confirmationUnit: 'source_order_create',
+      candidates: [{ fieldKey: 'adultGuestCount', proposedValue: 2, clarity: 'clear',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '两位成人' }] }],
+    }
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '两位成人',
+      generate: async () => ({ text: '请审核', toolCalls: [{ toolName: 'proposeSourceOrderReviewPackage' }],
+        toolResults: [{ toolName: 'proposeSourceOrderReviewPackage', result: { status: 'accepted', ...reviewPackage } }],
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage },
+    })
+  })
+
   it('returns only the registered departure intent from an accepted bounded routing result', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个七月喀纳斯团',

@@ -1,12 +1,12 @@
+import { AgentWorkContext } from '@/features/agent-conversation/agent-work-context'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { memo } from 'react'
 import { AgentReasoningMessage } from './agent-reasoning-message'
 
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotChatReasoningMessage: {
-    Header: ({ label }: { label?: string }) => (
-      <button type="button">{label ?? '思考过程'}</button>
-    ),
+    Header: ({ label }: { label?: string }) => <button type="button">{label ?? '思考过程'}</button>,
     Content: () => null,
     Toggle: () => null,
   },
@@ -22,17 +22,10 @@ const liveReasoning = {
   content: '正在核对出团日期与人数',
 }
 
-function renderIndicator(
-  overrides: Partial<Parameters<typeof AgentReasoningMessage>[0]> = {},
-) {
+function renderIndicator(overrides: Partial<Parameters<typeof AgentReasoningMessage>[0]> = {}) {
   const messages = overrides.messages ?? [liveReasoning]
   return render(
-    <AgentReasoningMessage
-      message={liveReasoning}
-      messages={messages}
-      isRunning
-      {...overrides}
-    />,
+    <AgentReasoningMessage message={liveReasoning} messages={messages} isRunning {...overrides} />,
   )
 }
 
@@ -114,4 +107,21 @@ describe('AgentReasoningMessage working indicator', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent(`${'甲'.repeat(36)}…`)
   })
+})
+
+// A cached CopilotKit row may retain stale props after a following assistant message.
+it('updates a cached working row from the controlled conversation context', () => {
+  const CachedRow = memo(
+    () => <AgentReasoningMessage message={liveReasoning} messages={[liveReasoning]} isRunning />,
+    () => true,
+  )
+  const view = (isRunning: boolean) => (
+    <AgentWorkContext.Provider value={{ isRunning, messages: [liveReasoning] }}>
+      <CachedRow />
+    </AgentWorkContext.Provider>
+  )
+  const rendered = render(view(true))
+  expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
+  rendered.rerender(view(false))
+  expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
 })

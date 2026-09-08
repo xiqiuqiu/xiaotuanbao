@@ -35,9 +35,18 @@ describe('fetchTaskContext', () => {
       },
     }
 
+    const formalFacts = {
+      departureId: 'departure-1', guestCount: 10, adultGuestCount: 8, childGuestCount: 2,
+      sourceOrders: [{
+        id: 'source-1', displayName: '土楼客源', partnerId: 'partner-1',
+        partnerName: '福建土楼专线地接', guestCount: 10, adultGuestCount: 8, childGuestCount: 2,
+      }],
+    }
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ code: 0, data: context }),
+      json: async () => ({ code: 0, data: {
+        ...context, snapshot: { ...context.snapshot, ...formalFacts },
+      } }),
     })
 
     const result = await fetchTaskContext(
@@ -50,6 +59,7 @@ describe('fetchTaskContext', () => {
     )
 
     expect(result.objectVersion).toBe(2)
+    expect(result.snapshot).toMatchObject(formalFacts)
     expect(result.availableCapabilities).toEqual(['getTaskContext'])
     expect(global.fetch).toHaveBeenCalledWith(
       'http://api.local/api/ai-tools/v1/get-task-context',

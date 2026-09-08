@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
+import { submitSourceOrderReviewPackageModelInputSchema } from '../review/source-order-schema'
 import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
 
@@ -175,6 +176,7 @@ export const headlessAwaitingReviewResultSchema = z
     reviewPackage: z.union([
       submitReviewPackageModelInputSchema,
       submitSegmentResourceReviewModelInputSchema,
+      submitSourceOrderReviewPackageModelInputSchema,
     ]),
     diagnostic: headlessDiagnosticSchema.optional(),
   })

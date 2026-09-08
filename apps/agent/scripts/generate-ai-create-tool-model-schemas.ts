@@ -1,3 +1,4 @@
+import { createProposeSourceOrderReviewTool } from '../src/propose-source-order-review.tool'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { standardSchemaToJSONSchema } from '@mastra/core/schema'
@@ -28,6 +29,7 @@ const tools = {
   searchPartners: createSearchPartnersTool(config),
   proposeReviewPackage: createSubmitReviewPackageTool(config),
   proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
+    proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
   readConversationHistory: createReadConversationHistoryTool(config),
   readConversationSource: createReadConversationSourceTool(config),

@@ -9,6 +9,11 @@ import { AssistPane } from './AssistPane'
 import { AssistPaneSlotProvider, useAssistPaneSlot } from './assist-pane-slot'
 
 const expandToGlobal = vi.fn()
+vi.mock('@/features/agent-conversation/conversation-materials', () => ({
+  ConversationMaterialsTrigger: () => <button>会话资料</button>,
+}))
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+vi.mock('@/features/agent-conversation/use-business-departure-id', () => ({ useBusinessDepartureId: () => undefined }))
 
 vi.mock('@/features/agent-conversation/use-expand-agent-conversation', () => ({
   useExpandAgentConversation: () => expandToGlobal,
@@ -143,7 +148,7 @@ describe('AssistPane', () => {
       </QueryClientProvider>,
     )
 
-    await user.click(screen.getByRole('button', { name: '进入全局模式' }))
+    await user.click(screen.getByRole('button', { name: '展开协作工作区' }))
     expect(expandToGlobal).toHaveBeenCalledTimes(1)
   })
 
@@ -156,7 +161,7 @@ describe('AssistPane', () => {
         </AssistPaneSlotProvider>
       </QueryClientProvider>,
     )
-    expect(screen.getByRole('button', { name: '进入全局模式' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '展开协作工作区' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '收起电子化助理' })).toBeInTheDocument()
   })
 

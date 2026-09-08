@@ -345,7 +345,7 @@ describe('ReviewCollaborationService #447', () => {
     expect(jobs).toHaveLength(0)
   })
 
-  it('writes a source order and selected guests when confirming a source-order package', async () => {
+  it.each([false, true])('writes source order and guests after confirmation (human supplied empty choices: %s)', async (humanChoices) => {
     const sourcePackage = {
       ...pendingPackage,
       payloadSchema: 'source_order.create@v1',
@@ -411,6 +411,12 @@ describe('ReviewCollaborationService #447', () => {
         },
       ],
       userCorrections: {},
+    }
+    if (humanChoices) {
+      sourcePackage.candidates = sourcePackage.candidates.filter(
+        (candidate) => !['fareAdjustments', 'discountType'].includes(candidate.fieldKey),
+      )
+      sourcePackage.userCorrections = { fareAdjustments: [], discountType: 'none' }
     }
     const { service, sourceOrders, prisma, tx } = createService({ packages: [sourcePackage] })
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({

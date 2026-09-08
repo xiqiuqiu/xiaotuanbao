@@ -2,8 +2,10 @@ import {
   CopilotChatReasoningMessage,
   type CopilotChatReasoningMessageProps,
 } from '@copilotkit/react-core/v2'
+import { useContext } from 'react'
 import { Mascot } from '@/components/mascot'
 import styles from './agent-reasoning-message.module.css'
+import { AgentWorkContext } from './agent-work-context'
 
 const DEFAULT_WORK_DESCRIPTION = '正在处理你的请求'
 const MAX_WORK_DESCRIPTION_LENGTH = 36
@@ -68,10 +70,13 @@ export function AgentReasoningMessage({
   className,
   ...rootProps
 }: CopilotChatReasoningMessageProps) {
+  const current = useContext(AgentWorkContext)
+  const currentMessages = current?.messages ?? messages
+  const running = current?.isRunning ?? isRunning
   const isLatestRunningMessage = Boolean(
-    isRunning && latestReasoningMessageId(messages) === message.id,
+    running && latestReasoningMessageId(currentMessages) === message.id,
   )
-  const turnFinished = hasDurableAssistantAfter(messages, message.id)
+  const turnFinished = hasDurableAssistantAfter(currentMessages, message.id)
 
   if (!isLatestRunningMessage || turnFinished) return <></>
 

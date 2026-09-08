@@ -1,3 +1,4 @@
+import { createProposeSourceOrderReviewTool } from './propose-source-order-review.tool'
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 import {
@@ -64,6 +65,7 @@ function createMastra(
     searchPartners: createSearchPartnersTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
     proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
+    proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),

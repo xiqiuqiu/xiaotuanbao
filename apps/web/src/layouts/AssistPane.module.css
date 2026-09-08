@@ -41,7 +41,7 @@
   justify-content: space-between;
   gap: 8px;
   padding-inline: 16px;
-  border-bottom: 1px solid var(--assist-border);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
 .paneTitle {

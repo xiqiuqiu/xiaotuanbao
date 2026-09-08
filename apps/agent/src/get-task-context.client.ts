@@ -33,7 +33,7 @@ export async function fetchTaskContext(
   } | null
 
   if (!response.ok) {
-    throw mapAgentFetchError(payload?.data ?? { status: response.status })
+    throw mapAgentFetchError(payload?.data, response.status)
   }
 
   return getTaskContextOutputSchema.parse(payload?.data)

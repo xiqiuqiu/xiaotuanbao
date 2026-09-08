@@ -66,6 +66,10 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
     return this.tasks.proposeReviewPackageForAgent(caller as ReviewCaller, input)
   }
 
+  proposeSourceOrderReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.proposeSourceOrderReviewPackageForAgent(caller as ReviewCaller, input)
+  }
+
   proposeSegmentResourceReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
     return this.tasks.proposeSegmentResourceReviewPackageForAgent(
       caller as SegmentResourceReviewCaller,

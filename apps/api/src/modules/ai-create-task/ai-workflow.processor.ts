@@ -32,6 +32,7 @@ import {
   DEPARTURE_COLLABORATION_INSTRUCTIONS,
   departureCollaborationCapabilityDefinitionRegistry,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
@@ -1531,6 +1532,8 @@ export class AiWorkflowProcessor {
         entitlementStatus: 'unavailable',
         objectScopes: [
           { organizationId: job.organizationId, kind: 'agent_task', id: taskId },
+          // getTaskContext retains its legacy scope name; it binds this formal collaboration task, not a draft.
+          { organizationId: job.organizationId, kind: 'ai_create_task', id: taskId },
           { organizationId: job.organizationId, kind: 'agent_conversation', id: job.conversationId },
         ],
       })
@@ -1967,7 +1970,8 @@ export class AiWorkflowProcessor {
           : result.kind === 'awaiting_user_input'
             ? result.interaction.prompt
             : result.kind === 'awaiting_review' &&
-                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+                (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT)
               ? '已提交待审核建议，请在右侧审核确认。'
               : '已提交待审核建议，请在中间表单确认。'
       const interactionId =
@@ -2009,7 +2013,8 @@ export class AiWorkflowProcessor {
           attemptId,
           ...(job.taskId ? { taskId: job.taskId } : {}),
           ...(result.kind === 'awaiting_review' &&
-          result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+          (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT)
             ? { taskType: DEPARTURE_COLLABORATION_TASK_TYPE }
             : {}),
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
@@ -2023,7 +2028,8 @@ export class AiWorkflowProcessor {
                     ? result.reviewPackage.candidates.map((candidate) => candidate.fieldKey)
                     : undefined,
                 ...(result.kind === 'awaiting_review' &&
-                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT &&
+                (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT) &&
                 reviewPackageCoordinates?.targetId
                   ? { departureId: reviewPackageCoordinates.targetId }
                   : {}),

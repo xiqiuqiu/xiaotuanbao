@@ -126,7 +126,9 @@ function renderPanel() {
   return render(
     <ConfigProvider locale={zhCN}>
       <App>
-        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
           <SegmentResourceReviewPanel departureId="dep-1" conversationId="conv-1" />
         </QueryClientProvider>
       </App>
@@ -209,6 +211,28 @@ describe('SegmentResourceReviewPanel #449', () => {
     expect(generatePayable).not.toHaveBeenCalled()
   })
 
+  it('locks resource fields while confirmation is in flight', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    acceptReviewConfirmation.mockImplementation(() => new Promise(() => {}))
+    renderPanel()
+    await userEvent.setup().click(await screen.findByRole('button', { name: '确认写入资源' }))
+    expect(screen.getByLabelText('资源名称候选')).toBeDisabled()
+    expect(screen.getByLabelText('约定总价候选')).toBeDisabled()
+    expect(screen.getByLabelText('备注候选')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '拒绝建议' })).toBeDisabled()
+  })
+
+  it('shows typed corrections immediately and blocks a cleared price before saving', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    renderPanel()
+    const title = await screen.findByLabelText('资源名称候选')
+    await userEvent.setup().type(title, '含早')
+    expect(title).toHaveValue('4月2日住宿含早')
+    fireEvent.change(screen.getByLabelText('约定总价候选'), { target: { value: '' } })
+    expect(screen.getByRole('button', { name: '确认写入资源' })).toBeDisabled()
+    expect(acceptReviewConfirmation).not.toHaveBeenCalled()
+  })
+
   it('confirms the saved version when a correction is immediately followed by confirm', async () => {
     let stored = packageView()
     getDepartureCollaboration.mockImplementation(async () => collaboration([stored]))
@@ -216,13 +240,19 @@ describe('SegmentResourceReviewPanel #449', () => {
       stored = packageView({ version: input.expectedPackageVersion + 1 })
       return { pendingReviews: [stored], pendingReview: stored }
     })
-    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    acceptReviewConfirmation.mockResolvedValue({
+      items: [{ packageId: 'pkg-1', status: 'succeeded' }],
+    })
     renderPanel()
-    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), {
+      target: { value: '修订住宿' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
-    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
-      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
-    ))
+    await waitFor(() =>
+      expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
+      ),
+    )
   })
 
   it('waits for an in-flight debounced save and drains later corrections before confirming', async () => {
@@ -230,23 +260,33 @@ describe('SegmentResourceReviewPanel #449', () => {
     let stored = packageView()
     getDepartureCollaboration.mockImplementation(async () => collaboration([stored]))
     patchAiReviewPackage.mockImplementation(async (_taskId, _packageId, input) => {
-      if (input.expectedPackageVersion === 1) await new Promise<void>((resolve) => { finishSave = resolve })
+      if (input.expectedPackageVersion === 1)
+        await new Promise<void>((resolve) => {
+          finishSave = resolve
+        })
       stored = packageView({ version: input.expectedPackageVersion + 1 })
       return { pendingReviews: [stored], pendingReview: stored }
     })
-    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    acceptReviewConfirmation.mockResolvedValue({
+      items: [{ packageId: 'pkg-1', status: 'succeeded' }],
+    })
     renderPanel()
-    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), {
+      target: { value: '修订住宿' },
+    })
     await waitFor(() => expect(patchAiReviewPackage).toHaveBeenCalledTimes(1))
     fireEvent.change(screen.getByLabelText('约定总价候选'), { target: { value: '9000' } })
     fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
     expect(acceptReviewConfirmation).not.toHaveBeenCalled()
     finishSave()
-    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
-      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 3 }] }),
-    ))
+    await waitFor(() =>
+      expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 3 }] }),
+      ),
+    )
     expect(patchAiReviewPackage.mock.calls[1][2]).toEqual({
-      expectedPackageVersion: 2, corrections: { amountCents: 900000 },
+      expectedPackageVersion: 2,
+      corrections: { amountCents: 900000 },
     })
   })
 
@@ -255,37 +295,52 @@ describe('SegmentResourceReviewPanel #449', () => {
     patchAiReviewPackage.mockRejectedValueOnce(new Error('保存失败')).mockResolvedValue({
       pendingReviews: [packageView({ version: 2 })],
     })
-    acceptReviewConfirmation.mockResolvedValue({ items: [{ packageId: 'pkg-1', status: 'succeeded' }] })
+    acceptReviewConfirmation.mockResolvedValue({
+      items: [{ packageId: 'pkg-1', status: 'succeeded' }],
+    })
     renderPanel()
-    fireEvent.change(await screen.findByLabelText('资源名称候选'), { target: { value: '修订住宿' } })
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), {
+      target: { value: '修订住宿' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
-    await screen.findByText('保存失败')
+    await screen.findAllByText('保存失败')
     expect(acceptReviewConfirmation).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '确认写入资源' }))
     await waitFor(() => expect(patchAiReviewPackage).toHaveBeenCalledTimes(2))
     expect(patchAiReviewPackage.mock.calls[1][2].corrections).toEqual({ title: '修订住宿' })
-    await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith(
-      expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
-    ))
+    await waitFor(() =>
+      expect(acceptReviewConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({ items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }] }),
+      ),
+    )
   })
 
-  it.each(['amountCents', 'notes'])('preserves an explicit null correction for %s', async (fieldKey) => {
-    const pkg = packageView()
-    pkg.candidates = pkg.candidates.filter((item) => item.fieldKey !== fieldKey).concat({
-      fieldKey, proposedValue: fieldKey === 'amountCents' ? 880000 : '含早',
-      userCorrectedValue: null, clarity: 'clear', status: 'pending', evidence,
-    })
-    getDepartureCollaboration.mockResolvedValue(collaboration([pkg]))
-    renderPanel()
-    const confirm = await screen.findByRole('button', { name: '确认写入资源' })
-    if (fieldKey === 'amountCents') {
-      expect(screen.getByLabelText('约定总价候选')).toHaveValue('')
-      expect(confirm).toBeDisabled()
-    } else {
-      expect(screen.getByLabelText('备注候选')).toHaveValue('')
-      expect(confirm).toBeEnabled()
-    }
-  })
+  it.each(['amountCents', 'notes'])(
+    'preserves an explicit null correction for %s',
+    async (fieldKey) => {
+      const pkg = packageView()
+      pkg.candidates = pkg.candidates
+        .filter((item) => item.fieldKey !== fieldKey)
+        .concat({
+          fieldKey,
+          proposedValue: fieldKey === 'amountCents' ? 880000 : '含早',
+          userCorrectedValue: null,
+          clarity: 'clear',
+          status: 'pending',
+          evidence,
+        })
+      getDepartureCollaboration.mockResolvedValue(collaboration([pkg]))
+      renderPanel()
+      const confirm = await screen.findByRole('button', { name: '确认写入资源' })
+      if (fieldKey === 'amountCents') {
+        expect(screen.getByLabelText('约定总价候选')).toHaveValue('')
+        expect(confirm).toBeDisabled()
+      } else {
+        expect(screen.getByLabelText('备注候选')).toHaveValue('')
+        expect(confirm).toBeEnabled()
+      }
+    },
+  )
 
   it('disables supplier search until a resource kind is selected', async () => {
     const pkg = packageView()
@@ -300,7 +355,9 @@ describe('SegmentResourceReviewPanel #449', () => {
     getDepartureCollaboration.mockResolvedValue(
       collaboration([
         packageView({
-          candidates: packageView().candidates.filter((candidate) => candidate.fieldKey !== 'itinerarySegmentId'),
+          candidates: packageView().candidates.filter(
+            (candidate) => candidate.fieldKey !== 'itinerarySegmentId',
+          ),
         }),
       ]),
     )
@@ -331,8 +388,9 @@ describe('SegmentResourceReviewPanel #449', () => {
     })
     renderPanel()
 
-    expect(await screen.findByText(/已写入行程段资源 res-1/)).toBeInTheDocument()
-    expect(screen.getByText(/未提交应付/)).toBeInTheDocument()
+    expect(await screen.findByText('资源已写入')).toBeInTheDocument()
+    expect(screen.getByText(/4月2日住宿。写入时未自动提交应付/)).toBeInTheDocument()
+    expect(screen.getByText(/未自动提交应付/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入资源' })).not.toBeInTheDocument()
   })
 })

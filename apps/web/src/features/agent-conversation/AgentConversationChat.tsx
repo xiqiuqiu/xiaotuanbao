@@ -1,3 +1,6 @@
+import { ConversationUserMessage } from './conversation-materials'
+import { getAiCreateTask } from '@/services/ai-create-task.service'
+import { AgentWorkContext } from '@/features/agent-conversation/agent-work-context'
 import {
   CopilotChatConfigurationProvider,
   CopilotChatInput,
@@ -9,7 +12,7 @@ import {
 import { EditOutlined, FileTextOutlined, OrderedListOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Input, Radio, Space, Tag, Typography } from 'antd'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   parseConversationStreamFrame,
@@ -46,10 +49,7 @@ import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
 } from '@/features/ai-assist/ai-create-assist-polling'
-import {
-  ASSIST_ERROR_TEXT,
-  getAssistErrorText,
-} from '@/features/ai-assist/assist-error-text'
+import { ASSIST_ERROR_TEXT, getAssistErrorText } from '@/features/ai-assist/assist-error-text'
 import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -60,7 +60,6 @@ import {
 } from './page-locator-attachment'
 import {
   agentTaskWorkspaceNavigation,
-  departureIdFromPathname,
   isCurrentAgentTaskWorkspace,
   resolveRegisteredTaskDescriptor,
 } from './task-descriptor-navigation'
@@ -73,7 +72,6 @@ import {
   MATERIAL_ACCEPT,
   useConversationComposerAttachments,
 } from '@/features/ai-assist/conversation-composer-attachments'
-import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
 import { DEPARTURE_COLLABORATION_TASK_TYPE } from '@xiaotuanbao/ai-contracts'
 import { useUiStore } from '@/app/store/ui.store'
 
@@ -149,6 +147,7 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
         isRunning={stoppable && !hasDraft}
         onStop={onStop}
         textArea={{ 'aria-label': '询问小团宝业务' }}
+        addMenuButton={{ 'aria-label': '添加附件' }}
         sendButton={(buttonProps) => (
           <ComposerSendButton
             {...buttonProps}
@@ -216,8 +215,22 @@ function taskActivityPresentation(status: string): {
   return { color: 'processing', label: '进行中', description: 'Agent 正在推进这个任务。' }
 }
 
+function CompletedDepartureAction({ taskId, onOpen }: {
+  taskId: string
+  onOpen: (departureId: string) => void
+}) {
+  const { data } = useQuery({
+    queryKey: ['ai-create-task', taskId],
+    queryFn: () => getAiCreateTask(taskId, { silentError: true }),
+    retry: false,
+  })
+  if (!data?.departureId) return null
+  return <Button size="small" onClick={() => onOpen(data.departureId!)}>查看发团</Button>
+}
+
 function createAgentTaskActivityRenderer(
   openTask: (taskId: string, taskType?: string) => void,
+  openDeparture: (departureId: string) => void,
 ): ReactActivityMessageRenderer<AgentTaskActivityContent> {
   return {
     activityType: AGENT_TASK_ACTIVITY_TYPE,
@@ -258,9 +271,13 @@ function createAgentTaskActivityRenderer(
           >
             <Typography.Text type="secondary">{presentation.description}</Typography.Text>
             <div className={chatStyles.activityActions}>
-              <Button size="small" onClick={() => openTask(content.taskId, content.taskType)}>
-                {actionLabel}
-              </Button>
+              {content.taskType === 'departure_creation' && content.status === 'completed' ? (
+                <CompletedDepartureAction taskId={content.taskId} onOpen={openDeparture} />
+              ) : content.taskType === 'departure_creation' && !['failed', 'cancelled'].includes(content.status) ? (
+                <Button size="small" onClick={() => openTask(content.taskId, content.taskType)}>
+                  {actionLabel}
+                </Button>
+              ) : null}
             </div>
           </Card>
         </section>
@@ -298,15 +315,23 @@ function createReviewPackageActivityRenderer(
     render: ({ content }) => (
       <section aria-label="待审核内容">
         <Card
-          className={chatStyles.reviewActivityCard}
+          className={content.disposition ? chatStyles.activityCard : chatStyles.reviewActivityCard}
           size="small"
           title={
             <div className={chatStyles.activityHeading}>
               <span className={chatStyles.activityTitle}>
                 <FileTextOutlined aria-hidden="true" />
-                <Typography.Text strong>待审核内容</Typography.Text>
+                <Typography.Text strong>
+                  {content.disposition ? '审核记录' : '待审核内容'}
+                </Typography.Text>
               </span>
-              <Tag color="warning">待审核</Tag>
+              <Tag color={content.disposition === 'confirmed' ? 'success' : 'warning'}>
+                {content.disposition === 'confirmed'
+                  ? '已确认'
+                  : content.disposition === 'rejected'
+                    ? '已拒绝'
+                    : '待审核'}
+              </Tag>
             </div>
           }
         >
@@ -320,7 +345,9 @@ function createReviewPackageActivityRenderer(
           <div className={chatStyles.activityActions}>
             {content.taskId ? (
               <Button
-                type={content.taskType === DEPARTURE_COLLABORATION_TASK_TYPE ? 'default' : 'primary'}
+                type={
+                  content.taskType === DEPARTURE_COLLABORATION_TASK_TYPE ? 'default' : 'primary'
+                }
                 size="small"
                 onClick={() =>
                   openTask(content.taskId!, content.taskType, {
@@ -371,9 +398,7 @@ function InteractionCard({
           <Typography.Text>{content.prompt}</Typography.Text>
           {resolved ? (
             <Typography.Text type="secondary">
-              {content.status === 'answered'
-                ? '已根据你的回答继续处理。'
-                : '已取消本次等待。'}
+              {content.status === 'answered' ? '已根据你的回答继续处理。' : '已取消本次等待。'}
             </Typography.Text>
           ) : content.type === 'single_choice' ? (
             <Radio.Group
@@ -407,7 +432,8 @@ function InteractionCard({
                   onReply(
                     content,
                     content.type === 'single_choice'
-                      ? (content.options.find((option) => option.id === selectedOptionId)?.label ?? '')
+                      ? (content.options.find((option) => option.id === selectedOptionId)?.label ??
+                          '')
                       : text.trim(),
                     selectedOptionId,
                   )
@@ -415,7 +441,12 @@ function InteractionCard({
               >
                 发送回答
               </Button>
-              <Button size="small" loading={pending} disabled={pending} onClick={() => onCancel(content)}>
+              <Button
+                size="small"
+                loading={pending}
+                disabled={pending}
+                onClick={() => onCancel(content)}
+              >
                 取消本次等待
               </Button>
             </Space>
@@ -483,7 +514,9 @@ function mergeEvents(
   return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
 }
 
-function useAgentConversationChatController() {
+function useAgentConversationChatController(
+  onReviewRequested?: (packageId: string, departureId?: string) => void,
+) {
   const [focusedReviewPackageId, setFocusedReviewPackageId] = useState<string | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -492,9 +525,7 @@ function useAgentConversationChatController() {
   })
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const conversationView = useAgentConversationStore((state) => state.view)
-  const attachedPageAttachment = useAgentConversationStore(
-    (state) => state.attachedPageAttachment,
-  )
+  const attachedPageAttachment = useAgentConversationStore((state) => state.attachedPageAttachment)
   const attachCurrentPage = useAgentConversationStore((state) => state.attachCurrentPage)
   const detachCurrentPage = useAgentConversationStore((state) => state.detachCurrentPage)
   const composerEpoch = useAgentConversationStore((state) => state.composerEpoch)
@@ -612,10 +643,7 @@ function useAgentConversationChatController() {
           if (page.events.length > 0) {
             useAgentConversationRuntimeStore.getState().hydrate({
               conversationId,
-              events: mergeEvents(
-                useAgentConversationRuntimeStore.getState().events,
-                page.events,
-              ),
+              events: mergeEvents(useAgentConversationRuntimeStore.getState().events, page.events),
             })
           }
           if (page.draft) {
@@ -724,10 +752,7 @@ function useAgentConversationChatController() {
         )
         useAgentConversationRuntimeStore.getState().hydrate({
           conversationId: result.conversationId,
-          events: mergeEvents(
-            useAgentConversationRuntimeStore.getState().events,
-            result.events,
-          ),
+          events: mergeEvents(useAgentConversationRuntimeStore.getState().events, result.events),
           pendingText: null,
           draft: result.draft?.text ?? '',
           draftEpoch: result.draft?.draftEpoch ?? draftEpochRef.current + 1,
@@ -755,13 +780,7 @@ function useAgentConversationChatController() {
         await restoreFiles?.()
       }
     },
-    [
-      conversationIdRef,
-      draftEpochRef,
-      draftRevisionRef,
-      persistConversation,
-      updateDraft,
-    ],
+    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation, updateDraft],
   )
 
   const stop = useCallback(async () => {
@@ -918,10 +937,7 @@ function useAgentConversationChatController() {
   )
   const isRunning = isCopilotChatRunning(visibleEvents, null, pendingText, liveAssistant)
   const stoppableBatchId = currentStoppableBatchId(visibleEvents)
-  const messageView = useMemo(
-    () => ({ reasoningMessage: AgentReasoningMessage }),
-    [],
-  )
+  const messageView = useMemo(() => ({ reasoningMessage: AgentReasoningMessage, userMessage: ConversationUserMessage }), [])
   const openAgentTask = useCallback(
     (
       taskId: string,
@@ -931,6 +947,21 @@ function useAgentConversationChatController() {
       if (!resolveRegisteredTaskDescriptor(taskType)) {
         return
       }
+      if (
+        taskType === DEPARTURE_COLLABORATION_TASK_TYPE &&
+        extras?.reviewPackageId &&
+        onReviewRequested
+      ) {
+        onReviewRequested(extras.reviewPackageId, extras.departureId)
+        return
+      }
+      if (taskType === 'departure_creation' && extras?.departureId && !extras.reviewPackageId) {
+        closeGlobalForBusinessNavigation()
+        void navigate({ to: '/departure/$departureId', params: { departureId: extras.departureId } })
+        return
+      }
+      // 无明确目标的协作卡不应切换会话布局。
+      if (taskType === DEPARTURE_COLLABORATION_TASK_TYPE && !extras?.departureId && !extras?.reviewPackageId) return
       closeGlobalForBusinessNavigation()
       const alreadyOnTask = isCurrentAgentTaskWorkspace(
         location.pathname,
@@ -962,6 +993,7 @@ function useAgentConversationChatController() {
     },
     [
       closeGlobalForBusinessNavigation,
+      onReviewRequested,
       location.pathname,
       location.searchStr,
       navigate,
@@ -977,7 +1009,10 @@ function useAgentConversationChatController() {
         onReply: (...args) => replyToInteractionRef.current(...args),
         onCancel: (...args) => cancelInteractionRef.current(...args),
       }),
-      createAgentTaskActivityRenderer((...args) => openAgentTaskRef.current(...args)),
+      createAgentTaskActivityRenderer(
+        (...args) => openAgentTaskRef.current(...args),
+        (departureId) => openAgentTaskRef.current('', 'departure_creation', { departureId }),
+      ),
       createReviewPackageActivityRenderer((...args) => openAgentTaskRef.current(...args)),
     ],
     [],
@@ -1044,6 +1079,8 @@ function AgentConversationComposer({
     containerRef,
   } = useConversationComposerAttachments()
 
+  const workState = useMemo(() => ({ messages, isRunning }), [messages, isRunning])
+
   return (
     <div
       ref={containerRef}
@@ -1065,41 +1102,41 @@ function AgentConversationComposer({
         }}
       />
       <QueuedMessagesContext.Provider value={queuedMessagesContextValue}>
-        <CopilotChatView
-          className={chatStyles.chat}
-          messages={messages}
-          isRunning={isRunning}
-          messageView={messageView}
-          input={QueueAwareChatInput}
-          inputValue={pendingText ? '' : draft}
-          onInputChange={updateDraft}
-          attachments={attachments}
-          onRemoveAttachment={(id) => {
-            removeAttachment(id)
-          }}
-          onAddFile={() => fileInputRef.current?.click()}
-          dragOver={dragOver}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={(event) => {
-            void handleDrop(event)
-          }}
-          onSubmitMessage={(value) => {
-            const files = filesFromAttachmentSources(consumeAttachments())
-            void send(value, files, () => processFiles(files))
-          }}
-          onStop={stop}
-        />
+        <AgentWorkContext.Provider value={workState}>
+          <CopilotChatView
+            className={chatStyles.chat}
+            messages={messages}
+            isRunning={isRunning}
+            messageView={messageView}
+            input={QueueAwareChatInput}
+            inputValue={pendingText ? '' : draft}
+            onInputChange={updateDraft}
+            attachments={attachments}
+            onRemoveAttachment={(id) => {
+              removeAttachment(id)
+            }}
+            onAddFile={() => fileInputRef.current?.click()}
+            dragOver={dragOver}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={(event) => {
+              void handleDrop(event)
+            }}
+            onSubmitMessage={(value) => {
+              const files = filesFromAttachmentSources(consumeAttachments())
+              void send(value, files, () => processFiles(files))
+            }}
+            onStop={stop}
+          />
+        </AgentWorkContext.Provider>
       </QueuedMessagesContext.Provider>
     </div>
   )
 }
 
-export function AgentConversationChat() {
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  })
-  const departureId = departureIdFromPathname(pathname)
+export function AgentConversationChat({
+  onReviewRequested,
+}: { onReviewRequested?: (packageId: string, departureId?: string) => void } = {}) {
   const {
     activityRenderers,
     attachCurrentPage,
@@ -1123,7 +1160,7 @@ export function AgentConversationChat() {
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
-  } = useAgentConversationChatController()
+  } = useAgentConversationChatController(onReviewRequested)
   const queuedMessagesContextValue = useMemo(
     () => ({
       editingBatchId: editingQueueBatchId,
@@ -1147,13 +1184,6 @@ export function AgentConversationChat() {
         : {})}
     >
       {errorText ? <Alert type="error" showIcon title={errorText} /> : null}
-      {departureId && conversationId ? (
-        <SegmentResourceReviewPanel
-          departureId={departureId}
-          conversationId={conversationId}
-          focusedReviewPackageId={focusedReviewPackageId}
-        />
-      ) : null}
       {attachedPageAttachment ? (
         <div className={chatStyles.pageContext}>
           <Tag
@@ -1189,7 +1219,17 @@ export function AgentConversationChat() {
           <CopilotChatConfigurationProvider
             agentId={COPILOTKIT_RUNTIME_AGENT_ID}
             threadId={conversationId ?? 'new'}
-            labels={{ chatInputPlaceholder: '询问小团宝业务…' }}
+            labels={{
+              chatInputPlaceholder: '描述需求、粘贴业务信息，或上传材料…',
+              welcomeMessageText: '需要整理什么业务材料？',
+              chatDisclaimerText: '请核对助手整理的内容，确认后才会写入业务记录。',
+              chatInputToolbarAddButtonLabel: '添加附件',
+              assistantMessageToolbarCopyMessageLabel: '复制',
+              assistantMessageToolbarCopyCodeLabel: '复制代码',
+              assistantMessageToolbarCopyCodeCopiedLabel: '已复制',
+              userMessageToolbarCopyMessageLabel: '复制',
+              userMessageToolbarEditMessageLabel: '编辑',
+            }}
           >
             <AgentConversationComposer
               key={composerEpoch}

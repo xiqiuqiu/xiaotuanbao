@@ -2943,7 +2943,13 @@ export class AiConversationService {
       const resolvedTaskId = params.taskId ?? primaryTaskId(batch)
       if (resolvedTaskId) {
         await this.assertAssistAccess(params.userId)
-        await this.findOwnedInProgressTask(params.organizationId, params.userId, resolvedTaskId, tx)
+        await this.resolvePrimaryDepartureTask(
+          tx,
+          params.organizationId,
+          params.userId,
+          conversation.id,
+          resolvedTaskId,
+        )
       }
       const record = await tx.aiCreateIdempotencyRecord.upsert({
         where: {

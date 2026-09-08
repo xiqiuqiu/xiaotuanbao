@@ -177,7 +177,16 @@ export function toReviewPackageView(pkg: {
     targetId: pkg.targetId ?? '',
     proposalHash: pkg.proposalHash ?? '',
     itemIdentity: pkg.itemIdentity ?? undefined,
-    candidates: (candidatePayloadSupported ? parsedCandidates : []).map((candidate) => ({
+    candidates: (candidatePayloadSupported ? [
+      ...parsedCandidates,
+      // Human additions have their own correction audit; never fabricate Agent evidence.
+      ...Object.entries(corrections)
+        .filter(([key]) => !parsedCandidates.some((candidate) => candidate.fieldKey === key))
+        .map(([fieldKey, userCorrectedValue]): StoredReviewCandidate => ({
+          fieldKey, proposedValue: null, userCorrectedValue, clarity: 'clear',
+          status: pkg.status === 'confirmed' ? 'confirmed' : 'pending', evidence: [],
+        })),
+    ] : []).map((candidate) => ({
       fieldKey: candidate.fieldKey,
       proposedValue: candidate.proposedValue,
       userCorrectedValue:

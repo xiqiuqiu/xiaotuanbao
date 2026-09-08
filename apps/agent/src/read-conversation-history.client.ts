@@ -39,7 +39,7 @@ export async function fetchConversationHistory(
   } | null
 
   if (!response.ok) {
-    throw mapAgentFetchError(payload?.data ?? { status: response.status })
+    throw mapAgentFetchError(payload?.data, response.status)
   }
 
   return readConversationHistoryOutputSchema.parse(payload?.data)

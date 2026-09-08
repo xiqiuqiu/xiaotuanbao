@@ -4,6 +4,7 @@ import type {
   GetTaskContextOutput,
   ProposeReviewPackageOutput,
   ProposeSegmentResourceReviewPackageOutput,
+  ProposeSourceOrderReviewPackageOutput,
   ReadConversationHistoryOutput,
   ReadConversationSourceOutput,
   SearchPartnersOutput,
@@ -158,6 +159,13 @@ export class AiToolHttpAdapter {
   ): Promise<ProposeReviewPackageOutput> {
     const caller = requireTaskBoundUser(user)
     return this.domain.proposeReview(caller, body)
+  }
+
+  proposeSourceOrderReviewPackage(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ProposeSourceOrderReviewPackageOutput> {
+    return this.domain.proposeSourceOrderReview(requireTaskBoundUser(user), body)
   }
 
   proposeSegmentResourceReviewPackage(

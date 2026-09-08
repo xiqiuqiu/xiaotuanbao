@@ -60,7 +60,23 @@ export const getTaskContextOutputSchema = z
         creatorUserId: z.string().min(1),
       })
       .strip(),
-    snapshot: aiCreateDraftSnapshotSchema,
+    snapshot: aiCreateDraftSnapshotSchema.extend({
+      departureId: z.string().min(1).optional(),
+      guestCount: z.number().int().nonnegative().optional(),
+      adultGuestCount: z.number().int().nonnegative().optional(),
+      childGuestCount: z.number().int().nonnegative().optional(),
+      sourceOrders: z
+        .array(z.object({
+          id: z.string().min(1),
+          displayName: z.string(),
+          partnerId: z.string().min(1),
+          partnerName: z.string(),
+          guestCount: z.number().int().nonnegative(),
+          adultGuestCount: z.number().int().nonnegative(),
+          childGuestCount: z.number().int().nonnegative(),
+        }))
+        .optional(),
+    }),
     objectVersion: z.number().int().positive(),
     pending: z
       .object({
@@ -68,7 +84,12 @@ export const getTaskContextOutputSchema = z
         reviewPackageId: z.string().nullable(),
       })
       .strip(),
-    availableCapabilities: z.array(aiCreateToolNameSchema).min(1),
+    availableCapabilities: z
+      .array(z.union([
+        aiCreateToolNameSchema,
+        z.enum(['proposeSourceOrderReviewPackage', 'proposeSegmentResourceReviewPackage']),
+      ]))
+      .min(1),
     fieldCoverage: z
       .object({
         filled: z.array(z.string()),

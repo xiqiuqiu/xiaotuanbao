@@ -275,6 +275,9 @@ export {
   type SubmitSegmentResourceReviewModelInput,
 } from './review/segment-resource-schema'
 export {
+  SOURCE_ORDER_REVIEW_FIELD_KEYS,
+  submitSourceOrderReviewPackageModelInputSchema,
+  type SubmitSourceOrderReviewPackageModelInput,
   SOURCE_ORDER_REVIEW_GROUPS,
   SOURCE_ORDER_REVIEW_GROUP_LABELS,
   sourceOrderFareAdjustmentCandidateSchema,
@@ -467,6 +470,10 @@ export {
   DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL,
   DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
   DEPARTURE_COLLABORATION_INSTRUCTIONS,
+  DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY,
+  DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY_REF,
+  proposeSourceOrderReviewPackageOutputSchema,
+  type ProposeSourceOrderReviewPackageOutput,
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
   PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL,

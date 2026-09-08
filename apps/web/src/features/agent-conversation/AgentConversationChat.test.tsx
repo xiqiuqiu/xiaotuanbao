@@ -1,3 +1,4 @@
+import { getAiCreateTask } from '@/services/ai-create-task.service'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -124,6 +125,8 @@ function useMockComposerAttachments() {
     },
   }
 }
+
+vi.mock('@/services/ai-create-task.service', () => ({ getAiCreateTask: vi.fn() }))
 
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
@@ -700,6 +703,43 @@ describe('AgentConversationChat task and review activities', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  it.each(['completed', 'failed', 'cancelled'])('keeps a %s collaboration card in the current workspace without a task shortcut', async (status) => {
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-collab', taskType: 'departure_collaboration', status },
+    }] })
+    renderChat()
+    const card = await screen.findByRole('region', { name: 'Agent 协作' })
+    expect(within(card).queryByRole('button')).toBeNull()
+    expect(routerState.navigate).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'departure_creation'])('does not send a completed round without a formal result back to the wizard (%s)', async (taskType) => {
+    vi.mocked(getAiCreateTask).mockResolvedValue({ departureId: null } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-without-result', ...(taskType ? { taskType } : {}), status: 'completed' },
+    }] })
+    renderChat()
+    const card = await screen.findByRole('region', { name: 'Agent 任务' })
+    expect(within(card).queryByRole('button')).toBeNull()
+    if (!taskType) expect(card).not.toHaveTextContent('创建发团')
+  })
+
+  it('opens the authoritative departure result for a completed creation round', async () => {
+    vi.mocked(getAiCreateTask).mockResolvedValue({ departureId: 'dep-created' } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-created', taskType: 'departure_creation', status: 'completed' },
+    }] })
+    renderChat()
+    await userEvent.click(await screen.findByRole('button', { name: '查看发团' }))
+    expect(routerState.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/departure/$departureId', params: { departureId: 'dep-created' } }))
   })
 
   it('renders the task card and opens the matching departure review form', async () => {

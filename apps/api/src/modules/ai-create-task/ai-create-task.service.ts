@@ -22,6 +22,7 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   classifyDraftFields,
+  DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
   capabilitiesForPendingReview,
   evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
@@ -37,6 +38,10 @@ import {
   searchPartnersInputSchema,
   searchPartnersOutputSchema,
   submitReviewPackageOutputSchema,
+  submitSourceOrderReviewPackageInputSchema,
+  proposeSourceOrderReviewPackageOutputSchema,
+  SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+  type ProposeSourceOrderReviewPackageOutput,
   submitSegmentResourceReviewInputSchema,
   resolveSegmentResourceReviewDraft,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
@@ -329,6 +334,54 @@ export class AiCreateTaskService {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
+    const collaborationTask = await this.prisma.agentTask.findFirst({
+      where: {
+        id: caller.taskId,
+        organizationId: caller.organizationId,
+        type: AgentTaskType.departure_collaboration,
+      },
+      include: {
+        departure: true,
+        reviewPackages: { where: { status: AiReviewPackageStatus.pending } },
+      },
+    })
+    if (collaborationTask) {
+      if (collaborationTask.ownerUserId !== caller.userId) {
+        throw new ForbiddenException('仅任务创建者可查询发团上下文')
+      }
+      const departure = collaborationTask.departure
+      if (!departure || departure.organizationId !== caller.organizationId) {
+        throw new NotFoundException('正式发团不存在')
+      }
+      await this.requireRunningAttempt(caller)
+      const snapshot = {
+        ...toFormalDepartureSnapshot(departure, null),
+        ...(await this.readFormalSourceOrderFacts(caller.organizationId, departure.id)),
+      }
+      const pending = collaborationTask.reviewPackages.find(
+        (pkg) => pkg.conversationId === caller.conversationId,
+      )
+      return getTaskContextOutputSchema.parse({
+        task: {
+          id: collaborationTask.id,
+          status:
+            collaborationTask.status === AgentTaskStatus.completed
+              ? 'completed'
+              : collaborationTask.status === AgentTaskStatus.cancelled ||
+                  collaborationTask.status === AgentTaskStatus.closed
+                ? 'abandoned'
+                : 'in_progress',
+          currentPhase: AiCreatePhase.BASIC_INFO,
+          creatorUserId: collaborationTask.ownerUserId,
+        },
+        snapshot,
+        objectVersion: departureObjectVersion(departure.updatedAt),
+        pending: { hasPendingReview: Boolean(pending), reviewPackageId: pending?.id ?? null },
+        availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
+        fieldCoverage: classifyDraftFields(snapshot),
+      })
+    }
+
     const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
     await this.requireRunningAttempt(caller)
 
@@ -349,7 +402,11 @@ export class AiCreateTaskService {
         currentPhase: summary.currentPhase,
         creatorUserId: summary.creatorUserId,
       },
-      snapshot,
+      snapshot: {
+        ...snapshot,
+        ...(task.departure &&
+          (await this.readFormalSourceOrderFacts(caller.organizationId, task.departure.id))),
+      },
       objectVersion: summary.draft.version,
       pending: {
         hasPendingReview: Boolean(conversationPending),
@@ -361,6 +418,32 @@ export class AiCreateTaskService {
       ),
       fieldCoverage: classifyDraftFields(snapshot),
     })
+  }
+
+  private async readFormalSourceOrderFacts(organizationId: string, departureId: string) {
+    const sourceOrders = await this.prisma.sourceOrder.findMany({
+      where: { departureId, departure: { organizationId } },
+      select: {
+        id: true,
+        displayName: true,
+        partnerId: true,
+        partner: { select: { name: true } },
+        guestCount: true,
+        adultGuestCount: true,
+        childGuestCount: true,
+      },
+      orderBy: { id: 'asc' },
+    })
+    return {
+      departureId,
+      guestCount: sourceOrders.reduce((sum, order) => sum + order.guestCount, 0),
+      adultGuestCount: sourceOrders.reduce((sum, order) => sum + order.adultGuestCount, 0),
+      childGuestCount: sourceOrders.reduce((sum, order) => sum + order.childGuestCount, 0),
+      sourceOrders: sourceOrders.map(({ partner, ...order }) => ({
+        ...order,
+        partnerName: partner.name,
+      })),
+    }
   }
 
   async getMaterialParseResultForAgent(
@@ -392,14 +475,14 @@ export class AiCreateTaskService {
     if (!caller.inputBatchId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
-    const task = await this.findOwnedTaskOrThrow(
-      caller.organizationId,
-      caller.userId,
-      caller.taskId,
-    )
-    if (task.departureId || task.departure) {
-      throw new BadRequestException('正式发团后不可读取建团资料解析结果')
+    // 会话来源不随建团完成失效，也不要求协作任务存在建团草稿。
+    const task = await this.prisma.agentTask.findFirst({
+      where: { id: caller.taskId, organizationId: caller.organizationId },
+    })
+    if (!task || task.ownerUserId !== caller.userId) {
+      throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
     }
+    await this.requireRunningAttempt(caller)
     const result = await this.materialService.getPinnedParseResult({
       organizationId: caller.organizationId,
       inputBatchId: caller.inputBatchId,
@@ -651,6 +734,35 @@ export class AiCreateTaskService {
       candidates: input.candidates,
       normalizedProposal: validated.normalizedProposal,
     } as ProposeReviewPackageOutput
+  }
+
+  async proposeSourceOrderReviewPackageForAgent(
+    caller: Parameters<AiCreateTaskService['proposeReviewPackageForAgent']>[0],
+    rawInput: unknown,
+  ): Promise<ProposeSourceOrderReviewPackageOutput> {
+    const input = submitSourceOrderReviewPackageInputSchema.safeParse(rawInput)
+    if (!input.success) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    const task = await this.prisma.agentTask.findFirst({
+      where: { id: caller.taskId, organizationId: caller.organizationId,
+        type: AgentTaskType.departure_collaboration, departureId: { not: null } },
+      select: { id: true },
+    })
+    if (!task) throw new NotFoundException('发团协作任务不存在')
+    // Reuse the existing ownership, attempt, object-version and evidence boundary.
+    const proposal = await this.proposeReviewPackageForAgent(caller, input.data)
+    if (proposal.status === 'rejected') return proposal
+    const partnerId = input.data.candidates.find((candidate) => candidate.fieldKey === 'partnerId')?.proposedValue
+    if (typeof partnerId === 'string') {
+      const partner = await this.prisma.partner.findFirst({
+        where: { id: partnerId, organizationId: caller.organizationId, status: DirectoryProfileStatus.active },
+        select: { id: true },
+      })
+      if (!partner) return { status: 'rejected', errors: [{ candidateIndex: 0, evidenceIndex: 0,
+        code: 'PARTNER_INVALID', message: '客户不存在或已停用，请搜索并核实客户' }] }
+    }
+    return proposeSourceOrderReviewPackageOutputSchema.parse({
+      ...proposal, payloadSchema: SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+    })
   }
 
   async proposeSegmentResourceReviewPackageForAgent(

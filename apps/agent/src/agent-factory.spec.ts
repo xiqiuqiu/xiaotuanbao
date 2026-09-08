@@ -207,4 +207,17 @@ describe('Agent Factory', () => {
       }),
     ).toThrow('未注册')
   })
+
+  it('exposes the formal snapshot tool for a granted collaboration task', () => {
+    const collaborationContext = requestContextSchema.parse({
+      ...context,
+      agentDefinition: { key: 'departure.collaboration', version: 1 },
+      grantedCapabilities: [{ key: 'departure.task-context.read', version: 2 }],
+    })
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'test-only' },
+      collaborationContext,
+    )
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['getTaskContext'])
+  })
 })

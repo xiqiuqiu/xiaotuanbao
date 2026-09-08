@@ -1,3 +1,4 @@
+import { AgentWorkContext } from '@/features/agent-conversation/agent-work-context'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   CopilotChatConfigurationProvider,
@@ -160,17 +161,21 @@ function ReviewPackageNotice({ content }: { content: ReviewPackageActivityConten
   )
 }
 
-function SearchRouteTemplatesNotice({ items }: { items: SearchRouteTemplatesActivityContent['items'] }) {
+function SearchRouteTemplatesNotice({
+  items,
+}: {
+  items: SearchRouteTemplatesActivityContent['items']
+}) {
   if (items.length === 0) {
     return (
-      <p className={styles.notice}>
-        没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。
-      </p>
+      <p className={styles.notice}>没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。</p>
     )
   }
   return (
     <div className={styles.reviewCardBody}>
-      <p className={styles.notice}>组织内常用路线候选（回复要用哪一条；确认与拒绝只在中间表单）：</p>
+      <p className={styles.notice}>
+        组织内常用路线候选（回复要用哪一条；确认与拒绝只在中间表单）：
+      </p>
       {items.map((item) => (
         <p key={item.id} className={styles.notice}>
           {item.name} · {item.defaultDayCount} 天 · 用过 {item.usageCount} 次
@@ -327,7 +332,9 @@ function InteractionCard({
       <Typography.Text>{content.prompt}</Typography.Text>
       {resolved ? (
         <Typography.Text type="secondary">
-          {content.status === 'answered' ? '已根据你的回答继续处理。' : '已取消等待，可继续发送新的说明。'}
+          {content.status === 'answered'
+            ? '已根据你的回答继续处理。'
+            : '已取消等待，可继续发送新的说明。'}
         </Typography.Text>
       ) : content.type === 'single_choice' ? (
         <Radio.Group
@@ -368,7 +375,12 @@ function InteractionCard({
           >
             发送回答
           </Button>
-          <Button size="small" loading={pending} disabled={pending} onClick={() => onCancel(content)}>
+          <Button
+            size="small"
+            loading={pending}
+            disabled={pending}
+            onClick={() => onCancel(content)}
+          >
             取消本次等待
           </Button>
         </Space>
@@ -443,7 +455,11 @@ function createSearchRouteTemplatesActivityRenderer(): ReactActivityMessageRende
         version: 1,
         vendor: 'xiaotuanbao',
         validate(value) {
-          if (value && typeof value === 'object' && Array.isArray((value as { items?: unknown }).items)) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            Array.isArray((value as { items?: unknown }).items)
+          ) {
             return { value: value as SearchRouteTemplatesActivityContent }
           }
           return { issues: [{ message: 'invalid search route templates activity' }] }
@@ -512,6 +528,8 @@ function ChatComposer({
     containerRef,
   } = useConversationComposerAttachments()
 
+  const workState = useMemo(() => ({ messages, isRunning }), [messages, isRunning])
+
   return (
     <div
       ref={containerRef}
@@ -532,33 +550,35 @@ function ChatComposer({
           void handleFileUpload(event)
         }}
       />
-      <CopilotChatView
-        className={styles.chat}
-        messages={messages}
-        isRunning={isRunning}
-        messageView={{ reasoningMessage: AgentReasoningMessage }}
-        inputValue={pendingText ? '' : draft}
-        onInputChange={setDraft}
-        onSubmitMessage={(value) => {
-          const ready = consumeAttachments()
-          const files = filesFromAttachmentSources(ready)
-          void onSend(value, files, () => processFiles(files))
-        }}
-        welcomeScreen={WelcomeScreen}
-        attachments={attachments}
-        onRemoveAttachment={(id) => {
-          removeAttachment(id)
-        }}
-        onAddFile={() => fileInputRef.current?.click()}
-        dragOver={dragOver}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={(event) => {
-          void handleDrop(event)
-        }}
-        input={DepartureAssistChatInput}
-        onStop={onStop}
-      />
+      <AgentWorkContext.Provider value={workState}>
+        <CopilotChatView
+          className={styles.chat}
+          messages={messages}
+          isRunning={isRunning}
+          messageView={{ reasoningMessage: AgentReasoningMessage }}
+          inputValue={pendingText ? '' : draft}
+          onInputChange={setDraft}
+          onSubmitMessage={(value) => {
+            const ready = consumeAttachments()
+            const files = filesFromAttachmentSources(ready)
+            void onSend(value, files, () => processFiles(files))
+          }}
+          welcomeScreen={WelcomeScreen}
+          attachments={attachments}
+          onRemoveAttachment={(id) => {
+            removeAttachment(id)
+          }}
+          onAddFile={() => fileInputRef.current?.click()}
+          dragOver={dragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(event) => {
+            void handleDrop(event)
+          }}
+          input={DepartureAssistChatInput}
+          onStop={onStop}
+        />
+      </AgentWorkContext.Provider>
     </div>
   )
 }
@@ -660,11 +680,7 @@ function useConversationEventSync({
         })
         .catch(() => undefined)
 
-    const stopPolling = startConversationCatchUpPolling(
-      catchUp,
-      activeBatchStatusRef,
-      isCancelled,
-    )
+    const stopPolling = startConversationCatchUpPolling(catchUp, activeBatchStatusRef, isCancelled)
     const errorHandler = createCatchUpErrorHandler(catchUp, isCancelled)
     const source = new EventSource(
       `${env.apiBaseUrl}/agent/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
@@ -701,13 +717,7 @@ function useConversationEventSync({
       errorHandler.dispose()
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [
-    activeBatchStatusRef,
-    conversationId,
-    lastSequenceRef,
-    sink,
-    taskId,
-  ])
+  }, [activeBatchStatusRef, conversationId, lastSequenceRef, sink, taskId])
 }
 
 type BatchCommandResult = {

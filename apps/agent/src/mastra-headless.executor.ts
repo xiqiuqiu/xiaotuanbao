@@ -8,6 +8,7 @@ import {
   registeredTaskDescriptors,
   submitReviewPackageModelInputSchema,
   submitSegmentResourceReviewModelInputSchema,
+  submitSourceOrderReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
@@ -60,8 +61,13 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const streamed = deps.stream ? await deps.stream(userText, options?.signal) : null
       let sequence = 1
       let stepReasoning = ''
+      const toolErrors: unknown[] = []
       if (streamed?.fullStream) {
         for await (const chunk of iterateUnknownStream(streamed.fullStream)) {
+          if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-error') {
+            const { toolCallId, toolName } = toolPayload(chunk)
+            toolErrors.push({ toolCallId, toolName, isError: true })
+          }
           if (isStepBoundaryChunk(chunk)) {
             stepReasoning = ''
             continue
@@ -82,7 +88,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
         }
       }
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
-      const result = resultFromGenerate(output)
+      const result = resultFromGenerate({ ...output, toolResults: [...toolErrors, ...(output.toolResults ?? [])] })
       if (result.kind === 'completed' && sequence === 1) {
         yield { type: 'message.delta', sequence: 1, text: result.message }
       }
@@ -112,7 +118,7 @@ function requireGenerate(deps: MastraHeadlessExecutorDeps): (userText: string) =
 }
 
 function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult {
-  const toolSteps = toolStepsFromCalls(output.toolCalls)
+  const toolSteps = toolStepsFromCalls(output.toolCalls, output.toolResults)
   const diagnostic = diagnosticFromMastraGenerate(output, toolSteps)
   if (isCapacityTripwire(output)) {
     return capacityFailure(diagnostic)
@@ -238,7 +244,7 @@ function capacityFailure(diagnostic: ReturnType<typeof diagnosticFromMastraGener
   }
 }
 
-function toolStepsFromCalls(toolCalls: unknown[] | undefined): ToolStepDiagnostic[] {
+function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unknown[] | undefined): ToolStepDiagnostic[] {
   if (!toolCalls) {
     return []
   }
@@ -247,6 +253,14 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined): ToolStepDiagnosti
     if (!toolName) {
       return []
     }
+    const callPayload = toolPayload(call)
+    const result = callPayload.toolCallId
+      ? toolResults?.map(toolPayload).find((item) => item.toolCallId === callPayload.toolCallId)
+      : toolResults?.map(toolPayload).filter((item) => item.toolName === toolName)[
+          toolCalls.slice(0, index).filter((item) => toolNameFromCall(item) === toolName).length
+        ]
+    // 只有实际结果才能证明工具成功；没有结果的调用不伪造成功记录。
+    if (!result) return []
     const capability = capabilityForToolName(toolName)
     return [
       {
@@ -255,10 +269,16 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined): ToolStepDiagnosti
         ...(capability
           ? { capabilityKey: capability.key, capabilityVersion: capability.version }
           : {}),
-        status: 'succeeded' as const,
+        status: result.isError === true || result.error != null ? 'failed' as const : 'succeeded' as const,
       },
     ]
   })
+}
+
+function toolPayload(value: unknown): { toolCallId?: string; toolName?: string; isError?: boolean; error?: unknown } {
+  if (!value || typeof value !== 'object') return {}
+  const item = value as { payload?: object }
+  return item.payload ?? value
 }
 
 function capabilityForToolName(toolName: string) {
@@ -304,7 +324,9 @@ function acceptedReviewPackageFromGenerate(output: MastraGenerateLike) {
     confirmationUnit: accepted.confirmationUnit,
     candidates: accepted.candidates,
   })
-  return segmentResource.success ? segmentResource.data : null
+  if (segmentResource.success) return segmentResource.data
+  const sourceOrder = submitSourceOrderReviewPackageModelInputSchema.safeParse(accepted)
+  return sourceOrder.success ? sourceOrder.data : null
 }
 
 function acceptedConversationRoutingFromGenerate(output: MastraGenerateLike) {
@@ -364,7 +386,7 @@ function lastAcceptedProposeResult(toolResults: unknown[] | undefined) {
         : typeof candidate.payload?.toolName === 'string'
           ? candidate.payload.toolName
           : null
-    if (toolName !== 'proposeReviewPackage' && toolName !== 'proposeSegmentResourceReviewPackage') {
+    if (toolName !== 'proposeReviewPackage' && toolName !== 'proposeSegmentResourceReviewPackage' && toolName !== 'proposeSourceOrderReviewPackage') {
       continue
     }
     const result = candidate.result ?? candidate.payload?.result

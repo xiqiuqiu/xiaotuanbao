@@ -15,7 +15,7 @@ export interface ProposeSegmentResourceReviewToolConfig {
   modelApiKey?: string
 }
 
-const evidenceInputSchema = z.discriminatedUnion('kind', [
+export const evidenceInputSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('user_message'),

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import {
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  type SubmitSourceOrderReviewPackageModelInput,
   type SubmitReviewPackageModelInput,
   type SubmitSegmentResourceReviewModelInput,
 } from '@xiaotuanbao/ai-contracts'
@@ -17,14 +19,16 @@ export class AiToolWorkerAdapter {
 
   async projectReviewPackage(params: {
     actor: AiActionActor
-    input: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput
+    input: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput | SubmitSourceOrderReviewPackageModelInput
     persist: (context: AiActionForwardContext) => Promise<string>
   }): Promise<{ action: AiActionSummary | null; reviewPackageId: string }> {
     const executed = await this.gateway.execute({
       name:
         params.input.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
           ? 'proposeSegmentResourceReviewPackage'
-          : 'proposeReviewPackage',
+          : params.input.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
+            ? 'proposeSourceOrderReviewPackage'
+            : 'proposeReviewPackage',
       actor: params.actor,
       input: params.input,
       forward: params.persist,

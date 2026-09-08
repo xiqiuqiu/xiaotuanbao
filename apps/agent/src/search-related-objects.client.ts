@@ -45,7 +45,7 @@ async function postRelatedSearch(
   } | null
 
   if (!response.ok) {
-    throw mapAgentFetchError(payload?.data ?? { status: response.status })
+    throw mapAgentFetchError(payload?.data, response.status)
   }
 
   return payload?.data

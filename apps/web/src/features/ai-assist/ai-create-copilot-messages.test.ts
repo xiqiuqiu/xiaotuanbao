@@ -1443,3 +1443,27 @@ describe('isCopilotChatRunning in-flight statuses #415', () => {
     ).toBe(false)
   })
 })
+
+it('keeps collaboration identity and marks only the disposed review card as confirmed', () => {
+  const messages = toCopilotChatMessages([
+    { sequence: 1, kind: 'agent_message', createdAt: '2026-09-07T00:00:00Z', payload: {
+      text: '待审核', taskId: 'task', taskType: 'departure_collaboration', batchId: 'batch', reviewPackageId: 'review', fieldKeys: ['title'],
+    } },
+    { sequence: 2, kind: 'batch_status', createdAt: '2026-09-07T00:00:01Z', payload: {
+      taskId: 'task', batchId: 'batch', status: 'completed', reviewPackageId: 'review', disposition: 'confirmed',
+    } },
+  ], null, null)
+  expect(messages).toEqual(expect.arrayContaining([
+    expect.objectContaining({ activityType: 'ai-create-review-package', content: expect.objectContaining({ disposition: 'confirmed' }) }),
+    expect.objectContaining({ activityType: 'agent-task', content: expect.objectContaining({ taskType: 'departure_collaboration', title: '发团协作' }) }),
+  ]))
+})
+
+
+it('clears stale streaming output when its batch enters review', () => {
+  const events = [{ sequence: 4, kind: 'batch_status' as const, payload: { status: 'awaiting_review', batchId: 'batch-review', attemptId: 'attempt-review' }, createdAt: '2026-09-07T00:00:00Z' }]
+  const live = { attemptId: 'attempt-review', batchId: 'batch-review', generation: 1, text: '正在整理', reasoningText: '正在核对材料' }
+  expect(isCopilotChatRunning(events, null, null, live)).toBe(false)
+  expect(projectConversationFrame({ events, pendingText: null, liveAssistant: live }).some(message => message.id.startsWith('live-'))).toBe(false)
+  expect(isCopilotChatRunning(events, null, null, { ...live, batchId: 'next-batch', attemptId: 'next-attempt' })).toBe(true)
+})
