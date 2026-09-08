@@ -602,6 +602,8 @@ function useCreateDepartureWizardController() {
     mutationFn: async () => {
       const pending = pendingReviewRef.current
       const runConfirm = async () => {
+        // Persist displayed defaults as well as user edits before server validation.
+        dirtyRef.current = true
         await flushDraft()
         const currentTaskId = taskIdRef.current
         const currentVersion = draftVersionRef.current

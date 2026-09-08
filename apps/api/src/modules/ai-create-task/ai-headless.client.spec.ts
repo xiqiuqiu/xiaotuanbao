@@ -32,7 +32,7 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
-  it('aborts a hung downstream fetch and returns AGENT_UNAVAILABLE', async () => {
+  it('aborts a hung downstream fetch and returns MODEL_TIMEOUT', async () => {
     server = createServer(() => {
       // Intentionally never respond — the worker must not wait indefinitely.
     })
@@ -50,8 +50,8 @@ describe('AiHeadlessClient.run', () => {
     expect(result).toEqual({
       kind: 'failed',
       error: {
-        code: 'AGENT_UNAVAILABLE',
-        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        code: 'MODEL_TIMEOUT',
+        message: '模型响应超时，已保存的发团创建草稿未改动',
         retryable: true,
       },
     })
@@ -76,8 +76,8 @@ describe('AiHeadlessClient.run', () => {
     expect(result).toEqual({
       kind: 'failed',
       error: {
-        code: 'AGENT_UNAVAILABLE',
-        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        code: 'MODEL_TIMEOUT',
+        message: '模型响应超时，已保存的发团创建草稿未改动',
         retryable: true,
       },
     })

@@ -65,6 +65,7 @@ function refineUsageSource(
 export const modelStepUsageSchema = z
   .object({
     stepIndex: z.number().int().nonnegative(),
+    latencyMs: z.number().int().nonnegative().optional(),
     usageSource: z.enum(USAGE_SOURCES),
     usage: usageCountsSchema.optional(),
   })

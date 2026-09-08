@@ -143,7 +143,7 @@ describe('buildBudgetedContext', () => {
     expect(result.userText).toContain('src-1')
     expect(result.userText).toContain('解析版本 1')
     expect(result.userText).toContain('赛里木湖1日_草稿.pdf')
-    expect(result.userText).toContain('再调用 readConversationSource 或 getMaterialParseResult')
+    expect(result.userText).toContain('原文读取：')
   })
 
   it('本批已固定的来源只出现在【本批资料】，不在【本会话来源】重复列出', () => {
@@ -195,6 +195,26 @@ describe('buildBudgetedContext', () => {
     expect(result.userText).toContain('资料 src-1')
     expect(result.userText).toContain('来源 src-2')
     expect(result.userText).not.toContain('来源 src-1')
+  })
+
+  it.each(['readConversationSource', 'getMaterialParseResult'])('本轮 PDF 的文件名和读取指针匹配可用工具 %s', (reader) => {
+    const result = buildBudgetedContext({
+      modelId: 'deterministic', toolNames: [reader], currentUserText: '从这个里面取客人信息',
+      businessFacts: {}, unresolvedState: {},
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null }, recentTail: [], truncationReasons: [],
+        pinnedMaterials: [{ materialId: 'pdf-new', parseResultVersion: 2, status: 'ready', pageCount: 1, excerpt: '赛里木湖报价', truncated: true }],
+        availableSources: [
+          { materialId: 'pdf-new', parseResultVersion: 2, status: 'ready', pageCount: 1, excerpt: '', truncated: true, originalFilename: '新资料.pdf', requiredThisBatch: true },
+          { materialId: 'image-old', parseResultVersion: 1, status: 'ready', pageCount: 1, excerpt: '旧名单', truncated: false, originalFilename: '旧截图.jpg' },
+        ],
+      },
+    })
+    const current = result.userText.split('【本批资料】')[1]!.split('【本会话来源】')[0]!
+    expect(current).toContain('新资料.pdf')
+    expect(current).toContain(reader === 'readConversationSource' ? '"sourceId":"pdf-new","parseVersion":2' : '"materialId":"pdf-new","parseResultVersion":2')
+    expect(result.userText).not.toContain(reader === 'readConversationSource' ? 'getMaterialParseResult' : 'readConversationSource')
+    expect(current).toContain('本轮附件')
   })
 
   it('追加任何实际模型输入都会改变 manifest input hash', () => {
@@ -323,7 +343,7 @@ describe('buildBudgetedContext', () => {
     })
 
     expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
-      version: 'conversation-general/v5',
+      version: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
       sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({

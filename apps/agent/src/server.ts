@@ -34,6 +34,7 @@ export interface AgentServerConfig {
   model?: string
   modelApiKey?: string
   modelBaseUrl?: string
+  modelThinking?: 'enabled' | 'disabled'
   headlessExecutor?: HeadlessExecutor
 }
 
@@ -163,6 +164,7 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
       .map((value) => value.trim())
       .filter(Boolean),
     model: process.env.AI_MODEL ?? 'deepseek/deepseek-chat',
+    modelThinking: process.env.AI_MODEL_THINKING === 'enabled' ? 'enabled' : 'disabled',
     modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
     modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
   }

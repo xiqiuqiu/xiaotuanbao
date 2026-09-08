@@ -30,7 +30,7 @@ function renderIndicator(overrides: Partial<Parameters<typeof AgentReasoningMess
 }
 
 describe('AgentReasoningMessage working indicator', () => {
-  it('shows working mascot and hover summary for the latest running turn', () => {
+  it('shows only a generic working status for the latest running turn', () => {
     renderIndicator()
 
     const indicator = screen.getByTestId('agent-working-indicator')
@@ -44,7 +44,8 @@ describe('AgentReasoningMessage working indicator', () => {
     expect(mascot).toHaveAttribute('height', '56')
     expect(mascot).toHaveAttribute('data-mascot-state', 'play')
 
-    expect(screen.getByRole('status')).toHaveTextContent('正在核对出团日期与人数')
+    expect(screen.getByRole('status')).toHaveTextContent('正在处理你的请求')
+    expect(document.body.innerHTML).not.toContain(liveReasoning.content)
   })
 
   it('keeps the indicator while live assistant text streams (live-assistant-* is not durable)', () => {
@@ -98,14 +99,15 @@ describe('AgentReasoningMessage working indicator', () => {
     expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
   })
 
-  it('truncates long work descriptions for the hover/focus tooltip', () => {
+  it('never exposes reasoning in the hover/focus tooltip', () => {
     const long = '甲'.repeat(40)
     renderIndicator({
       message: { ...liveReasoning, content: long },
       messages: [{ ...liveReasoning, content: long }],
     })
 
-    expect(screen.getByRole('status')).toHaveTextContent(`${'甲'.repeat(36)}…`)
+    expect(screen.getByRole('status')).toHaveTextContent('正在处理你的请求')
+    expect(document.body.innerHTML).not.toContain('甲')
   })
 })
 

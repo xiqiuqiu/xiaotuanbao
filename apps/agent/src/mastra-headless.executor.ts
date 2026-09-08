@@ -55,6 +55,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
     request: HeadlessExecutionRequest,
     options?: { signal?: AbortSignal },
   ): AsyncIterable<HeadlessRunFrame> {
+    const startedAt = Date.now()
     yield { type: 'run.started' }
     try {
       const userText = (await deps.readUserText(request)).trim() || FALLBACK_USER_TEXT
@@ -62,8 +63,17 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       let sequence = 1
       let stepReasoning = ''
       const toolErrors: unknown[] = []
+      const stepLatencies: number[] = []
+      let stepStartedAt: number | undefined
       if (streamed?.fullStream) {
         for await (const chunk of iterateUnknownStream(streamed.fullStream)) {
+          if (chunk && typeof chunk === 'object' && 'type' in chunk) {
+            if (chunk.type === 'step-start') stepStartedAt = Date.now()
+            if (chunk.type === 'step-finish' && stepStartedAt != null) {
+              stepLatencies.push(Date.now() - stepStartedAt)
+              stepStartedAt = undefined
+            }
+          }
           if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-error') {
             const { toolCallId, toolName } = toolPayload(chunk)
             toolErrors.push({ toolCallId, toolName, isError: true })
@@ -91,6 +101,13 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const result = resultFromGenerate({ ...output, toolResults: [...toolErrors, ...(output.toolResults ?? [])] })
       if (result.kind === 'completed' && sequence === 1) {
         yield { type: 'message.delta', sequence: 1, text: result.message }
+      }
+      if (result.diagnostic) {
+        result.diagnostic.latencyMs = Date.now() - startedAt
+        result.diagnostic.modelSteps = result.diagnostic.modelSteps.map((step) => ({
+          ...step,
+          ...(stepLatencies[step.stepIndex] != null ? { latencyMs: stepLatencies[step.stepIndex] } : {}),
+        }))
       }
       yield { type: 'run.completed', result }
     } catch (error) {

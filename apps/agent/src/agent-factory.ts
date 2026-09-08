@@ -35,6 +35,7 @@ export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 export interface AiCreateAgentFactoryConfig extends GetTaskContextToolConfig {
   model?: string
   modelBaseUrl?: string
+  modelThinking?: 'enabled' | 'disabled'
 }
 
 export function createAiCreateMastraFromDefinition(
@@ -87,6 +88,9 @@ function createMastra(
       apiKey: config.modelApiKey || 'missing',
     },
     tools,
+    defaultOptions: (config.model ?? 'deepseek/deepseek-chat').startsWith('deepseek')
+      ? { providerOptions: { deepseek: { thinking: { type: config.modelThinking ?? 'disabled' } } } }
+      : {},
     inputProcessors: [
       createTokenLimiterSafetyNet({
         limit: limiterLimit,

@@ -235,6 +235,9 @@ export function batchStatusLabel(
     }
     return '资料处理中'
   }
+  if (status === 'ready_for_agent' && extra?.reason === 'retry_scheduled') {
+    return extra.errorCode === 'MODEL_TIMEOUT' ? '本轮处理超时，正在等待自动重试' : '本轮处理失败，正在等待自动重试'
+  }
   if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
   if (status === 'preparing_context') return '正在整理会话上下文'
   if (status === 'agent_running') return 'AI 处理中'

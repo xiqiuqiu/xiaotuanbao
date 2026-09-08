@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
   AI_CREATE_SYSTEM_INSTRUCTIONS,
-  PINNED_PARSE_CONTEXT_PREFACE,
-  CONVERSATION_SOURCE_CATALOG_PREFACE,
   TOKEN_ESTIMATOR_VERSION,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   TOKEN_LIMITER_TRIM_MODE,
@@ -111,10 +109,16 @@ export function buildBudgetedContext(input: {
     modelContract.toolSchemaText,
     toolSchemaVersion,
   )
+  const sourceReader = input.toolNames.includes('getMaterialParseResult')
+    ? 'getMaterialParseResult'
+    : input.toolNames.includes('readConversationSource') ? 'readConversationSource' : null
   const projection: BudgetProjection = {
     conversationBackground: { ...input.projection.conversationBackground },
     recentTail: input.projection.recentTail.map((event) => ({ ...event })),
-    pinnedMaterials: input.projection.pinnedMaterials.map((material) => ({ ...material })),
+    pinnedMaterials: input.projection.pinnedMaterials.map((material) => ({
+      ...material,
+      originalFilename: material.originalFilename ?? input.projection.availableSources?.find((source) => source.materialId === material.materialId)?.originalFilename,
+    })),
     availableSources: (input.projection.availableSources ?? []).map((material) => ({ ...material })),
     truncationReasons: [...input.projection.truncationReasons],
   }
@@ -122,6 +126,7 @@ export function buildBudgetedContext(input: {
   let userText = renderUserText({
     businessFactsText,
     unresolvedStateText,
+    sourceReader,
     currentUserText: input.currentUserText,
     projection,
   })
@@ -138,6 +143,7 @@ export function buildBudgetedContext(input: {
       userText = renderUserText({
         businessFactsText,
         unresolvedStateText,
+        sourceReader,
         currentUserText: input.currentUserText,
         projection,
       })
@@ -157,6 +163,7 @@ export function buildBudgetedContext(input: {
       userText = renderUserText({
         businessFactsText,
         unresolvedStateText,
+        sourceReader,
         currentUserText: input.currentUserText,
         projection,
       })
@@ -172,6 +179,7 @@ export function buildBudgetedContext(input: {
     userText = renderUserText({
       businessFactsText,
       unresolvedStateText,
+      sourceReader,
       currentUserText: input.currentUserText,
       projection,
     })
@@ -186,6 +194,7 @@ export function buildBudgetedContext(input: {
     userText = renderUserText({
       businessFactsText,
       unresolvedStateText,
+      sourceReader,
       currentUserText: input.currentUserText,
       projection,
     })
@@ -199,8 +208,8 @@ export function buildBudgetedContext(input: {
   const summaryText = projection.conversationBackground.summary ?? '本阶段无滚动摘要。'
   const recentTailText = formatTail(projection.recentTail)
   const sourcesText = [
-    formatMaterials(projection.pinnedMaterials),
-    formatAvailableSources(projection.availableSources ?? []),
+    formatMaterials(projection.pinnedMaterials, sourceReader),
+    formatAvailableSources(projection.availableSources ?? [], sourceReader),
   ].join('\n\n')
 
   const sections: ContextSectionUsage[] = [
@@ -256,6 +265,7 @@ export function buildBudgetedContext(input: {
 }
 
 function renderUserText(input: {
+  sourceReader: string | null
   businessFactsText: string
   unresolvedStateText: string
   currentUserText: string
@@ -275,13 +285,17 @@ function renderUserText(input: {
     formatTail(input.projection.recentTail),
     '',
     '【本批资料】',
-    formatMaterials(input.projection.pinnedMaterials),
+    formatMaterials(input.projection.pinnedMaterials, input.sourceReader),
     '',
     '【本会话来源】',
-    formatAvailableSources(input.projection.availableSources ?? []),
+    formatAvailableSources(input.projection.availableSources ?? [], input.sourceReader),
     '',
     '【本轮指令】',
     input.currentUserText,
+    ...(input.projection.pinnedMaterials.length > 0 ? [
+      '【本轮附件指向】上述指令中的“这个/这份文件”指向以下本轮附件，除非用户明确指定其他来源。先读取这些附件，不要沿用历史截图的名单；没有所需信息时如实说明。',
+      ...input.projection.pinnedMaterials.map((item) => formatSource({ ...item, excerpt: '' }, input.sourceReader, '本轮附件')),
+    ] : []),
   ].join('\n')
 }
 
@@ -367,28 +381,26 @@ function formatTail(events: ConversationEventForAgent[]): string {
   return lines.length > 0 ? lines.join('\n') : '（无）'
 }
 
-function formatMaterials(materials: MaterialParseIndexItem[]): string {
-  if (materials.length === 0) {
-    return '（无）'
-  }
-  const blocks = materials.map((item) => {
-    const clip = item.truncated ? '，摘录已裁剪' : ''
-    const excerpt = item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''
-    return `资料 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${clip}）${excerpt}`
-  })
-  return `${PINNED_PARSE_CONTEXT_PREFACE}\n\n${blocks.join('\n\n')}`
+function formatMaterials(materials: MaterialParseIndexItem[], reader: string | null): string {
+  if (materials.length === 0) return '（无）'
+  return [
+    '以下是本轮附件，已解析完成。用户说“这个文件/这份资料”且未指定历史文件时，优先指向本轮附件；本轮多份且无法确定时才追问。必须读取对应原文，不能用历史附件替代；原文没有所需内容时明确说明，不补造。摘录不是全文。',
+    ...materials.map((item) => formatSource(item, reader, '资料')),
+  ].join('\n\n')
 }
 
-function formatAvailableSources(sources: MaterialParseIndexItem[]): string {
+function formatAvailableSources(sources: MaterialParseIndexItem[], reader: string | null): string {
   const catalog = sources.filter((item) => item.requiredThisBatch !== true)
-  if (catalog.length === 0) {
-    return '（无）'
-  }
-  const blocks = catalog.map((item) => {
-    const filename = item.originalFilename ? `，文件名 ${item.originalFilename}` : ''
-    const clip = item.truncated ? '，摘录已裁剪' : ''
-    const excerpt = item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''
-    return `来源 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${filename}${clip}）${excerpt}`
-  })
-  return `${CONVERSATION_SOURCE_CATALOG_PREFACE}\n\n${blocks.join('\n\n')}`
+  if (catalog.length === 0) return '（无）'
+  return [
+    '以下是历史来源目录，不是本轮附件，也不是全文。仅在用户明确引用或本轮无附件且指向明确时读取；多个可能来源无法确定时追问。禁止凭历史摘要编造候选。',
+    ...catalog.map((item) => formatSource(item, reader, '来源')),
+  ].join('\n\n')
+}
+
+function formatSource(item: MaterialParseIndexItem, reader: string | null, label: string): string {
+  const args = reader === 'readConversationSource'
+    ? { sourceId: item.materialId, parseVersion: item.parseResultVersion }
+    : { materialId: item.materialId, parseResultVersion: item.parseResultVersion }
+  return `${label} ${item.materialId}（解析版本 ${item.parseResultVersion}，文件名 ${JSON.stringify(item.originalFilename ?? '未知')}，共 ${item.pageCount} 页${item.truncated ? '，摘录已裁剪' : ''}）\n${reader ? `原文读取：${reader}(${JSON.stringify(args)})；如返回 truncated=true，按 pageCount 使用 pageNumber 逐页读取。` : '当前无原文读取工具，不能声称已读取全文。'}${item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''}`
 }

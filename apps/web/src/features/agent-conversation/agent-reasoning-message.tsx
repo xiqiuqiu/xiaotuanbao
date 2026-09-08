@@ -8,20 +8,10 @@ import styles from './agent-reasoning-message.module.css'
 import { AgentWorkContext } from './agent-work-context'
 
 const DEFAULT_WORK_DESCRIPTION = '正在处理你的请求'
-const MAX_WORK_DESCRIPTION_LENGTH = 36
 /** Chat-scale mascot: 56 CSS px keeps orbit rings ~1px+ readable. */
 const CHAT_MASCOT_SIZE = 56
 /** Face + colorful rings only; exclude faceless burst/comet from the catalog working cycle. */
 const CHAT_WORKING_CYCLE = ['play', 'orbit'] as const
-
-function workDescription(content: unknown): string {
-  if (typeof content !== 'string') return DEFAULT_WORK_DESCRIPTION
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  if (!normalized) return DEFAULT_WORK_DESCRIPTION
-  return normalized.length > MAX_WORK_DESCRIPTION_LENGTH
-    ? `${normalized.slice(0, MAX_WORK_DESCRIPTION_LENGTH)}…`
-    : normalized
-}
 
 function latestReasoningMessageId(messages: CopilotChatReasoningMessageProps['messages']) {
   if (!messages) return null
@@ -55,7 +45,7 @@ function hasDurableAssistantAfter(
 
 /**
  * Grok-style transient work indicator: only the latest running turn renders.
- * Reasoning stays non-expandable; its short live description appears on hover/focus.
+ * Only a generic working status appears on hover/focus; reasoning is never rendered.
  * Hide as soon as a durable assistant reply follows this reasoning row (do not wait for
  * batch_status completed — isRunning stays true through waiting/agent_running).
  */
@@ -80,7 +70,7 @@ export function AgentReasoningMessage({
 
   if (!isLatestRunningMessage || turnFinished) return <></>
 
-  const description = workDescription(message.content)
+  const description = DEFAULT_WORK_DESCRIPTION
   const rootClassName = [styles.root, className].filter(Boolean).join(' ')
 
   return (

@@ -26,7 +26,9 @@ export function createConversationRoutingTool() {
     description: CONVERSATION_ROUTING_TOOL.description,
     inputSchema: modelRoutingInputSchema,
     execute: async (input) => {
-      const parsed = conversationRoutingInputSchema.parse(input)
+      const parsed = conversationRoutingInputSchema.parse(input.decision === 'request_clarification'
+        ? { decision: input.decision, prompt: input.prompt, ...(input.options && input.options.length > 0 ? { options: input.options } : {}) }
+        : { decision: input.decision, goal: input.goal })
       const descriptor = registeredTaskDescriptors.findByRoutingDecision(parsed.decision)
       if (descriptor && 'goal' in parsed) {
         return {

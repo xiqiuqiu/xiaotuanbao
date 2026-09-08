@@ -26,6 +26,28 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
+  it('preserves streamed step durations in the parsed run diagnostic', async () => {
+    let now = 1000
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => now)
+    try {
+      const executor = createMastraHeadlessExecutor({
+        readUserText: async () => '整理材料',
+        stream: async () => ({
+          fullStream: (async function* () {
+            yield { type: 'step-start' }
+            now += 250
+            yield { type: 'step-finish' }
+          })(),
+          getFullOutput: async () => ({ text: '已整理', steps: [{ usage: { inputTokens: 10, outputTokens: 5 } }] }),
+        }),
+      })
+      const { result } = await collectHeadlessRun(executor(IDENTITY))
+      expect(result.diagnostic).toMatchObject({ latencyMs: 250, modelSteps: [{ stepIndex: 0, latencyMs: 250 }] })
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it('records streamed tool errors even when final output omits the failed result', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '读取附件',

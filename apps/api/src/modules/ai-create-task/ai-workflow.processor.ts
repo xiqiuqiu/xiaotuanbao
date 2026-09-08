@@ -1907,7 +1907,7 @@ export class AiWorkflowProcessor {
         })
         return
       }
-      await this.scheduleRetry(job, errorCode, attemptId)
+      await this.scheduleRetry(job, errorCode, attemptId, result)
       return
     }
     if (result.kind === 'registered_intent') {
@@ -2527,6 +2527,7 @@ export class AiWorkflowProcessor {
     job: ClaimedJob,
     errorCode: string,
     attemptId?: string,
+    result?: HeadlessExecutionResult,
   ): Promise<void> {
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       if (job.type === AiWorkflowJobType.material_parse) {
@@ -2552,6 +2553,7 @@ export class AiWorkflowProcessor {
       return
     }
     const delayMs = workflowBackoffMs(job.attemptCount)
+    let retryEventId: string | undefined
     await this.prisma.$transaction(async (tx) => {
       if (!(await this.ownsClaimedJob(tx, job.id))) {
         return
@@ -2562,10 +2564,20 @@ export class AiWorkflowProcessor {
           data: {
             status: AiAgentAttemptStatus.failed,
             errorCode,
-            ...attemptDiagnosticUpdate(),
+            ...attemptDiagnosticUpdate(result),
             endedAt: new Date(),
           },
         })
+      }
+      if (job.type === AiWorkflowJobType.agent_batch) {
+        const event = await this.conversationService.appendEvent(tx, {
+          organizationId: job.organizationId,
+          conversationId: job.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: { batchId: job.inputBatchId, status: 'ready_for_agent', reason: 'retry_scheduled',
+            errorCode, retryAttempt: job.attemptCount, retryDelayMs: delayMs },
+        })
+        retryEventId = event.id
       }
       await tx.aiWorkflowJob.update({
         where: { id: job.id },
@@ -2579,6 +2591,10 @@ export class AiWorkflowProcessor {
         },
       })
     })
+    if (retryEventId) {
+      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: retryEventId } })
+      if (event) this.conversationService.publish(job.conversationId, event)
+    }
     this.workflowLog('retry_scheduled', {
       job: job.id,
       type: job.type,

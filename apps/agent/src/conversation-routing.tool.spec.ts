@@ -26,6 +26,20 @@ describe('createConversationRoutingTool', () => {
     })
   })
 
+  it('accepts model flat fields without confusing creation and clarification', async () => {
+    const tool = createConversationRoutingTool()
+    await expect(tool.execute?.({ decision: 'propose_departure_creation', goal: '创建指定团', prompt: '', options: [] }, {} as never))
+      .resolves.toMatchObject({ status: 'accepted', registeredIntent: { goal: '创建指定团' } })
+    await expect(tool.execute?.({ decision: 'request_clarification', goal: '', prompt: '选择哪份资料？', options: [] }, {} as never))
+      .resolves.toMatchObject({ status: 'accepted', interaction: { type: 'free_text' } })
+  })
+
+  it('still rejects missing goals and incomplete choice lists', async () => {
+    const tool = createConversationRoutingTool()
+    await expect(tool.execute?.({ decision: 'propose_departure_creation' }, {} as never)).rejects.toThrow()
+    await expect(tool.execute?.({ decision: 'request_clarification', prompt: '选择资料', options: [{ id: 'one', label: '资料一' }] }, {} as never)).rejects.toThrow()
+  })
+
   it('rejects an unregistered task-creation decision instead of mapping it', async () => {
     const tool = createConversationRoutingTool()
 

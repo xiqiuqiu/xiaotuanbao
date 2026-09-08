@@ -49,7 +49,7 @@ export class AiHeadlessClient {
           signal,
         })
       } catch {
-        return unavailable()
+        return timeout.signal.aborted ? timedOut() : unavailable()
       }
 
       if (isRetryableHttpStatus(response.status)) {
@@ -59,18 +59,20 @@ export class AiHeadlessClient {
       const contentType = response.headers.get('content-type') ?? ''
       if (contentType.includes('ndjson')) {
         try {
-          return await readNdjsonResult(response, options, signal.aborted)
+          const result = await readNdjsonResult(response, options, signal.aborted)
+          return timeout.signal.aborted ? timedOut() : result
         } catch {
           return {
             kind: 'failed',
             error: AiCollaborationError.fromCode(
-              signal.aborted ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
+              timeout.signal.aborted ? 'MODEL_TIMEOUT' : signal.aborted ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
             ).toJSON(),
           }
         }
       }
 
-      return await readJsonResult(response, signal.aborted)
+      const result = await readJsonResult(response, signal.aborted)
+      return timeout.signal.aborted ? timedOut() : result
     } finally {
       clearTimeout(timer)
     }
@@ -206,4 +208,8 @@ async function readNdjsonResult(
     return unavailable()
   }
   return invalidFormat()
+}
+
+function timedOut(): HeadlessExecutionResult {
+  return { kind: 'failed', error: AiCollaborationError.fromCode('MODEL_TIMEOUT').toJSON() }
 }
