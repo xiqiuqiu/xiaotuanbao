@@ -1149,6 +1149,61 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     await inFlight
   })
 
+  it('persists a millisecond businessSnapshotVersion on context manifests', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 毫秒版本`,
+      `${testPrefix}-ms-version`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const last = await prisma.aiConversationEvent.findFirstOrThrow({
+      where: { conversationId },
+      orderBy: { sequence: 'desc' },
+      select: { sequence: true },
+    })
+    const event = await prisma.aiConversationEvent.create({
+      data: {
+        organizationId,
+        conversationId,
+        sequence: last.sequence + 1,
+        kind: AiConversationEventKind.user_message,
+        payload: { text: `${testPrefix} 毫秒版本写入` },
+      },
+    })
+    const batch = await prisma.aiInputBatch.create({
+      data: {
+        organizationId,
+        conversationId,
+        creatorUserId: ownerUserId,
+        userMessageEventId: event.id,
+        conversationVersion: last.sequence + 1,
+        status: AiInputBatchStatus.ready_for_agent,
+      },
+    })
+    const objectVersion = 1_785_733_521_449
+    const created = await prisma.aiContextManifest.create({
+      data: {
+        organizationId,
+        conversationId,
+        inputBatchId: batch.id,
+        conversationVersion: last.sequence + 1,
+        eventSequences: [last.sequence + 1],
+        businessSnapshotVersion: objectVersion,
+        builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
+        systemPromptVersion: PLAINTEXT_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: PLAINTEXT_TOOL_SCHEMA_VERSION,
+        modelId: 'e2e',
+        inputHash: `e2e-ms-${batch.id}`,
+        truncationReasons: [],
+      },
+    })
+    const stored = await prisma.aiContextManifest.findUniqueOrThrow({
+      where: { id: created.id },
+      select: { businessSnapshotVersion: true },
+    })
+    expect(stored.businessSnapshotVersion).toBe(objectVersion)
+  })
+
   it('lets any org member start a taskless conversation and isolates other users', async () => {
     const financeSent = await sendFirst(
       financeToken,

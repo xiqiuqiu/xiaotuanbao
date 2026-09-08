@@ -1,6 +1,7 @@
 import { AiReviewPackageStatus } from '@prisma/client'
 import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
 import {
+  departureObjectVersion,
   projectPendingReviewPackage,
   projectPendingReviewPackages,
 } from './review-package.projection'
@@ -569,5 +570,13 @@ describe('stable pending item revisions', () => {
     expect(await projectPendingReviewPackage(tx as never, params)).toBe('stable')
     expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
     expect(tx.aiReviewRecord.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('departureObjectVersion', () => {
+  it('encodes updatedAt as a millisecond timestamp beyond INT4', () => {
+    const updatedAt = new Date(1_785_733_521_449)
+    expect(departureObjectVersion(updatedAt)).toBe(1_785_733_521_449)
+    expect(departureObjectVersion(updatedAt)).toBeGreaterThan(2_147_483_647)
   })
 })
