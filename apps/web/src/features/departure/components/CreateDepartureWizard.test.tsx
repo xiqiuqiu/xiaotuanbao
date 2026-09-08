@@ -1210,6 +1210,22 @@ describe('CreateDepartureWizard', () => {
     }
   })
 
+  it('persists a generated name before confirming an unchanged restored draft', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1', status: 'in_progress', currentPhase: 'basic_info', departureId: null,
+      creatorUserId: 'user-1', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: { version: 2, snapshot: { mode: 'manual', routeName: '天吐喀伊10日', name: null,
+        startDate: '2026-07-21', endDate: '2026-07-30', ownerUserId: 'user-1' }, updatedAt: '2026-01-01T00:00:00.000Z' }, pendingReview: null,
+    })
+    renderWizard()
+    expect(await screen.findByLabelText('团名')).toHaveValue('2026年7月21日 天吐喀伊10日')
+    await userEvent.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => expect(confirmAiCreateTask).toHaveBeenCalled())
+    expect(saveDepartureCreationDraft).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ name: '2026年7月21日 天吐喀伊10日' }) }), expect.anything())
+    expect(vi.mocked(saveDepartureCreationDraft).mock.invocationCallOrder.at(-1)).toBeLessThan(vi.mocked(confirmAiCreateTask).mock.invocationCallOrder[0])
+  })
+
   it('validates required fields before creating departure', async () => {
     const user = userEvent.setup()
     renderWizard()

@@ -139,6 +139,9 @@ export class AiConversationRecallService {
         })
       : []
     const projected = projectParseResultPages(pages, input.pageNumber)
+    if (input.pageNumber != null && projected.pages.length === 0) {
+      throw new NotFoundException('会话来源解析页不存在')
+    }
     const selected = projected.pages.map((page) => page.text).join('\n')
     const clipped =
       selected.length > CONVERSATION_SOURCE_READ_MAX_CHARS

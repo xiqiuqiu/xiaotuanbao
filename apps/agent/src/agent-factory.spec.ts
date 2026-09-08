@@ -60,6 +60,11 @@ const context = requestContextSchema.parse({
 })
 
 describe('Agent Factory', () => {
+  it.each(['enabled', 'disabled'] as const)('passes explicit DeepSeek thinking=%s to model execution', (modelThinking) => {
+    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-v4-flash', modelThinking }, context)
+    expect(agentConfigs.at(-1)).toMatchObject({ defaultOptions: { providerOptions: { deepseek: { thinking: { type: modelThinking } } } } })
+  })
+
   it('只把当前 RequestContext 已授权 Capability 对应工具暴露给模型', () => {
     expect(
       toolNamesForRequestContext({
@@ -207,4 +212,23 @@ describe('Agent Factory', () => {
       }),
     ).toThrow('未注册')
   })
+
+  it('exposes the formal snapshot tool for a granted collaboration task', () => {
+    const collaborationContext = requestContextSchema.parse({
+      ...context,
+      agentDefinition: { key: 'departure.collaboration', version: 1 },
+      grantedCapabilities: [{ key: 'departure.task-context.read', version: 2 }],
+    })
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'test-only' },
+      collaborationContext,
+    )
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['getTaskContext'])
+  })
 })
+
+ it('exposes routing for an explicitly granted departure collaboration goal', () => {
+   const routingContext = { ...context, agentDefinition: { key: 'departure.collaboration', version: 1 }, grantedCapabilities: [{ key: 'conversation.intent.route', version: 1 }] }
+   createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://localhost:3000', serviceSecret: 'test' }, routingContext)
+   expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
+ })

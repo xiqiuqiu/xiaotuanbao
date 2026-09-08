@@ -173,7 +173,9 @@ export async function handleHeadlessRun(
   }
 
   try {
-    if (bound.identity.taskId) {
+    if (bound.identity.taskId && bound.requestContext.grantedCapabilities.some(
+      (capability) => capability.key === 'departure.task-context.read' && capability.version === 2,
+    )) {
       if (!bound.runId) {
         json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
         return

@@ -73,7 +73,7 @@ export function AssistMaterialsTrigger({
         })
       })
       .catch(() => {
-        setPreviewError('发团资料预览失败，请稍后重试')
+        setPreviewError('会话资料预览失败，请稍后重试')
       })
   }
 
@@ -83,7 +83,7 @@ export function AssistMaterialsTrigger({
       <Alert
         type="error"
         showIcon
-        title="发团资料加载失败"
+        title="会话资料加载失败"
         action={
           <Button size="small" aria-label="重试" onClick={() => void query.refetch()}>
             重试
@@ -112,7 +112,7 @@ export function AssistMaterialsTrigger({
           <Alert
             type="error"
             showIcon
-            title="发团资料刷新失败"
+            title="会话资料刷新失败"
             action={
               <Button size="small" aria-label="重试" onClick={() => void query.refetch()}>
                 重试
@@ -143,11 +143,11 @@ export function AssistMaterialsTrigger({
       <Popover
         trigger="click"
         placement="bottomRight"
-        title="发团资料"
+        title="会话资料"
         content={<div className={styles.panel}>{body}</div>}
       >
         <Badge size="small" count={materials.length}>
-          <Button type="text" icon={<FileTextOutlined />} aria-label="发团资料" />
+          <Button type="text" icon={<FileTextOutlined />} aria-label="会话资料" />
         </Badge>
       </Popover>
       <Modal

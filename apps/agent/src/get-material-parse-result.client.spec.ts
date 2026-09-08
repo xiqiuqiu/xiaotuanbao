@@ -8,6 +8,13 @@ describe('fetchMaterialParseResult', () => {
     global.fetch = originalFetch
   })
 
+  it('keeps the HTTP status even when the error envelope has empty data', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ data: {} }) })
+    await expect(fetchMaterialParseResult({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret', delegationToken: 'deleg-1' }, {
+      taskId: 'task-1', runId: 'run-1', materialId: 'mat-1', parseResultVersion: 1,
+    })).rejects.toMatchObject({ code: 'INVALID_FORMAT', retryable: false })
+  })
+
   it('calls NestJS with dual identity headers and returns pinned pages without bytes', async () => {
     const result: GetMaterialParseResultOutput = {
       materialId: 'mat-1',

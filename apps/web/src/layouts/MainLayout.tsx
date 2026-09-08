@@ -1,3 +1,4 @@
+import { useBusinessDepartureId } from '@/features/agent-conversation/use-business-departure-id'
 import { App, Layout, Menu, Breadcrumb, Button, Dropdown, Tooltip, theme } from 'antd'
 import {
   MenuFoldOutlined,
@@ -42,6 +43,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const hydrateFromSession = useAgentConversationStore((state) => state.hydrateFromSession)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const isGlobalAgent = globalOpen || routeIsGlobalAgent
+  const businessDepartureId = useBusinessDepartureId()
 
   useEffect(() => {
     hydrateFromSession()
@@ -157,6 +159,7 @@ export function MainLayout({ children }: PropsWithChildren) {
       >
         <Sider
           className={styles.sider}
+          inert={isGlobalAgent || undefined}
           collapsible
           collapsed={sidebarCollapsed}
           trigger={null}
@@ -207,7 +210,7 @@ export function MainLayout({ children }: PropsWithChildren) {
           />
         ) : null}
 
-        <Layout className={styles.main}>
+        <Layout className={styles.main} inert={isGlobalAgent || undefined}>
           <Header className={styles.header}>
             <div className={styles.headerLeading}>
               <Tooltip title={sidebarToggleLabel} placement="bottom">
@@ -279,8 +282,8 @@ export function MainLayout({ children }: PropsWithChildren) {
 
           {children}
         </Layout>
-        {isGlobalAgent ? null : <AssistPane />}
-        {isGlobalAgent ? (
+        {!isGlobalAgent || businessDepartureId ? <AssistPane /> : null}
+        {isGlobalAgent && !businessDepartureId ? (
           <dialog
             className={styles.agentOverlay}
             open

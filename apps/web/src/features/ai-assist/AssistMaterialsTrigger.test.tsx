@@ -52,7 +52,7 @@ describe('AssistMaterialsTrigger', () => {
 
     renderTrigger()
 
-    await userEvent.click(await screen.findByRole('button', { name: '发团资料' }))
+    await userEvent.click(await screen.findByRole('button', { name: '会话资料' }))
     expect(await screen.findByText('团期.png')).toBeInTheDocument()
     expect(screen.getByText('已解析')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '预览' }))
@@ -87,7 +87,7 @@ describe('AssistMaterialsTrigger', () => {
     )
 
     renderTrigger()
-    await userEvent.click(await screen.findByRole('button', { name: '发团资料' }))
+    await userEvent.click(await screen.findByRole('button', { name: '会话资料' }))
     expect(document.querySelector('.ant-spin')).toBeTruthy()
 
     await act(async () => {
@@ -100,8 +100,8 @@ describe('AssistMaterialsTrigger', () => {
     cleanup()
     vi.mocked(listDepartureMaterials).mockRejectedValueOnce(new Error('network'))
     renderTrigger('conv-2')
-    await userEvent.click(await screen.findByRole('button', { name: '发团资料' }))
-    expect(await screen.findByText('发团资料加载失败')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: '会话资料' }))
+    expect(await screen.findByText('会话资料加载失败')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 
@@ -125,7 +125,7 @@ describe('AssistMaterialsTrigger', () => {
     })
 
     renderTrigger()
-    await userEvent.click(await screen.findByRole('button', { name: '发团资料' }))
+    await userEvent.click(await screen.findByRole('button', { name: '会话资料' }))
     expect(await screen.findByText('解析中')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '预览' }))
     await waitFor(() => {

@@ -1,3 +1,8 @@
+import { ConversationMaterialsTrigger } from '@/features/agent-conversation/conversation-materials'
+import { useNavigate } from '@tanstack/react-router'
+import { DepartureCollaborationWorkspace } from '@/features/agent-conversation/DepartureCollaborationWorkspace'
+import { useBusinessDepartureId } from '@/features/agent-conversation/use-business-departure-id'
+import { toReturnNavigateOptions } from '@/features/agent-conversation/agent-conversation-location'
 import { CloseOutlined, ExpandOutlined, PlusOutlined } from '@ant-design/icons'
 import { Button, Tooltip, theme } from 'antd'
 import type { CSSProperties } from 'react'
@@ -10,10 +15,52 @@ import styles from './AssistPane.module.css'
 
 export function AssistPane() {
   const { token } = theme.useToken()
+  const departureId = useBusinessDepartureId()
+  const navigate = useNavigate()
+  const expanded = useAgentConversationStore((state) => state.globalOpen)
   const collapsed = useUiStore((state) => state.assistPaneCollapsed)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
   const expandToGlobal = useExpandAgentConversation()
+  const header = (
+<div className={styles.paneHeader}>
+          <ConversationHistoryTrigger />
+          <div className={styles.headerActions}>
+            <ConversationMaterialsTrigger />
+            <Button
+              className={styles.iconButton}
+              type="text"
+              icon={<PlusOutlined aria-hidden />}
+              onClick={() => startNewConversation()}
+              aria-label="新建会话"
+            />
+            <Tooltip title="展开协作工作区" placement="bottom">
+              <Button
+                className={`${styles.iconButton} ${styles.expand}`}
+                type="text"
+                icon={<ExpandOutlined aria-hidden />}
+                aria-label="展开协作工作区"
+                onClick={expandToGlobal}
+              />
+            </Tooltip>
+            <Button
+              className={styles.close}
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={() => setAssistPaneCollapsed(true)}
+              aria-label="收起电子化助理"
+            />
+          </div>
+        </div>
+  )
+  if (departureId) {
+    return <DepartureCollaborationWorkspace departureId={departureId} expanded={expanded} collapsed={collapsed} header={header}
+      onExpand={expandToGlobal} onExit={() => {
+        const restored = useAgentConversationStore.getState().exitGlobal()
+        setAssistPaneCollapsed(false)
+        void navigate(toReturnNavigateOptions(restored))
+      }} />
+  }
   return (
     <aside
       className={styles.slot}
@@ -31,34 +78,7 @@ export function AssistPane() {
       }
     >
       <div className={styles.pane}>
-        <div className={styles.paneHeader}>
-          <ConversationHistoryTrigger />
-          <div className={styles.headerActions}>
-            <Button
-              className={styles.iconButton}
-              type="text"
-              icon={<PlusOutlined aria-hidden />}
-              onClick={() => startNewConversation()}
-              aria-label="新建会话"
-            />
-            <Tooltip title="进入全局模式" placement="bottom">
-              <Button
-                className={`${styles.iconButton} ${styles.expand}`}
-                type="text"
-                icon={<ExpandOutlined aria-hidden />}
-                aria-label="进入全局模式"
-                onClick={expandToGlobal}
-              />
-            </Tooltip>
-            <Button
-              className={styles.close}
-              type="text"
-              icon={<CloseOutlined />}
-              onClick={() => setAssistPaneCollapsed(true)}
-              aria-label="收起电子化助理"
-            />
-          </div>
-        </div>
+        {header}
         <div className={styles.body}>
           <AgentConversationChat />
         </div>

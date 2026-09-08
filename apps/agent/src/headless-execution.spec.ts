@@ -491,6 +491,23 @@ describe('headless Agent runtime contract', () => {
     }
   })
 
+  it('does not require legacy create-task context for a departure collaboration delegation', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        authorization: `Bearer ${delegationToken({
+          agentDefinition: { key: 'departure.collaboration', version: 1 },
+          grantedCapabilities: [{ key: 'departure.segment-resource.propose', version: 1 }],
+        })}`,
+      })
+      expect(response.status).toBe(200)
+      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'completed' })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
+  })
+
   it('skips get-task-context for a taskless conversation run', async () => {
     const runtime = await listen()
     try {
@@ -647,7 +664,7 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await readHeadlessOutcome(response)).toEqual({
+      expect(await readHeadlessOutcome(response)).toMatchObject({
         kind: 'completed',
         message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
         diagnostic: {

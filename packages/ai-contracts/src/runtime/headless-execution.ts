@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
+import { submitSourceOrderReviewPackageModelInputSchema } from '../review/source-order-schema'
 import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
 
@@ -64,6 +65,7 @@ function refineUsageSource(
 export const modelStepUsageSchema = z
   .object({
     stepIndex: z.number().int().nonnegative(),
+    latencyMs: z.number().int().nonnegative().optional(),
     usageSource: z.enum(USAGE_SOURCES),
     usage: usageCountsSchema.optional(),
   })
@@ -169,13 +171,17 @@ export const headlessAwaitingUserInputResultSchema = z
   })
   .strip()
 
+const headlessReviewPackageSchema = z.union([
+  submitReviewPackageModelInputSchema,
+  submitSegmentResourceReviewModelInputSchema,
+  submitSourceOrderReviewPackageModelInputSchema,
+])
+
 export const headlessAwaitingReviewResultSchema = z
   .object({
     kind: z.literal('awaiting_review'),
-    reviewPackage: z.union([
-      submitReviewPackageModelInputSchema,
-      submitSegmentResourceReviewModelInputSchema,
-    ]),
+    reviewPackage: headlessReviewPackageSchema,
+    reviewPackages: z.array(headlessReviewPackageSchema).min(1).optional(),
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()

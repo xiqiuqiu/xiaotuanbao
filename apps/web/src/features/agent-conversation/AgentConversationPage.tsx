@@ -1,3 +1,4 @@
+import { ConversationMaterialsTrigger } from './conversation-materials'
 import {
   HistoryOutlined,
   MenuFoldOutlined,
@@ -86,6 +87,7 @@ export function AgentConversationPage({
           <Typography.Text strong className={styles.chatTitle}>
             {title}
           </Typography.Text>
+          <ConversationMaterialsTrigger />
           <Tooltip title="返回业务页面" placement="bottom">
             <Button
               type="text"

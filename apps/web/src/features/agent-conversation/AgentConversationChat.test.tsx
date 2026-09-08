@@ -1,3 +1,4 @@
+import { getAiCreateTask } from '@/services/ai-create-task.service'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -124,6 +125,8 @@ function useMockComposerAttachments() {
     },
   }
 }
+
+vi.mock('@/services/ai-create-task.service', () => ({ getAiCreateTask: vi.fn() }))
 
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
@@ -376,6 +379,7 @@ class MockEventSource {
 
 let lastEventSource: MockEventSource | null = null
 vi.stubGlobal('EventSource', MockEventSource)
+beforeEach(() => sessionStorage.clear())
 
 describe('AgentConversationChat page locator #371', () => {
   beforeEach(() => {
@@ -498,6 +502,22 @@ describe('AgentConversationChat page locator #371', () => {
     )
     expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
     expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
+  })
+
+  it('sends a stable review reference and clears it only after acceptance', async () => {
+    const user = userEvent.setup()
+    const onSent = vi.fn()
+    vi.mocked(sendAgentConversationText).mockRejectedValueOnce(new Error('暂时无法发送'))
+      .mockResolvedValueOnce({ conversationId: 'c-new', events: [], lastSequence: 1 } as never)
+    renderChat(<AgentConversationChat reviewPackageId="pkg-1" onReviewMessageSent={onSent} />)
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '只核对这项')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(onSent).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue('只核对这项')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenLastCalledWith(null,
+      expect.objectContaining({ text: '只核对这项', reviewPackageId: 'pkg-1' }), expect.any(String))
+    expect(onSent).toHaveBeenCalledWith('pkg-1')
   })
 
   it('shows one task chip and sends it as the primary task candidate', async () => {
@@ -700,6 +720,43 @@ describe('AgentConversationChat task and review activities', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  it.each(['completed', 'failed', 'cancelled'])('keeps a %s collaboration card in the current workspace without a task shortcut', async (status) => {
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-collab', taskType: 'departure_collaboration', status },
+    }] })
+    renderChat()
+    const card = await screen.findByRole('region', { name: 'Agent 协作' })
+    expect(within(card).queryByRole('button')).toBeNull()
+    expect(routerState.navigate).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'departure_creation'])('does not send a completed round without a formal result back to the wizard (%s)', async (taskType) => {
+    vi.mocked(getAiCreateTask).mockResolvedValue({ departureId: null } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-without-result', ...(taskType ? { taskType } : {}), status: 'completed' },
+    }] })
+    renderChat()
+    const card = await screen.findByRole('region', { name: 'Agent 任务' })
+    expect(within(card).queryByRole('button')).toBeNull()
+    if (!taskType) expect(card).not.toHaveTextContent('创建发团')
+  })
+
+  it('opens the authoritative departure result for a completed creation round', async () => {
+    vi.mocked(getAiCreateTask).mockResolvedValue({ departureId: 'dep-created' } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [{
+      id: 'terminal', sequence: 1, kind: 'batch_status', createdAt: '2026-09-08T00:00:00Z',
+      payload: { taskId: 'task-created', taskType: 'departure_creation', status: 'completed' },
+    }] })
+    renderChat()
+    await userEvent.click(await screen.findByRole('button', { name: '查看发团' }))
+    expect(routerState.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/departure/$departureId', params: { departureId: 'dep-created' } }))
   })
 
   it('renders the task card and opens the matching departure review form', async () => {
@@ -933,6 +990,7 @@ describe('AgentConversationChat task and review activities', () => {
 
   it('撤回排队消息并回填输入框供重新编辑', async () => {
     const user = userEvent.setup()
+    const restoreReviewTarget = vi.fn()
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',
       events: [
@@ -966,6 +1024,7 @@ describe('AgentConversationChat task and review activities', () => {
             batchId: 'batch-2',
             reason: 'queue_retracted',
             retractedUserMessageSequence: 5,
+            reviewPackageId: 'pkg-target',
           },
           createdAt: '2026-08-27T00:00:06.000Z',
         },
@@ -980,7 +1039,7 @@ describe('AgentConversationChat task and review activities', () => {
       },
     } as never)
 
-    renderChat()
+    renderChat(<AgentConversationChat onReviewMessageRestored={restoreReviewTarget} />)
     await user.click(await screen.findByRole('button', { name: '编辑' }))
 
     expect(retractQueuedAgentConversationBatch).toHaveBeenCalledWith(
@@ -991,6 +1050,7 @@ describe('AgentConversationChat task and review activities', () => {
     expect(screen.queryByRole('region', { name: '排队消息，共 1 条' })).not.toBeInTheDocument()
     const composer = screen.getByRole('textbox', { name: '询问小团宝业务' })
     expect(composer).toHaveValue('还有吗')
+    expect(restoreReviewTarget).toHaveBeenCalledWith('pkg-target')
 
     vi.mocked(sendAgentConversationText).mockResolvedValue({
       conversationId: 'c-1',
@@ -1196,7 +1256,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.getByTestId('agent-thinking-mascot')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
-    ).toHaveTextContent('先核对出团日期')
+    ).toHaveTextContent('正在处理你的请求')
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1218,7 +1279,8 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
-    ).toHaveTextContent('再核人数')
+    ).toHaveTextContent('正在处理你的请求')
+    expect(screen.queryByText('再核人数')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1369,6 +1431,33 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     cleanup()
   })
 
+  it('recovers a completed batch when the SSE connection remains open but delivers no frames', async () => {
+    vi.useFakeTimers()
+    try {
+      renderChat()
+      await act(() => Promise.resolve())
+      expect(lastEventSource?.readyState).toBe(1)
+      vi.mocked(listAgentConversationEvents).mockResolvedValue({
+        conversationId: 'c-1', lastSequence: 4,
+        events: [
+          { id: 'e-3', sequence: 3, kind: 'agent_message', payload: { text: '修订完成', batchId: 'batch-1' }, createdAt: '2026-08-26T00:00:02.000Z' },
+          { id: 'e-4', sequence: 4, kind: 'batch_status', payload: { status: 'done', batchId: 'batch-1' }, createdAt: '2026-08-26T00:00:03.000Z' },
+        ],
+      })
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      expect(screen.getByText('修订完成')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '停止当前处理' })).not.toBeInTheDocument()
+      const requests = vi.mocked(listAgentConversationEvents).mock.calls.length
+      await act(() => vi.advanceTimersByTimeAsync(5000))
+      expect(listAgentConversationEvents).toHaveBeenCalledTimes(requests)
+      await act(() => vi.advanceTimersByTimeAsync(10000))
+      expect(listAgentConversationEvents).toHaveBeenCalledTimes(requests + 1)
+    } finally {
+      cleanup()
+      vi.useRealTimers()
+    }
+  })
+
   it('posts stop-batch from the running composer button and replaces live text with 已停止当前处理', async () => {
     const user = userEvent.setup()
     vi.mocked(stopAgentConversationBatch).mockResolvedValue({
@@ -1510,7 +1599,8 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       )
     })
     expect(await screen.findByText('已整理当前资料。')).toBeInTheDocument()
-    expect(screen.getByText('先核对出团日期')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onerror?.(new Event('error'))

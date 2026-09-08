@@ -74,6 +74,15 @@ describe('AiConversationRecallService', () => {
     expect(result.events).toHaveLength(1)
   })
 
+  it('不存在的页码不能伪装成成功读取空正文', async () => {
+    const service = serviceWith({
+      conversationSource: { findFirst: async () => ({ id: 'src-1' }) },
+      conversationSourceParseRun: { findFirst: async () => ({ resultVersion: 1, pages: [{ pageNumber: 1, text: '正文' }] }) },
+    })
+    await expect(service.readSource({ organizationId: 'org-1', conversationId: 'conv-1', rawInput: { sourceId: 'src-1', parseVersion: 1, pageNumber: 2 } }))
+      .rejects.toThrow('会话来源解析页不存在')
+  })
+
   it('按当前会话来源与解析版本回读摘录', async () => {
     const prisma = {
       conversationSource: {

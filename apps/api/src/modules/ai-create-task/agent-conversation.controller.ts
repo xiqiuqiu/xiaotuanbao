@@ -100,6 +100,7 @@ export class AgentConversationController {
       })),
       dto.pageLocator,
       dto.primaryTaskId,
+      dto.reviewPackageId,
     )
   }
 
@@ -141,6 +142,7 @@ export class AgentConversationController {
       })),
       dto.pageLocator,
       dto.primaryTaskId,
+      dto.reviewPackageId,
     )
   }
 

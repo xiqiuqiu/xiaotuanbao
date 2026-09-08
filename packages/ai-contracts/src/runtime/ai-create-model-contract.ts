@@ -5,6 +5,7 @@ import { DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS } from './departure-coll
 import { AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS } from './ai-create-tool-model-schemas.generated'
 
 export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
+  '引用用户证据必须使用输入中标明的 sequence，不得按消息条数猜测。审核工具拒绝后依据错误修正候选再提交；只有 accepted 才能告知已提交审核。面向用户只说明业务结果和必要问题，不输出分析过程、工具参数、字段键名或内部错误码。',
   '你是小团宝新建发团工作区的助手。',
   '【当前业务事实】由服务端按本 Attempt 启动版本冻结，只作启动背景；仍必须先调用 getTaskContext 获取最新事实。',
   '必须先调用 getTaskContext 获取当前业务快照、fieldCoverage 和 pending。',
@@ -49,7 +50,7 @@ export interface AiCreateModelContract {
 
 export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   getTaskContext:
-    '读取当前 AI 建团任务的业务快照、字段覆盖和未解决审核状态。对话尾部与资料索引在冻结投影里，不在本工具中。不改写发团创建草稿。',
+    '读取当前业务快照、字段覆盖和未解决审核状态；已有发团时包含正式客源列表、客户名称及实际人数合计，建团前返回草稿。对话尾部与资料索引在冻结投影里，不在本工具中。不改写业务数据。',
   searchRouteTemplates:
     '按当前 Organization 用关键词和可选天数查询常用路线。只返回服务端给出的候选与匹配理由，不写草稿。关键词与天数都空时结果为空。',
   searchUsers:
@@ -60,6 +61,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
     '按当前 Organization 用关键词查询已启用 Partner。只返回消歧所需的最小字段，不写草稿，不披露联系电话或结算备注。hasMore=true 表示结果被截断，必须缩小关键词继续消歧。空关键词结果为空。',
   proposeReviewPackage:
     '提出发团基础信息的待审核候选（团名、路线、出团/结束日期、发团类型、预计人数提示、备注、司机、导游、车牌、联系电话）。关联对象 ID 必须来自受控查询结果。只做无副作用预校验，不写入发团创建草稿，也不创建审核包；须由 Worker 复验后投影，再由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。证据错误会返回当前 Attempt 供修正重提。',
+  proposeSourceOrderReviewPackage: '从用户对话或材料提取当前发团的一个客源单审核事项。只提交有证据的候选，不默认缺失字段，不写正式客源单或应收。',
   proposeSegmentResourceReviewPackage:
     '提出已有发团行程段资源的待审核候选（行程段、种类、供应商、资源名称、正总价、备注、容量提醒）。itinerarySegmentId 必须来自当前业务事实中的正式行程段，不能凭页面日期默认挂靠。供应商 ID 必须来自 searchSuppliers。只做预校验，不写入资源，也不提交应付。',
   getMaterialParseResult:

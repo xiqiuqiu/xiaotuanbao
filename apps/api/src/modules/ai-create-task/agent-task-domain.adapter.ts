@@ -3,6 +3,7 @@ import type {
   GetTaskContextOutput,
   ProposeReviewPackageOutput,
   ProposeSegmentResourceReviewPackageOutput,
+  ProposeSourceOrderReviewPackageOutput,
   ReviewFieldDescriptor,
   ReviewSchema,
   SearchPartnersOutput,
@@ -48,6 +49,10 @@ export interface AgentTaskDomainAdapter {
   searchPartners(user: TaskBoundAiToolRequestUser, input: unknown): Promise<SearchPartnersOutput>
   getMaterial(user: TaskBoundAiToolRequestUser, input: unknown): Promise<GetMaterialParseResultOutput>
   proposeReview(user: TaskBoundAiToolRequestUser, input: unknown): Promise<ProposeReviewPackageOutput>
+  proposeSourceOrderReview(
+    user: TaskBoundAiToolRequestUser,
+    input: unknown,
+  ): Promise<ProposeSourceOrderReviewPackageOutput>
   proposeSegmentResourceReview(
     user: TaskBoundAiToolRequestUser,
     input: unknown,

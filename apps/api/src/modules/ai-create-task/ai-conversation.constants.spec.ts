@@ -33,15 +33,15 @@ describe('isImmediateWorkflowFailure', () => {
 
 describe('context contract versions', () => {
   it('does not reuse AI建团 readonly-assist prompt or tool schema ids for conversation.general', () => {
-    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).toBe('conversation-general/v5')
+    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).toBe('conversation-general/v7')
     expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).toBe('conversation-general-routing-recall/v2')
     expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
   })
 
   it('does not reuse conversation.general prompt or tool schema ids for departure.collaboration', () => {
-    expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).toBe('departure-collaboration/v1')
-    expect(DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION).toBe('departure-collaboration-tools/v1')
+    expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).toBe('departure-collaboration/v3')
+    expect(DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION).toBe('departure-collaboration-tools/v3')
     expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).not.toBe(
       CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
     )

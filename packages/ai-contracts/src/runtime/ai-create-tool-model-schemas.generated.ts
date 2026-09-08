@@ -1311,6 +1311,17 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
         "exclusiveMinimum": 0,
         "maximum": 9007199254740991
       },
+      "reviewPackageId": {
+        "description": "修订已有事项时填写当前审核包 ID；新事项省略",
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "description": "与 reviewPackageId 同时填写当前审核包版本",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
       "candidates": {
         "minItems": 1,
         "type": "array",
@@ -2174,6 +2185,284 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
           ]
         },
         "description": "每个字段最多一条候选；itinerarySegmentId 必须来自当前业务事实中的正式行程段"
+      }
+    },
+    "required": [
+      "objectVersion",
+      "candidates"
+    ],
+    "additionalProperties": false
+  },
+  "proposeSourceOrderReviewPackage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "objectVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "reviewPackageId": {
+        "description": "修订已有事项时填写当前审核包 ID；新事项省略",
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "description": "与 reviewPackageId 同时填写当前审核包版本",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "candidates": {
+        "minItems": 1,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fieldKey": {
+              "type": "string",
+              "enum": [
+                "partnerId",
+                "adultGuestCount",
+                "childGuestCount",
+                "adultUnitPriceCents",
+                "childUnitPriceCents",
+                "fareAdjustments",
+                "discountType",
+                "discountCents",
+                "discountNotes",
+                "collectionMode",
+                "depositCents",
+                "balanceCents",
+                "settlementNotes",
+                "notes",
+                "guests"
+              ]
+            },
+            "proposedValue": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "child_ticket_topup",
+                          "single_room_topup",
+                          "extended_stay",
+                          "ticket_discount_refund",
+                          "lodging_deduction",
+                          "other"
+                        ]
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "increase",
+                          "decrease"
+                        ]
+                      },
+                      "amountCents": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "customName": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "direction",
+                      "amountCents"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "phone": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "gender": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "male",
+                              "female",
+                              "unknown"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "notes": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "included": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              ]
+            },
+            "clarity": {
+              "type": "string",
+              "enum": [
+                "clear",
+                "needs_confirmation",
+                "undetermined"
+              ]
+            },
+            "evidence": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "user_message"
+                      },
+                      "excerpt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "sequence": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "messageId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "excerpt",
+                      "sequence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "system_derivation"
+                      },
+                      "rule": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "rule"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "material_region"
+                      },
+                      "materialId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "parseResultVersion": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "pageNumber": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "excerpt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "materialId",
+                      "parseResultVersion",
+                      "pageNumber",
+                      "excerpt"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "fieldKey",
+            "proposedValue",
+            "clarity",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
       }
     },
     "required": [

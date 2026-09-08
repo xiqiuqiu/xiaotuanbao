@@ -17,6 +17,7 @@ const requestContext = requestContextSchema.parse({
   agentDefinition: { key: 'departure.collaboration', version: 1 },
   objectScopes: [
     { organizationId: 'org-1', kind: 'agent_task', id: 'task-1' },
+    { organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' },
     { organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' },
   ],
 })
@@ -33,6 +34,8 @@ describe('已有发团协作 Agent Definition #449', () => {
     ).toEqual(
       expect.arrayContaining([
         { key: 'departure.supplier.search', toolName: 'searchSuppliers' },
+        { key: 'departure.partner.search', toolName: 'searchPartners' },
+        { key: 'departure.source-order.propose', toolName: 'proposeSourceOrderReviewPackage' },
         {
           key: 'departure.segment-resource.propose',
           toolName: 'proposeSegmentResourceReviewPackage',
@@ -51,7 +54,10 @@ describe('已有发团协作 Agent Definition #449', () => {
 
     expect(result.granted).toEqual(
       expect.arrayContaining([
+        { key: 'departure.task-context.read', version: 2 },
         { key: 'departure.supplier.search', version: 1 },
+        { key: 'departure.partner.search', version: 1 },
+        { key: 'departure.source-order.propose', version: 1 },
         { key: 'departure.segment-resource.propose', version: 1 },
       ]),
     )

@@ -29,6 +29,10 @@ vi.mock('@/services/auth.service', () => ({
   logout: vi.fn(),
 }))
 
+vi.mock('@/features/agent-conversation/conversation-materials', () => ({
+  ConversationMaterialsTrigger: () => <button type="button">会话资料</button>,
+}))
+
 vi.mock('@/features/agent-conversation/AgentConversationChat', () => ({
   AgentConversationChat: () => <p>通用会话</p>,
 }))
@@ -42,11 +46,15 @@ vi.mock('@/features/agent-conversation/ConversationHistoryList', () => ({
 }))
 
 function renderLayout(ui: React.ReactNode) {
-  return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      {ui}
-    </QueryClientProvider>,
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrap = (node: React.ReactNode) => (
+    <QueryClientProvider client={client}>{node}</QueryClientProvider>
   )
+  const view = render(wrap(ui))
+  return {
+    ...view,
+    rerender: (next: React.ReactNode) => view.rerender(wrap(next)),
+  }
 }
 
 describe('MainLayout 侧栏开关', () => {

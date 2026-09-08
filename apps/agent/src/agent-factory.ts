@@ -1,3 +1,4 @@
+import { createProposeSourceOrderReviewTool } from './propose-source-order-review.tool'
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 import {
@@ -34,6 +35,7 @@ export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 export interface AiCreateAgentFactoryConfig extends GetTaskContextToolConfig {
   model?: string
   modelBaseUrl?: string
+  modelThinking?: 'enabled' | 'disabled'
 }
 
 export function createAiCreateMastraFromDefinition(
@@ -64,12 +66,11 @@ function createMastra(
     searchPartners: createSearchPartnersTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
     proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
+    proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),
-    ...(definition.key === 'conversation.general'
-      ? { routeConversation: createConversationRoutingTool() }
-      : {}),
+    routeConversation: createConversationRoutingTool(),
   }
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),
@@ -85,6 +86,9 @@ function createMastra(
       apiKey: config.modelApiKey || 'missing',
     },
     tools,
+    defaultOptions: (config.model ?? 'deepseek/deepseek-chat').startsWith('deepseek')
+      ? { providerOptions: { deepseek: { thinking: { type: config.modelThinking ?? 'disabled' } } } }
+      : {},
     inputProcessors: [
       createTokenLimiterSafetyNet({
         limit: limiterLimit,

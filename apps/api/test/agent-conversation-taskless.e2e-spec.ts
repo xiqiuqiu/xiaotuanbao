@@ -359,7 +359,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       mastraTraceId: null,
       toolSteps: [],
       contextManifest: {
-        systemPromptVersion: 'conversation-general/v5',
+        systemPromptVersion: 'conversation-general/v7',
         toolSchemaVersion: 'conversation-general-routing-recall/v2',
       },
     })

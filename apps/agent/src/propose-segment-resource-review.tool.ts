@@ -15,7 +15,7 @@ export interface ProposeSegmentResourceReviewToolConfig {
   modelApiKey?: string
 }
 
-const evidenceInputSchema = z.discriminatedUnion('kind', [
+export const evidenceInputSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('user_message'),
@@ -99,6 +99,8 @@ export function createProposeSegmentResourceReviewTool(config: ProposeSegmentRes
     description: AI_CREATE_TOOL_DESCRIPTIONS.proposeSegmentResourceReviewPackage,
     inputSchema: z.object({
       objectVersion: z.number().int().positive(),
+      reviewPackageId: z.string().min(1).optional().describe('修订已有事项时填写当前审核包 ID；新事项省略'),
+      expectedPackageVersion: z.number().int().positive().optional().describe('与 reviewPackageId 同时填写当前审核包版本'),
       candidates: z
         .array(candidateInputSchema)
         .min(1)
@@ -129,9 +131,7 @@ export function createProposeSegmentResourceReviewTool(config: ProposeSegmentRes
         {
           taskId,
           runId,
-          objectVersion: parsed.objectVersion,
-          confirmationUnit: parsed.confirmationUnit,
-          candidates: parsed.candidates,
+          ...parsed,
         },
       )
     },

@@ -1,6 +1,5 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
 import {
-  DEPARTURE_CREATION_TASK_DESCRIPTOR,
   registeredTaskDescriptors,
   sanitizeVisibleReasoning,
 } from '@xiaotuanbao/ai-contracts'
@@ -186,6 +185,7 @@ export type InteractionActivityContent = {
 }
 
 export type ReviewPackageActivityContent = {
+  disposition?: 'confirmed' | 'rejected'
   reviewPackageId: string
   fieldKeys: string[]
   payloadSchema?: string
@@ -234,6 +234,9 @@ export function batchStatusLabel(
       return `已上传 ${total} 个，解析 ${ready}/${total}`
     }
     return '资料处理中'
+  }
+  if (status === 'ready_for_agent' && extra?.reason === 'retry_scheduled') {
+    return extra.errorCode === 'MODEL_TIMEOUT' ? '本轮处理超时，正在等待自动重试' : '本轮处理失败，正在等待自动重试'
   }
   if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
   if (status === 'preparing_context') return '正在整理会话上下文'
@@ -567,6 +570,7 @@ export function toCopilotChatMessages(
   const batchTaskIds = new Map<string, string>()
   const taskTitles = new Map<string, string>()
   const taskTypes = new Map<string, string>()
+  const reviewCards = new Map<string, ReviewPackageActivityContent>()
   const upsertStatus = (content: BatchStatusActivityContent) => {
     const key = content.batchId ?? 'current'
     const item: ChatMessage = {
@@ -618,6 +622,8 @@ export function toCopilotChatMessages(
     }
     if (taskId && typeof event.payload.createdTaskType === 'string') {
       taskTypes.set(taskId, event.payload.createdTaskType)
+    } else if (taskId && typeof event.payload.taskType === 'string') {
+      taskTypes.set(taskId, event.payload.taskType)
     }
     if (event.kind === 'user_message') {
       messages.push({
@@ -652,6 +658,7 @@ export function toCopilotChatMessages(
         taskId ? taskTypes.get(taskId) : undefined,
       )
       if (reviewNotice) {
+        reviewCards.set(reviewNotice.reviewPackageId, reviewNotice)
         messages.push({
           id: `review-${reviewNotice.reviewPackageId}`,
           role: 'activity',
@@ -686,11 +693,15 @@ export function toCopilotChatMessages(
     if (event.kind === 'batch_status') {
       const payload = event.payload
       const status = String(payload.status ?? '')
+      const review = typeof payload.reviewPackageId === 'string' ? reviewCards.get(payload.reviewPackageId) : undefined
+      if (review && (payload.disposition === 'confirmed' || payload.disposition === 'rejected')) {
+        review.disposition = payload.disposition
+      }
       if (taskId) {
         const taskType = taskTypes.get(taskId)
         const descriptor = taskType
           ? registeredTaskDescriptors.findByTaskType(taskType)
-          : DEPARTURE_CREATION_TASK_DESCRIPTOR
+          : undefined
         upsertTask({
           taskId,
           title: taskTitles.get(taskId) ?? descriptor?.defaultTitle ?? '任务',
@@ -830,7 +841,7 @@ function isLiveClearedByTerminalBatch(
     if (RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
       return false
     }
-    if (status !== 'failed' && status !== 'cancelled' && status !== 'completed') {
+    if (status !== 'failed' && status !== 'cancelled' && status !== 'completed' && status !== 'awaiting_review') {
       return false
     }
     const attemptId =

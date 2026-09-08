@@ -1,4 +1,5 @@
-import { message } from 'antd'
+import { useRef } from 'react'
+import { App } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA } from '@xiaotuanbao/ai-contracts'
@@ -16,10 +17,16 @@ import { ApiError } from '@/lib/request/client'
 export function DepartureSourceOrderReview({
   departureId,
   canEdit,
+  packageId,
+  onLeaveWorkspace,
 }: {
   departureId: string
   canEdit: boolean
+  packageId?: string
+  onLeaveWorkspace?: () => void
 }) {
+  const { message } = App.useApp()
+  const decisions = useRef<Record<string, string>>({})
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const conversationId = useAgentConversationStore((state) => state.conversationId)
@@ -32,11 +39,18 @@ export function DepartureSourceOrderReview({
 
   const pendingReview = (collaborationQuery.data?.items ?? []).find(
     (item) =>
-      item.status === 'pending' && item.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+      (!packageId || item.id === packageId) &&
+      item.status === 'pending' &&
+      item.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   )
   const succeeded = (collaborationQuery.data?.confirmations ?? [])
     .flatMap((confirmation) => confirmation.items)
-    .find((item) => item.status === 'succeeded' && item.resultRef?.objectKind === 'source_order')
+    .find(
+      (item) =>
+        (!packageId || item.packageId === packageId) &&
+        item.status === 'succeeded' &&
+        item.resultRef?.objectKind === 'source_order',
+    )
 
   const saveGroup = useMutation({
     mutationFn: async (corrections: Record<string, unknown>) => {
@@ -46,8 +60,8 @@ export function DepartureSourceOrderReview({
         corrections,
       })
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
         queryKey: ['departure-collaboration', departureId, conversationId],
       })
     },
@@ -60,8 +74,10 @@ export function DepartureSourceOrderReview({
   const confirm = useMutation({
     mutationFn: async () => {
       if (!pendingReview) return
+      const key = `${pendingReview.id}:${pendingReview.version}`
+      const decisionCommandId = (decisions.current[key] ??= crypto.randomUUID())
       const accepted = await acceptReviewConfirmation({
-        decisionCommandId: crypto.randomUUID(),
+        decisionCommandId,
         items: [{ packageId: pendingReview.id, expectedPackageVersion: pendingReview.version }],
       })
       return awaitReviewConfirmationItem({
@@ -70,27 +86,28 @@ export function DepartureSourceOrderReview({
         getConfirmation: getReviewConfirmation,
       })
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
         queryKey: ['departure-collaboration', departureId, conversationId],
       })
       void queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
     },
-    onError: () => {
-      message.error('确认失败')
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '确认失败')
     },
   })
 
-  if (!canEdit || (!pendingReview && !succeeded)) {
+  if (!pendingReview && !succeeded) {
     return null
   }
 
   if (!pendingReview && succeeded?.resultRef?.objectId) {
     return (
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <SourceOrderReviewPanel
           createdSourceOrderId={succeeded.resultRef.objectId}
           onViewSourceOrder={(sourceOrderId) => {
+            onLeaveWorkspace?.()
             void navigate({
               to: '/departure/$departureId',
               params: { departureId },
@@ -98,6 +115,7 @@ export function DepartureSourceOrderReview({
             })
           }}
           onContinueReceivables={(sourceOrderId) => {
+            onLeaveWorkspace?.()
             void navigate({
               to: '/departure/$departureId',
               params: { departureId },
@@ -114,11 +132,20 @@ export function DepartureSourceOrderReview({
   }
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <SourceOrderReviewPanel
         pendingReview={pendingReview}
+        readOnly={!canEdit}
+        error={
+          saveGroup.error || confirm.error
+            ? ((saveGroup.error ?? confirm.error)?.message ?? '操作失败，请重试')
+            : undefined
+        }
         saving={saveGroup.isPending}
         confirming={confirm.isPending}
+        confirmationBlockedReason={pendingReview.confirmationBlockedReason ?? (
+          pendingReview.conflicts?.length ? '请先核对新建议与人工修改的差异。' : undefined
+        )}
         onSaveGroup={(corrections) => saveGroup.mutateAsync(corrections)}
         onConfirm={() => confirm.mutateAsync().then(() => undefined)}
       />

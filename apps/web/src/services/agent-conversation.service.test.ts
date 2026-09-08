@@ -23,6 +23,16 @@ import {
 } from './agent-conversation.service'
 
 describe('agent conversation service', () => {
+  it('sends the review package reference with text and attached materials', async () => {
+    await sendAgentConversationText('conv-1', { text: '请修改金额', reviewPackageId: 'pkg-1' }, 'key-review')
+    expect(post).toHaveBeenLastCalledWith('/agent/conversations/conv-1/messages',
+      { text: '请修改金额', reviewPackageId: 'pkg-1' }, expect.anything())
+    await sendAgentConversationText('conv-1', {
+      text: '新报价', reviewPackageId: 'pkg-1', files: [new File(['报价'], 'quote.txt')],
+    }, 'key-file')
+    const form = post.mock.lastCall?.[1] as FormData
+    expect(form.get('reviewPackageId')).toBe('pkg-1')
+  })
   beforeEach(() => {
     get.mockReset()
     post.mockReset()

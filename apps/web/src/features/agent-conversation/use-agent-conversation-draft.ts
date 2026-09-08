@@ -7,6 +7,21 @@ const DRAFT_SAVE_DEBOUNCE_MS = 600
 
 type DraftVersion = Pick<AiConversationDraftView, 'draftEpoch' | 'revision'>
 
+export function readPendingConversationDraft(conversationId: string | null): (DraftVersion & { text: string }) | null {
+  if (!conversationId) return null
+  try {
+    const value = JSON.parse(sessionStorage.getItem(`conversation-pending-draft:${conversationId}`) ?? 'null')
+    return value && typeof value.text === 'string' && Number.isInteger(value.draftEpoch) && Number.isInteger(value.revision)
+      ? value : null
+  } catch { return null }
+}
+
+export function clearPendingConversationDraft(conversationId: string | null, text: string) {
+  if (readPendingConversationDraft(conversationId)?.text === text) {
+    sessionStorage.removeItem(`conversation-pending-draft:${conversationId}`)
+  }
+}
+
 function isNewerDraftVersion(next: DraftVersion, current: DraftVersion): boolean {
   return (
     next.draftEpoch > current.draftEpoch ||
@@ -84,6 +99,9 @@ export function useAgentConversationDraft(conversationId: string | null) {
       if (!conversationIdRef.current) {
         return
       }
+      sessionStorage.setItem(`conversation-pending-draft:${conversationIdRef.current}`, JSON.stringify({
+        text: value, draftEpoch: draftEpochRef.current, revision: draftRevisionRef.current,
+      }))
       editingDraftRef.current = true
       draftSaveGenerationRef.current += 1
       const generation = draftSaveGenerationRef.current
@@ -106,6 +124,7 @@ export function useAgentConversationDraft(conversationId: string | null) {
             if (generation !== draftSaveGenerationRef.current) {
               return
             }
+            if (saved.text === value) clearPendingConversationDraft(saved.conversationId, value)
             editingDraftRef.current = false
             applyServerDraft(saved)
             const deferred = deferredDraftRef.current
@@ -129,6 +148,17 @@ export function useAgentConversationDraft(conversationId: string | null) {
     },
     [abortDraftSave, applyServerDraft],
   )
+
+  useEffect(() => {
+    const pending = readPendingConversationDraft(conversationId)
+    if (!pending) return
+    draftEpochRef.current = pending.draftEpoch
+    draftRevisionRef.current = pending.revision
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId, draftEpoch: pending.draftEpoch, revision: pending.revision, draft: pending.text,
+    })
+    updateDraft(pending.text)
+  }, [conversationId, updateDraft])
 
   useEffect(
     () => () => {

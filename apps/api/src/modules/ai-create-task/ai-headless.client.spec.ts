@@ -32,7 +32,7 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
-  it('aborts a hung downstream fetch and returns AGENT_UNAVAILABLE', async () => {
+  it('aborts a hung downstream fetch and returns MODEL_TIMEOUT', async () => {
     server = createServer(() => {
       // Intentionally never respond — the worker must not wait indefinitely.
     })
@@ -50,8 +50,8 @@ describe('AiHeadlessClient.run', () => {
     expect(result).toEqual({
       kind: 'failed',
       error: {
-        code: 'AGENT_UNAVAILABLE',
-        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        code: 'MODEL_TIMEOUT',
+        message: '模型响应超时，已保存的发团创建草稿未改动',
         retryable: true,
       },
     })
@@ -76,8 +76,8 @@ describe('AiHeadlessClient.run', () => {
     expect(result).toEqual({
       kind: 'failed',
       error: {
-        code: 'AGENT_UNAVAILABLE',
-        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        code: 'MODEL_TIMEOUT',
+        message: '模型响应超时，已保存的发团创建草稿未改动',
         retryable: true,
       },
     })
@@ -180,6 +180,51 @@ describe('AiHeadlessClient.run', () => {
     expect(publicText).toEqual(['已记下路线。', '已记下路线。日期待核对。'])
     expect(publicText.join('')).not.toContain('先核对')
     expect(publicText.join('')).not.toContain('再核人数')
+  })
+
+  it('accumulates thinking-disabled soliloquy from message.delta into the live public reply', async () => {
+    const publicText: string[] = []
+    const reasoningText: string[] = []
+    const soliloquy = '用户要建喀纳斯三日团。我先核团名、出团日期和人数，再决定是否提交审核建议。'
+    const publicReply = '已提交待审核建议，请在中间表单确认。'
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 1, text: soliloquy })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 2, text: publicReply })}\n`,
+      )
+      response.end(
+        `${JSON.stringify({
+          type: 'run.completed',
+          result: { kind: 'completed', message: `${soliloquy}${publicReply}` },
+        })}\n`,
+      )
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+
+    await expect(
+      client.run(request, 'delegation-token', {
+        onPublicText: (text) => {
+          publicText.push(text)
+        },
+        onReasoningText: (text) => {
+          reasoningText.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'completed',
+      message: `${soliloquy}${publicReply}`,
+    })
+    expect(reasoningText).toEqual([])
+    expect(publicText.at(-1)).toBe(`${soliloquy}${publicReply}`)
   })
 
   it('parses NDJSON message.delta frames and still awaits the terminal result', async () => {

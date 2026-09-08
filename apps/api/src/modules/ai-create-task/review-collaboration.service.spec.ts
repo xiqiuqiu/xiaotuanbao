@@ -47,6 +47,7 @@ describe('ReviewCollaborationService #447', () => {
       )
     }
     const tx = {
+      aiInputBatch: { findFirst: jest.fn().mockResolvedValue(null) },
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
       aiReviewPackage: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve(packages.map((pkg) => ({ ...pkg })))),
@@ -164,6 +165,7 @@ describe('ReviewCollaborationService #447', () => {
       },
     }
     const prisma = {
+      aiInputBatch: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
       aiCreateIdempotencyRecord: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -345,7 +347,7 @@ describe('ReviewCollaborationService #447', () => {
     expect(jobs).toHaveLength(0)
   })
 
-  it('writes a source order and selected guests when confirming a source-order package', async () => {
+  it.each([false, true])('writes source order and guests after confirmation (human supplied empty choices: %s)', async (humanChoices) => {
     const sourcePackage = {
       ...pendingPackage,
       payloadSchema: 'source_order.create@v1',
@@ -411,6 +413,12 @@ describe('ReviewCollaborationService #447', () => {
         },
       ],
       userCorrections: {},
+    }
+    if (humanChoices) {
+      sourcePackage.candidates = sourcePackage.candidates.filter(
+        (candidate) => !['fareAdjustments', 'discountType'].includes(candidate.fieldKey),
+      )
+      sourcePackage.userCorrections = { fareAdjustments: [], discountType: 'none' }
     }
     const { service, sourceOrders, prisma, tx } = createService({ packages: [sourcePackage] })
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({
@@ -671,6 +679,46 @@ describe('ReviewCollaborationService #447', () => {
     }))
   })
 
+  it('rejects confirmation of unresolved human correction conflicts', async () => {
+    const { service, tx } = createService({ packages: [{ ...pendingPackage,
+      baselineSnapshot: { reviewConflicts: [{ fieldKey: 'amountCents', proposedValue: 26000, userCorrectedValue: 22000 }] },
+    }] })
+    await expect(service.acceptReviewConfirmation(organizationId, userId, {
+      decisionCommandId: 'conflict-confirm', items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+    })).rejects.toThrow('尚未处理的差异')
+    expect(tx.aiWorkflowJob.upsert).not.toHaveBeenCalled()
+  })
+
+  it('rechecks revision safety when an accepted confirmation executes', async () => {
+    const { service, prisma, tx } = createService()
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1', type: AiWorkflowJobType.review_confirm, organizationId,
+      reviewPackage: pendingPackage,
+      idempotencyRecord: { operatorUserId: userId, requestSnapshot: { expectedPackageVersion: 1 } },
+      idempotencyRecordId: 'idem-1',
+    })
+    tx.aiInputBatch.findFirst.mockResolvedValue({ id: 'revision-batch' })
+    await service.executeConfirmedItem('job-1')
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ resultJson: expect.objectContaining({ status: 'conflict', reason: expect.stringContaining('助手正在核对') }) }),
+    }))
+  })
+
+  it('blocks only the referenced pending item while its revision is processing', async () => {
+    const { service, tx } = createService()
+    tx.aiInputBatch.findFirst.mockResolvedValue({ id: 'revision-batch' })
+    await expect(service.acceptReviewConfirmation(organizationId, userId, {
+      decisionCommandId: 'revision-confirm', items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+    })).rejects.toThrow('助手正在核对该事项')
+    expect(tx.aiWorkflowJob.upsert).not.toHaveBeenCalled()
+    expect(tx.aiInputBatch.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      organizationId, conversationId: 'conv-1',
+      userMessageEvent: { payload: { path: ['reviewPackageId'], equals: 'pkg-1' } },
+      status: { in: ['waiting_for_materials', 'ready_for_agent', 'preparing_context', 'agent_running', 'awaiting_user_input'] },
+    }) }))
+  })
+
   it('lists pending and disposed packages for an existing departure', async () => {
     const { service, prisma } = createService()
     prisma.conversationDepartureLink.findMany.mockResolvedValue([
@@ -688,6 +736,7 @@ describe('ReviewCollaborationService #447', () => {
       { ...pendingPackage, id: 'pkg-done', status: AiReviewPackageStatus.confirmed, itemIdentity: 'item:1' },
     ])
     prisma.aiWorkflowJob.findMany.mockResolvedValue([])
+    prisma.aiInputBatch.findMany.mockResolvedValue([{ userMessageEvent: { payload: { reviewPackageId: 'pkg-1' } } }])
 
     const view = await service.listDepartureCollaboration(
       organizationId,
@@ -696,6 +745,8 @@ describe('ReviewCollaborationService #447', () => {
       'conv-1',
     )
 
+    expect(view.items[0].confirmationBlockedReason).toContain('助手正在核对')
+    expect(view.items[1].confirmationBlockedReason).toBeUndefined()
     expect(view.departureId).toBe('departure-1')
     expect(view.conversations).toEqual([
       { id: 'conv-1', title: '发团协作', lastActivityAt: '2026-09-07T00:00:00.000Z' },

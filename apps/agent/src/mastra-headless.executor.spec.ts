@@ -26,6 +26,124 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
+  it('preserves streamed step durations in the parsed run diagnostic', async () => {
+    let now = 1000
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => now)
+    try {
+      const executor = createMastraHeadlessExecutor({
+        readUserText: async () => '整理材料',
+        stream: async () => ({
+          fullStream: (async function* () {
+            yield { type: 'step-start' }
+            now += 250
+            yield { type: 'step-finish' }
+          })(),
+          getFullOutput: async () => ({ text: '已整理', steps: [{ usage: { inputTokens: 10, outputTokens: 5 } }] }),
+        }),
+      })
+      const { result } = await collectHeadlessRun(executor(IDENTITY))
+      expect(result.diagnostic).toMatchObject({ latencyMs: 250, modelSteps: [{ stepIndex: 0, latencyMs: 250 }] })
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('keeps an accepted routing result from the stream when the final model step only returns text', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '创建指定发团',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'tool-result', payload: { toolName: 'routeConversation', toolCallId: 'route-1', result: { status: 'accepted', decision: 'propose_departure_creation', registeredIntent: { key: 'task.departure-creation.requested', confidence: 'high', goal: '创建指定发团' } } } }
+          yield { type: 'text-delta', payload: { text: '参数已确认' } }
+        })(),
+        getFullOutput: async () => ({ text: '参数已确认', toolCalls: [{ toolName: 'routeConversation', toolCallId: 'route-1' }], toolResults: [] }),
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({ result: { kind: 'registered_intent', intent: { goal: '创建指定发团' } } })
+  })
+
+  it('records streamed tool errors even when final output omits the failed result', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'tool-error', payload: { toolName: 'getMaterialParseResult', toolCallId: 'failed', error: 'private details' } }
+        })(),
+        getFullOutput: async () => ({ text: '无法读取', toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'failed' }] }),
+      }),
+    })
+    const { result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.diagnostic?.toolSteps).toMatchObject([{ status: 'failed' }])
+    expect(JSON.stringify(result)).not.toContain('private details')
+  })
+
+  it('records failed tool results by call ID, including retries of the same tool', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      generate: async () => ({ text: '已读取',
+        toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'first' }, { toolName: 'getMaterialParseResult', toolCallId: 'retry' }],
+        toolResults: [{ toolName: 'getMaterialParseResult', toolCallId: 'retry', result: { pages: [] } },
+          { toolName: 'getMaterialParseResult', toolCallId: 'first', isError: true, result: 'rejected' }],
+      }),
+    })
+    const { result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.diagnostic?.toolSteps.map((step) => step.status)).toEqual(['failed', 'succeeded'])
+  })
+
+  it('preserves source-order candidates from accepted tools through headless execution', async () => {
+    const reviewPackage = {
+      objectVersion: 1780000000000, confirmationUnit: 'source_order_create',
+      reviewPackageId: 'review-source-order', expectedPackageVersion: 3,
+      candidates: [{ fieldKey: 'adultGuestCount', proposedValue: 2, clarity: 'clear',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '两位成人' }] }],
+    }
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '两位成人',
+      generate: async () => ({ text: '请审核', toolCalls: [{ toolName: 'proposeSourceOrderReviewPackage' }],
+        toolResults: [{ toolName: 'proposeSourceOrderReviewPackage', result: { status: 'accepted', ...reviewPackage } }],
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage },
+    })
+  })
+
+  it('preserves both accepted items and deduplicates replayed tool calls', async () => {
+    const packages = ['A', 'B'].map((title) => ({
+      ...REVIEW_ARGS,
+      candidates: [{ ...REVIEW_ARGS.candidates[0], proposedValue: title }],
+    }))
+    const results = packages.map((reviewPackage, index) => ({
+      toolName: 'proposeReviewPackage', toolCallId: `proposal-${index}`,
+      result: { status: 'accepted', ...reviewPackage },
+    }))
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '分别整理 A 和 B',
+      stream: async () => ({
+        fullStream: (async function* () {
+          for (const result of results) yield { type: 'tool-result', payload: result }
+        })(),
+        getFullOutput: async () => ({ text: '请审核', toolResults: [results[1]] }),
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage: packages[0], reviewPackages: packages },
+    })
+  })
+
+  it('keeps identical proposals from distinct calls as separate accepted items', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '分别整理两项',
+      generate: async () => ({ toolResults: ['first', 'second'].map((toolCallId) => ({
+        toolName: 'proposeReviewPackage', toolCallId,
+        result: { status: 'accepted', ...REVIEW_ARGS },
+      })) }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackages: [REVIEW_ARGS, REVIEW_ARGS] },
+    })
+  })
+
   it('returns only the registered departure intent from an accepted bounded routing result', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个七月喀纳斯团',
@@ -269,7 +387,7 @@ describe('createMastraHeadlessExecutor', () => {
     })
   })
 
-  it('stays in the current attempt when proposeReviewPackage is rejected', async () => {
+  it('does not mark an unresolved rejected review as completed', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个喀纳斯3日团',
       generate: async () => ({
@@ -296,8 +414,8 @@ describe('createMastraHeadlessExecutor', () => {
 
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: {
-        kind: 'completed',
-        message: '摘录对不上冻结消息，请修正后再提。',
+        kind: 'failed',
+        error: { code: 'INVALID_FORMAT', retryable: false },
         diagnostic: {
           processorVersion: 'mastra-token-limiter-contiguous/v1',
           usageSource: 'missing',

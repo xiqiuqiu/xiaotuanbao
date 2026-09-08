@@ -7,8 +7,8 @@ import {
   nextReviewItemIdentity,
   reviewItemIdentity,
 } from '@xiaotuanbao/ai-contracts'
-import { reviewPackageCreateData } from './review-package.envelope'
-import type { ReviewPackageProposal } from './review-package.mapper'
+import { reviewPackageCreateData, departureReviewProposalHash, reviewProposalHash } from './review-package.envelope'
+import { toReviewPackageView, toStoredCandidates, reviewConfirmValues, type ReviewPackageProposal } from './review-package.mapper'
 
 const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 
@@ -39,6 +39,10 @@ export async function projectPendingReviewPackage(
   }
   if (!params.conversationId || !params.inputBatchId) {
     throw new Error('REVIEW_PACKAGE_MISSING_SOURCE')
+  }
+
+  if (params.reviewPackage.reviewPackageId) {
+    return revisePendingReviewPackage(tx, params)
   }
 
   const byAction = await tx.aiReviewPackage.findFirst({
@@ -115,6 +119,86 @@ export async function projectPendingReviewPackage(
     }
   }
   throw new Error('REVIEW_ITEM_IDENTITY_EXHAUSTED')
+}
+
+async function revisePendingReviewPackage(
+  tx: Prisma.TransactionClient,
+  params: Parameters<typeof projectPendingReviewPackage>[1],
+): Promise<string> {
+  const target = params.target ?? (await resolveReviewPackageTarget(tx, params))
+  const pkg = await tx.aiReviewPackage.findFirst({
+    where: {
+      id: params.reviewPackage.reviewPackageId,
+      organizationId: params.organizationId,
+      taskId: params.taskId,
+      conversationId: params.conversationId,
+      confirmationUnit: params.reviewPackage.confirmationUnit,
+      targetKind: target.kind,
+      targetId: target.id,
+    },
+    include: { task: { select: { ownerUserId: true } } },
+  })
+  if (!pkg?.task) throw new Error('REVIEW_PACKAGE_TASK_MISSING')
+  const decisionCommandId = `agent-revise:${params.sourceActionId}`
+  const replay = await tx.aiReviewRecord.findFirst({
+    where: { packageId: pkg.id, organizationId: params.organizationId, decisionCommandId },
+    select: { id: true },
+  })
+  if (replay) return pkg.id
+  if (pkg.status !== 'pending' || pkg.version !== params.reviewPackage.expectedPackageVersion || target.version !== params.reviewPackage.objectVersion) {
+    throw new Error('VERSION_CONFLICT')
+  }
+  const before = toReviewPackageView(pkg)
+  if (!before.schemaSupported) throw new Error('REVIEW_PACKAGE_SCHEMA_UNSUPPORTED')
+  const { corrections, submissions: beforeValues } = reviewConfirmValues(before.candidates)
+  const candidates = new Map(toStoredCandidates(before.candidates.filter((candidate) => candidate.evidence.length > 0)).map((candidate) => [candidate.fieldKey, candidate]))
+  const conflicts = new Map((before.conflicts ?? []).map((conflict) => [conflict.fieldKey, conflict]))
+  for (const candidate of toStoredCandidates(params.reviewPackage.candidates)) {
+    const previous = candidates.get(candidate.fieldKey)
+    const hasCorrection = Object.hasOwn(corrections, candidate.fieldKey)
+    const agreesWithCorrection = hasCorrection && reviewProposalHash(candidate.proposedValue) === reviewProposalHash(corrections[candidate.fieldKey])
+    if (agreesWithCorrection) conflicts.delete(candidate.fieldKey)
+    else if (hasCorrection && (conflicts.has(candidate.fieldKey) || reviewProposalHash(previous?.proposedValue ?? null) !== reviewProposalHash(candidate.proposedValue))) {
+      conflicts.set(candidate.fieldKey, { fieldKey: candidate.fieldKey, proposedValue: candidate.proposedValue, userCorrectedValue: corrections[candidate.fieldKey] })
+    }
+    candidates.set(candidate.fieldKey, candidate)
+  }
+  const nextCandidates = [...candidates.values()]
+  const afterValues = { ...Object.fromEntries(nextCandidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue])), ...corrections }
+  const baseline = pkg.baselineSnapshot && typeof pkg.baselineSnapshot === 'object' && !Array.isArray(pkg.baselineSnapshot) ? pkg.baselineSnapshot : {}
+  const updated = await tx.aiReviewPackage.updateMany({
+    where: { id: pkg.id, organizationId: params.organizationId, status: 'pending', version: pkg.version },
+    data: {
+      version: { increment: 1 },
+      sourceActionId: params.sourceActionId,
+      attemptId: params.attemptId,
+      baseObjectVersion: target.version,
+      proposalHash: departureReviewProposalHash({ ...params.reviewPackage, candidates: nextCandidates }),
+      candidates: nextCandidates as unknown as Prisma.InputJsonValue,
+      userCorrections: corrections as Prisma.InputJsonValue,
+      baselineSnapshot: { ...baseline, reviewConflicts: [...conflicts.values()] } as Prisma.InputJsonValue,
+    },
+  })
+  if (updated.count !== 1) throw new Error('VERSION_CONFLICT')
+  await tx.aiReviewRecord.create({
+    data: {
+      organizationId: params.organizationId,
+      packageId: pkg.id,
+      operatorUserId: pkg.task.ownerUserId,
+      action: 'revise',
+      decisionCommandId,
+      packageVersion: pkg.version + 1,
+      originalCandidates: pkg.candidates as Prisma.InputJsonValue,
+      userCorrections: corrections as Prisma.InputJsonValue,
+      submittedValues: afterValues as Prisma.InputJsonValue,
+      beforeSnapshot: beforeValues as Prisma.InputJsonValue,
+      afterSnapshot: afterValues as Prisma.InputJsonValue,
+      evidence: nextCandidates.flatMap((candidate) => candidate.evidence) as Prisma.InputJsonValue,
+      objectVersion: target.version,
+      writeResult: 'success',
+    },
+  })
+  return pkg.id
 }
 
 export async function projectPendingReviewPackages(

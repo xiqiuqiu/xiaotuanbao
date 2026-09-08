@@ -11,6 +11,10 @@ describe('mapAgentFetchError', () => {
     expect(mapAgentFetchError({ code: 'REVIEW_PENDING' }).code).toBe('REVIEW_PENDING')
   })
 
+  it.each([400, 404, 422])('does not report HTTP %s request rejection as an outage', (status) => {
+    expect(mapAgentFetchError({ status })).toMatchObject({ code: 'INVALID_FORMAT', retryable: false })
+  })
+
   it('maps transport failures to AGENT_UNAVAILABLE', () => {
     expect(mapAgentFetchError(new Error('network'))).toMatchObject({
       code: 'AGENT_UNAVAILABLE',

@@ -39,7 +39,7 @@ export async function fetchConversationSource(
   } | null
 
   if (!response.ok) {
-    throw mapAgentFetchError(payload?.data ?? { status: response.status })
+    throw mapAgentFetchError(payload?.data, response.status)
   }
 
   return readConversationSourceOutputSchema.parse(payload?.data)

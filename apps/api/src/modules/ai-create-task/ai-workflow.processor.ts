@@ -32,6 +32,7 @@ import {
   DEPARTURE_COLLABORATION_INSTRUCTIONS,
   departureCollaborationCapabilityDefinitionRegistry,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
+  SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
@@ -100,7 +101,7 @@ import {
   type AgentExecutionRoutingInput,
   type FrozenAgentAssociation,
 } from './agent-execution-router'
-import { lockConversationRuntime } from './ai-create-task.lock'
+import { lockAiCreateTask, lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
@@ -902,6 +903,9 @@ export class AiWorkflowProcessor {
       },
       ...(pageAttachment ? { pageAttachment } : {}),
     }
+    // A task created by this batch owns its continuation, even if the batch began on another task.
+    const createdTask = input.associations.taskRefs.find((ref) => ref.role === InputBatchTaskRole.created && ref.taskId === job.taskId)
+    if (createdTask) input.associations = { taskRefs: [createdTask] }
     return {
       route: this.executionRouter.route(input),
       input,
@@ -1391,6 +1395,23 @@ export class AiWorkflowProcessor {
         },
         ...(pageAttachment ? { page: pageAttachment.facts } : {}),
       }
+      const pendingReviews = await tx.aiReviewPackage.findMany({
+        where: {
+          organizationId: job.organizationId,
+          conversationId: job.conversationId,
+          taskId,
+          status: AiReviewPackageStatus.pending,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, version: true, confirmationUnit: true, candidates: true, userCorrections: true },
+      })
+      const messagePayload = userEvent.payload as Record<string, unknown>
+      const unresolvedState = {
+        hasPendingReview: pendingReviews.length > 0,
+        reviewPackageId: messagePayload.reviewPackageId ?? null,
+        expectedPackageVersion: messagePayload.expectedPackageVersion ?? null,
+        pendingReviews,
+      }
       const availableToolNames = [...DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES]
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
@@ -1404,7 +1425,7 @@ export class AiWorkflowProcessor {
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState,
         modelId,
         toolNames: availableToolNames,
         systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
@@ -1427,7 +1448,7 @@ export class AiWorkflowProcessor {
         toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
         currentUserText: modelInput.currentUserText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState,
         projection: withSourceIndexTruncation(
           preparedProjection.projection,
           modelInput.truncationReasons,
@@ -1531,6 +1552,8 @@ export class AiWorkflowProcessor {
         entitlementStatus: 'unavailable',
         objectScopes: [
           { organizationId: job.organizationId, kind: 'agent_task', id: taskId },
+          // getTaskContext retains its legacy scope name; it binds this formal collaboration task, not a draft.
+          { organizationId: job.organizationId, kind: 'ai_create_task', id: taskId },
           { organizationId: job.organizationId, kind: 'agent_conversation', id: job.conversationId },
         ],
       })
@@ -1904,12 +1927,14 @@ export class AiWorkflowProcessor {
         })
         return
       }
-      await this.scheduleRetry(job, errorCode, attemptId)
+      await this.scheduleRetry(job, errorCode, attemptId, result)
       return
     }
     if (result.kind === 'registered_intent') {
       const intentRoute = this.executionRouter.route({
         ...routingInput,
+        // A newly registered goal is a new task proposal, not a continuation of the old task.
+        associations: { taskRefs: [] },
         registeredIntent: result.intent,
       })
       if (intentRoute.kind === 'task_creation_proposal') {
@@ -1935,6 +1960,9 @@ export class AiWorkflowProcessor {
 
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
+      if (job.taskId) {
+        await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      }
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       if (!(await this.ownsClaimedJob(tx, job.id))) {
         return
@@ -1967,7 +1995,8 @@ export class AiWorkflowProcessor {
           : result.kind === 'awaiting_user_input'
             ? result.interaction.prompt
             : result.kind === 'awaiting_review' &&
-                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+                (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT)
               ? '已提交待审核建议，请在右侧审核确认。'
               : '已提交待审核建议，请在中间表单确认。'
       const interactionId =
@@ -1988,10 +2017,13 @@ export class AiWorkflowProcessor {
             }
           : null
 
-      const reviewPackageId =
-        result.kind === 'awaiting_review' && job.taskId
-          ? await this.projectReviewPackageViaGateway(tx, job, attemptId, result.reviewPackage)
-          : null
+      const reviewPackageIds: string[] = []
+      if (result.kind === 'awaiting_review' && job.taskId) {
+        for (const proposal of result.reviewPackages ?? [result.reviewPackage]) {
+          reviewPackageIds.push(await this.projectReviewPackageViaGateway(tx, job, attemptId, proposal))
+        }
+      }
+      const reviewPackageId = reviewPackageIds[0] ?? null
       const reviewPackageCoordinates = reviewPackageId
         ? await tx.aiReviewPackage.findUniqueOrThrow({
             where: { id: reviewPackageId },
@@ -2009,13 +2041,15 @@ export class AiWorkflowProcessor {
           attemptId,
           ...(job.taskId ? { taskId: job.taskId } : {}),
           ...(result.kind === 'awaiting_review' &&
-          result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
+          (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT)
             ? { taskType: DEPARTURE_COLLABORATION_TASK_TYPE }
             : {}),
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
           ...(reviewPackageId
             ? {
                 reviewPackageId,
+                reviewPackageIds,
                 payloadSchema: reviewPackageCoordinates?.payloadSchema,
                 confirmationUnit: reviewPackageCoordinates?.confirmationUnit,
                 fieldKeys:
@@ -2023,7 +2057,8 @@ export class AiWorkflowProcessor {
                     ? result.reviewPackage.candidates.map((candidate) => candidate.fieldKey)
                     : undefined,
                 ...(result.kind === 'awaiting_review' &&
-                result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT &&
+                (result.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
+                result.reviewPackage.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT) &&
                 reviewPackageCoordinates?.targetId
                   ? { departureId: reviewPackageCoordinates.targetId }
                   : {}),
@@ -2521,6 +2556,7 @@ export class AiWorkflowProcessor {
     job: ClaimedJob,
     errorCode: string,
     attemptId?: string,
+    result?: HeadlessExecutionResult,
   ): Promise<void> {
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       if (job.type === AiWorkflowJobType.material_parse) {
@@ -2546,6 +2582,7 @@ export class AiWorkflowProcessor {
       return
     }
     const delayMs = workflowBackoffMs(job.attemptCount)
+    let retryEventId: string | undefined
     await this.prisma.$transaction(async (tx) => {
       if (!(await this.ownsClaimedJob(tx, job.id))) {
         return
@@ -2556,10 +2593,20 @@ export class AiWorkflowProcessor {
           data: {
             status: AiAgentAttemptStatus.failed,
             errorCode,
-            ...attemptDiagnosticUpdate(),
+            ...attemptDiagnosticUpdate(result),
             endedAt: new Date(),
           },
         })
+      }
+      if (job.type === AiWorkflowJobType.agent_batch) {
+        const event = await this.conversationService.appendEvent(tx, {
+          organizationId: job.organizationId,
+          conversationId: job.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: { batchId: job.inputBatchId, status: 'ready_for_agent', reason: 'retry_scheduled',
+            errorCode, retryAttempt: job.attemptCount, retryDelayMs: delayMs },
+        })
+        retryEventId = event.id
       }
       await tx.aiWorkflowJob.update({
         where: { id: job.id },
@@ -2573,6 +2620,10 @@ export class AiWorkflowProcessor {
         },
       })
     })
+    if (retryEventId) {
+      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: retryEventId } })
+      if (event) this.conversationService.publish(job.conversationId, event)
+    }
     this.workflowLog('retry_scheduled', {
       job: job.id,
       type: job.type,
@@ -2724,6 +2775,16 @@ export class AiWorkflowProcessor {
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
+    }
+    const userEvent = await tx.aiConversationEvent.findUniqueOrThrow({
+      where: { id: job.inputBatch.userMessageEventId },
+      select: { payload: true },
+    })
+    const messagePayload = userEvent.payload as Record<string, unknown>
+    if (typeof messagePayload.reviewPackageId === 'string' &&
+        (reviewPackage.reviewPackageId !== messagePayload.reviewPackageId ||
+         reviewPackage.expectedPackageVersion !== messagePayload.expectedPackageVersion)) {
+      throw new Error('REVIEW_PACKAGE_REFERENCE_MISMATCH')
     }
     const taskId = job.taskId
     const attempt = await tx.aiAgentAttempt.findUniqueOrThrow({

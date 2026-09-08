@@ -358,16 +358,17 @@ export class DepartureMaterialService {
       where: { organizationId, conversationId },
       orderBy: { createdAt: 'asc' },
       include: {
+        batchSources: { where: { organizationId, inputBatch: { conversationId, organizationId } }, select: { inputBatch: { select: { userMessageEvent: { select: { sequence: true } } } } } },
         parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
       },
     })
     return sources.map((source) =>
-      toSourceView(
+      ({ ...toSourceView(
         source,
         source.parseRuns[0]?.status === ConversationSourceParseRunStatus.succeeded
           ? source.parseRuns[0].resultVersion
           : null,
-      ),
+      ), userMessageSequences: source.batchSources.map((link) => link.inputBatch.userMessageEvent.sequence) }),
     )
   }
 

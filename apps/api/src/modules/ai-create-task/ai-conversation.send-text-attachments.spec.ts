@@ -168,6 +168,7 @@ function createHarness(options?: {
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   }
   const aiWorkflowJob = {
+    findFirst: jest.fn().mockResolvedValue(null),
     upsert: jest.fn(async ({ create }: { create: Record<string, unknown> }) => ({
       id: 'job-1',
       status: AiWorkflowJobStatus.pending,
@@ -193,6 +194,7 @@ function createHarness(options?: {
   }
 
   const tx = {
+    aiReviewPackage: { findFirst: jest.fn().mockResolvedValue({ id: 'pkg-1', taskId, version: 2, status: 'pending' }) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     aiCreateTask,
     aiConversation,
@@ -294,6 +296,27 @@ function createHarness(options?: {
 }
 
 describe('AiConversationService.sendText attachment upload', () => {
+  it('persists the validated review target in taskless input and scopes ownership', async () => {
+    const { service, tx } = createHarness()
+    await service.sendTasklessText(organizationId, userId, conversationId, '请核对金额', 'target-input', {}, [], undefined, undefined, 'pkg-1')
+    expect(tx.aiReviewPackage.findFirst).toHaveBeenCalledWith({ where: {
+      id: 'pkg-1', organizationId, conversationId, task: { ownerUserId: userId, organizationId },
+    } })
+    expect(tx.aiConversationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      kind: 'user_message', payload: expect.objectContaining({ reviewPackageId: 'pkg-1', expectedPackageVersion: 2 }),
+    }) }))
+  })
+
+  it('rejects a cross-conversation or disposed target before creating a message', async () => {
+    const { service, tx } = createHarness()
+    tx.aiReviewPackage.findFirst.mockResolvedValue(null)
+    await expect(service.sendTasklessText(organizationId, userId, conversationId, '请核对', 'target-missing', {}, [], undefined, undefined, 'other-pkg')).rejects.toThrow('引用的审核事项不存在')
+    expect(tx.aiConversationEvent.create).not.toHaveBeenCalled()
+    tx.aiReviewPackage.findFirst.mockResolvedValue({ id: 'pkg-1', taskId, version: 2, status: 'confirmed' })
+    await expect(service.sendText(organizationId, userId, taskId, conversationId, '请核对', 'target-done', [], {}, 'pkg-1')).rejects.toThrow('仅待审核事项')
+    expect(tx.aiConversationEvent.create).not.toHaveBeenCalled()
+  })
+
   it('uploads attachments before opening the conversation transaction', async () => {
     const { service, storedObjectService, callOrder } = createHarness()
 

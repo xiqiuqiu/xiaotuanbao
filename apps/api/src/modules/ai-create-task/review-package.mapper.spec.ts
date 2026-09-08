@@ -170,3 +170,19 @@ describe('toReviewPackageView user provenance', () => {
     expect(view.candidates).toEqual([])
   })
 })
+
+it('includes validated human additions absent from model candidates without inventing evidence', () => {
+  const candidates = [{ fieldKey: 'adultGuestCount', proposedValue: 2, clarity: 'clear', status: 'pending',
+    evidence: [{ kind: 'user_message', sequence: 1, excerpt: '两位成人' }] }]
+  const view = toReviewPackageView({ id: 'source-pkg', status: 'pending', confirmationUnit: 'source_order_create',
+    payloadSchema: 'source_order.create@v1', targetKind: 'departure', targetId: 'departure-1',
+    baseObjectVersion: 1780000000000, version: 3, baselineSnapshot: {}, candidates,
+    userCorrections: { adultGuestCount: 3, guests: [{ name: '验收游客甲', included: true }], unexpected: 'drop' },
+  })
+  expect(view.schemaSupported).toBe(true)
+  expect(view.candidates).toHaveLength(2)
+  expect(view.candidates[0]).toMatchObject({ proposedValue: 2, userCorrectedValue: 3 })
+  expect(view.candidates[1]).toMatchObject({ fieldKey: 'guests', proposedValue: null,
+    userCorrectedValue: [{ name: '验收游客甲', included: true }], evidence: [] })
+  expect(candidates).toHaveLength(1)
+})

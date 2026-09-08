@@ -673,7 +673,7 @@ function FareAdjustmentViewRow({
   )
 }
 
-function FareAdjustmentsEditor({
+export function FareAdjustmentsEditor({
   value,
   onChange,
   lockAmounts,

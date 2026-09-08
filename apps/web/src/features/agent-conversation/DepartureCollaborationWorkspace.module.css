@@ -1,0 +1,328 @@
+.surface {
+  position: relative;
+  width: 0;
+  flex: none;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+.surface[data-open] {
+  width: 480px;
+  border-left: 1px solid var(--ant-color-border-secondary);
+}
+.conversation {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 480px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ant-color-bg-container);
+}
+.chat {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.entry {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+.surface[data-expanded] {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  width: 100%;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 240px minmax(360px, 0.95fr) minmax(420px, 1.15fr);
+  border: 0;
+}
+.surface[data-expanded] .conversation {
+  position: relative;
+  inset: auto;
+  width: auto;
+  min-width: 0;
+}
+.objects,
+.review {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.objects {
+  border-right: 1px solid var(--ant-color-border-secondary);
+}
+.review {
+  border-left: 1px solid var(--ant-color-border-secondary);
+}
+.heading {
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+.heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.objectBody,
+.reviewBody {
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 16px 88px;
+}
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+}
+.summary span,
+.context {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+.categories {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block: 20px;
+}
+.categories button {
+  text-align: left;
+  justify-content: start;
+}
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.history button {
+  height: auto;
+  text-align: left;
+  white-space: normal;
+  justify-content: start;
+}
+.categories button[aria-pressed='true'],
+.history button[aria-pressed='true'] {
+  background: var(--ant-control-item-bg-active);
+  color: var(--ant-color-primary);
+}
+.empty {
+  margin: 64px 16px;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+}
+.objectBody h3,
+.reviewBody h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+@media (max-width: 767px) {
+  .surface[data-open]:not([data-expanded]) {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    z-index: 1000;
+  }
+  .conversation {
+    width: 100%;
+  }
+}
+
+.objects[hidden],
+.review[hidden],
+.reviewBody > [hidden] {
+  display: none;
+}
+
+.heading strong,
+.summary strong,
+.snapshot strong {
+  font-weight: 600;
+}
+.heading > button {
+  flex: none;
+}
+.summary {
+  overflow-wrap: anywhere;
+}
+.historyTitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.evidence {
+  margin-block: 16px;
+  overflow-wrap: anywhere;
+}
+.compactNavigation {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .surface[data-expanded] {
+    display: flex;
+    flex-direction: column;
+  }
+  .compactNavigation {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--ant-color-border-secondary);
+  }
+  .compactNavigation > :first-child {
+    flex: 1;
+  }
+  .surface[data-expanded] > .objects,
+  .surface[data-expanded] > .conversation,
+  .surface[data-expanded] > .review {
+    display: none;
+    flex: 1;
+    border: 0;
+  }
+  .surface[data-panel='业务对象'][data-expanded] > .objects,
+  .surface[data-panel='来源会话'][data-expanded] > .conversation,
+  .surface[data-panel='事项与审核'][data-expanded] > .review {
+    display: flex;
+  }
+  .surface[data-expanded] .conversation .heading > button {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .surface :global(.ant-btn),
+  .compactNavigation :global(.ant-segmented-item-label) {
+    min-height: 44px;
+  }
+  .surface :global(.ant-select),
+  .surface :global(.ant-input-number),
+  .surface :global(input.ant-input) {
+    min-height: 44px;
+  }
+}
+
+.reviewItem {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.reviewItem > .context {
+  flex: none;
+}
+
+@media (max-width: 767px) {
+  .surface :global([data-testid='copilot-send-button']),
+  .surface :global([data-testid='copilot-add-menu-button']) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.objects {
+  background: var(--ant-color-fill-alter);
+}
+.summary {
+  background: var(--ant-color-bg-container);
+}
+.heading strong {
+  font-size: 16px;
+}
+.context {
+  margin: 0 0 12px;
+}
+.evidence {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+.reviewBody {
+  container-type: inline-size;
+}
+
+/* v6 Typography secondary defaults to description gray; business copy needs the text token. */
+.surface :global(.ant-typography-secondary),
+.surface input::placeholder,
+.surface textarea::placeholder {
+  color: var(--ant-color-text-secondary);
+  opacity: 1;
+}
+
+.items {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.items .itemTabsHeader {
+  margin: 0;
+  padding-inline: 16px;
+  flex: none;
+}
+.itemTabsBody {
+  height: 100%;
+  min-height: 0;
+}
+.itemTabsBody > div {
+  height: 100%;
+}
+.itemTabContent {
+  height: 100%;
+}
+.itemTabContent[aria-hidden='false'] {
+  display: flex;
+  flex-direction: column;
+}
+.snapshot {
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.snapshot :global(.ant-descriptions-item-label) {
+  width: 112px;
+}
+.snapshot :global(.ant-descriptions-item-content) {
+  min-width: 0;
+}
+.snapshot :global(.ant-descriptions-view) {
+  overflow: auto;
+}
+.snapshot :global(.ant-typography) {
+  margin-top: 12px;
+}
+.evidence {
+  flex: none;
+}
+
+.items :global(.ant-tabs-tab):has([data-filtered]),
+:global(.ant-tabs-dropdown-menu-item):has([data-filtered]) {
+  display: none;
+}
+
+.evidence :global(.ant-descriptions-item-label) {
+  width: 104px;
+}
+
+.itemTitle {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.items[data-visible-count='1'] :global(.ant-tabs-nav-operations) {
+  display: none;
+}

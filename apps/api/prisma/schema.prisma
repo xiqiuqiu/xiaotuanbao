@@ -1382,7 +1382,7 @@ model AiReviewPackage {
   targetId           String                @default("") @map("target_id")
   proposalHash       String                @default("") @map("proposal_hash")
   itemIdentity       String                @default("item:0") @map("item_identity")
-  baseObjectVersion  Int                   @map("base_object_version")
+  baseObjectVersion  Float                 @map("base_object_version") @db.DoublePrecision
   baselineSnapshot   Json                  @map("baseline_snapshot")
   candidates         Json
   userCorrections    Json                  @default("{}") @map("user_corrections")
@@ -1423,7 +1423,7 @@ model AiReviewRecord {
   beforeSnapshot     Json?               @map("before_snapshot")
   afterSnapshot      Json?               @map("after_snapshot")
   evidence           Json
-  objectVersion      Int                 @map("object_version")
+  objectVersion      Float               @map("object_version") @db.DoublePrecision
   writeResult        AiReviewWriteResult @map("write_result")
   conflictFields     Json?               @map("conflict_fields")
   createdAt          DateTime            @default(now()) @map("created_at")

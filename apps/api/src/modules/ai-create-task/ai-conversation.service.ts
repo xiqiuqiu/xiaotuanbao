@@ -31,6 +31,7 @@ import {
   AgentTaskType,
   AiAgentAttemptStatus,
   AiInputBatchStatus,
+  AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   ConversationSourceStatus,
@@ -38,6 +39,7 @@ import {
   TaskActivityKind,
   type AgentTask,
   type AiConversation,
+  type AiInputBatch,
   type AiConversationDraft,
   type AiConversationEvent,
   type AiConversationInteraction,
@@ -97,6 +99,7 @@ import {
   type ConversationReplyInput,
 } from './ai-conversation.interaction'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import {
   lockAiCreateSender,
   lockAiCreateTask,
@@ -241,6 +244,7 @@ export class AiConversationService {
     files: IncomingMaterialFile[] = [],
     pageLocatorInput?: unknown,
     requestedPrimaryTaskId?: string,
+    reviewPackageId?: string,
   ): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(idempotencyKey)
     const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
@@ -262,6 +266,7 @@ export class AiConversationService {
     const hash = requestHash({
       conversationId: conversationId ?? null,
       text: trimmed,
+      ...(reviewPackageId ? { reviewPackageId } : {}),
       replyToEventId: reply.replyToEventId ?? null,
       interactionId: reply.interactionId ?? null,
       interactionVersion: reply.interactionVersion ?? null,
@@ -304,6 +309,10 @@ export class AiConversationService {
     let committed = false
     try {
     const result = await this.prisma.$transaction(async (tx) => {
+      if (reviewPackageId && !conversationId) throw new BadRequestException('引用审核事项必须指定会话')
+      const targetReview = reviewPackageId
+        ? await this.lockTargetReview(tx, organizationId, userId, conversationId!, reviewPackageId)
+        : null
       let conversation: AiConversation
       if (conversationId) {
         await lockConversationRuntime(tx, organizationId, conversationId)
@@ -416,6 +425,7 @@ export class AiConversationService {
           kind: AiConversationEventKind.user_message,
           payload: {
             text: messageText,
+            ...(targetReview ? { reviewPackageId: targetReview.id, expectedPackageVersion: targetReview.version } : {}),
             ...(attachments.length > 0
               ? {
                   attachments: attachments.map((file) => ({
@@ -1045,6 +1055,30 @@ export class AiConversationService {
     return { status: 'idle' }
   }
 
+  private async lockTargetReview(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    packageId: string,
+  ) {
+    const where = {
+      id: packageId, organizationId, conversationId,
+      task: { ownerUserId: userId, organizationId },
+    }
+    const target = await tx.aiReviewPackage.findFirst({ where })
+    if (!target?.taskId) throw new NotFoundException('引用的审核事项不存在')
+    await lockAiCreateTask(tx, organizationId, target.taskId)
+    const current = await tx.aiReviewPackage.findFirst({ where })
+    if (!current || current.status !== AiReviewPackageStatus.pending) {
+      throw new ConflictException('仅待审核事项可交给助手核对，请刷新后重试')
+    }
+    if (await findInFlightReviewConfirmJob(tx, packageId)) {
+      throw new ConflictException('该事项正在确认中，暂不可修订')
+    }
+    return current
+  }
+
   async sendText(
     organizationId: string,
     userId: string,
@@ -1054,6 +1088,7 @@ export class AiConversationService {
     idempotencyKey: string | undefined,
     files: IncomingMaterialFile[] = [],
     reply: ConversationReplyInput = {},
+    reviewPackageId?: string,
   ): Promise<SendAiConversationMessageResult> {
     await this.assertAssistAccess(userId)
     const key = idempotencyKey?.trim()
@@ -1076,6 +1111,7 @@ export class AiConversationService {
       taskId,
       conversationId,
       text: trimmed,
+      ...(reviewPackageId ? { reviewPackageId } : {}),
       replyToEventId: reply.replyToEventId ?? null,
       interactionId: reply.interactionId ?? null,
       interactionVersion: reply.interactionVersion ?? null,
@@ -1117,6 +1153,9 @@ export class AiConversationService {
     let committed = false
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        const targetReview = reviewPackageId
+          ? await this.lockTargetReview(tx, organizationId, userId, conversationId, reviewPackageId)
+          : null
         await lockConversationRuntime(tx, organizationId, conversationId)
         await lockAiCreateSender(tx, organizationId, userId)
         const task = await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
@@ -1195,6 +1234,7 @@ export class AiConversationService {
             kind: AiConversationEventKind.user_message,
             payload: {
               text: messageText,
+              ...(targetReview ? { reviewPackageId: targetReview.id, expectedPackageVersion: targetReview.version } : {}),
               attachments: attachments.map((file) => ({
                 filename: file.originalname,
                 contentType: (file.mimetype ?? '').toLowerCase(),
@@ -1738,6 +1778,7 @@ export class AiConversationService {
             status: AiInputBatchStatus.cancelled,
             reason: 'queue_retracted',
             retractedUserMessageSequence: batch.conversationVersion,
+            ...(typeof userPayload.reviewPackageId === 'string' ? { reviewPackageId: userPayload.reviewPackageId } : {}),
           },
         })
         return { batch: updated, events: [statusEvent], draft }
@@ -2007,35 +2048,68 @@ export class AiConversationService {
       disposition: 'confirmed' | 'rejected'
     },
   ): Promise<AiConversationEvent[]> {
-    const batch = params.inputBatchId
-      ? await tx.aiInputBatch.findFirst({
-          where: {
-            id: params.inputBatchId,
-            taskLinks: { some: { taskId: params.taskId } },
-            organizationId: params.organizationId,
-            status: AiInputBatchStatus.awaiting_review,
-          },
-        })
-      : await tx.aiInputBatch.findFirst({
-          where: {
-            taskLinks: { some: { taskId: params.taskId } },
-            organizationId: params.organizationId,
-            status: AiInputBatchStatus.awaiting_review,
-          },
-          orderBy: { conversationVersion: 'desc' },
-        })
-    if (!batch) {
-      return []
+    const pkg = await tx.aiReviewPackage.findFirst({
+      where: { id: params.reviewPackageId, organizationId: params.organizationId, taskId: params.taskId },
+      select: { conversationId: true },
+    })
+    if (!pkg?.conversationId) return []
+    const messages = await tx.aiConversationEvent.findMany({
+      where: { organizationId: params.organizationId, conversationId: pkg.conversationId, kind: AiConversationEventKind.agent_message },
+      select: { payload: true },
+    })
+    const packagesByBatch = new Map<string, Set<string>>()
+    for (const { payload } of messages) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.batchId !== 'string') continue
+      const ids = packagesByBatch.get(payload.batchId) ?? new Set<string>()
+      if (typeof payload.reviewPackageId === 'string') ids.add(payload.reviewPackageId)
+      if (Array.isArray(payload.reviewPackageIds)) {
+        for (const id of payload.reviewPackageIds) if (typeof id === 'string') ids.add(id)
+      }
+      packagesByBatch.set(payload.batchId, ids)
     }
+    const affectedIds = [...packagesByBatch].filter(([, ids]) => ids.size > 0).map(([id]) => id)
+    if (params.inputBatchId) affectedIds.push(params.inputBatchId)
+    const batches = await tx.aiInputBatch.findMany({
+      where: {
+        organizationId: params.organizationId, conversationId: pkg.conversationId,
+        taskLinks: { some: { taskId: params.taskId } },
+        status: AiInputBatchStatus.awaiting_review,
+        ...(affectedIds.length ? { id: { in: affectedIds } } : {}),
+      },
+      orderBy: { conversationVersion: affectedIds.length ? 'asc' : 'desc' },
+      ...(!affectedIds.length ? { take: 1 } : {}),
+    })
+    const events: AiConversationEvent[] = []
+    for (const batch of batches) {
+      events.push(...await this.finalizeReviewBatch(tx, params, batch, [...(packagesByBatch.get(batch.id) ?? [])],
+        !events.some((event) => (event.payload as Record<string, unknown>).status === AiInputBatchStatus.ready_for_agent)))
+    }
+    return events
+  }
 
+  private async finalizeReviewBatch(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string; taskId: string; userId: string; reviewPackageId: string
+      inputBatchId: string | null; disposition: 'confirmed' | 'rejected'
+    },
+    batch: AiInputBatch,
+    referencedIds: string[],
+    allowContinuation: boolean,
+  ): Promise<AiConversationEvent[]> {
     const remainingPending = await tx.aiReviewPackage.count({
       where: {
-        inputBatchId: batch.id,
+        OR: [{ inputBatchId: batch.id }, { id: { in: referencedIds } }],
         organizationId: params.organizationId,
         status: 'pending',
         id: { not: params.reviewPackageId },
       },
     })
+    const directlyAffected = batch.id === params.inputBatchId || referencedIds.includes(params.reviewPackageId)
+    if (!directlyAffected && remainingPending > 0) return []
+    const reviewPayload = directlyAffected
+      ? { reviewPackageId: params.reviewPackageId, disposition: params.disposition }
+      : { reason: 'review_items_completed' }
     const task = await tx.agentTask.findFirst({
       where: { id: params.taskId, organizationId: params.organizationId },
       select: { type: true },
@@ -2046,7 +2120,7 @@ export class AiConversationService {
       disposition: params.disposition,
     })
 
-    await tx.taskActivity.create({
+    if (directlyAffected) await tx.taskActivity.create({
       data: {
         organizationId: params.organizationId,
         taskId: params.taskId,
@@ -2066,8 +2140,7 @@ export class AiConversationService {
         payload: {
           batchId: batch.id,
           status: AiInputBatchStatus.awaiting_review,
-          reviewPackageId: params.reviewPackageId,
-          disposition: params.disposition,
+          ...reviewPayload,
         },
       })
       await tx.aiConversation.update({
@@ -2081,10 +2154,15 @@ export class AiConversationService {
       where: { id: batch.id },
       data: { status: AiInputBatchStatus.completed },
     })
-    await tx.agentTask.updateMany({
-      where: { id: params.taskId, status: AgentTaskStatus.waiting },
-      data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+    const taskPending = await tx.aiReviewPackage.count({
+      where: { organizationId: params.organizationId, taskId: params.taskId, status: AiReviewPackageStatus.pending },
     })
+    if (taskPending === 0) {
+      await tx.agentTask.updateMany({
+        where: { id: params.taskId, status: AgentTaskStatus.waiting },
+        data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+      })
+    }
     const statusEvent = await this.appendEvent(tx, {
       organizationId: params.organizationId,
       conversationId: batch.conversationId,
@@ -2092,12 +2170,11 @@ export class AiConversationService {
       payload: {
         batchId: batch.id,
         status: AiInputBatchStatus.completed,
-        reviewPackageId: params.reviewPackageId,
-        disposition: params.disposition,
+        ...reviewPayload,
       },
     })
     const events = [statusEvent]
-    if (followUp !== 'complete_with_continuation') {
+    if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected) {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
         data: { updatedAt: new Date() },
@@ -2943,7 +3020,13 @@ export class AiConversationService {
       const resolvedTaskId = params.taskId ?? primaryTaskId(batch)
       if (resolvedTaskId) {
         await this.assertAssistAccess(params.userId)
-        await this.findOwnedInProgressTask(params.organizationId, params.userId, resolvedTaskId, tx)
+        await this.resolvePrimaryDepartureTask(
+          tx,
+          params.organizationId,
+          params.userId,
+          conversation.id,
+          resolvedTaskId,
+        )
       }
       const record = await tx.aiCreateIdempotencyRecord.upsert({
         where: {

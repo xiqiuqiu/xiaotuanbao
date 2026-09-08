@@ -100,4 +100,20 @@ describe('createProposeSegmentResourceReviewTool', () => {
       },
     )
   })
+  it('forwards paired revision identity and rejects incomplete metadata', async () => {
+    const tool = createProposeSegmentResourceReviewTool(toolConfig)
+    const revision = { reviewPackageId: 'review-1', expectedPackageVersion: 2 }
+    await runWithAssistRequestContext(
+      { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
+      () => tool.execute?.({ ...modelInput, ...revision }, {} as never),
+    )
+    expect(mockSubmit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining(revision))
+    mockSubmit.mockClear()
+    await expect(runWithAssistRequestContext(
+      { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
+      () => tool.execute?.({ ...modelInput, reviewPackageId: 'review-1' }, {} as never),
+    )).rejects.toMatchObject({ code: 'INVALID_FORMAT' })
+    expect(mockSubmit).not.toHaveBeenCalled()
+  })
+
 })

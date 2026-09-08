@@ -127,7 +127,12 @@ function createService(options?: { segmentId?: string | null }) {
       ),
     },
     aiAction: { create: writes.actionCreate, findFirst: jest.fn(), count: jest.fn() },
-    aiReviewPackage: { create: writes.reviewCreate, findFirst: jest.fn(), count: jest.fn() },
+    aiReviewPackage: { create: writes.reviewCreate, findFirst: jest.fn().mockResolvedValue({
+      id: 'review-1', status: 'pending', version: 2, confirmationUnit: 'segment_resource',
+      payloadSchema: 'departure.segment_resource@v1', targetKind: 'departure', targetId: 'departure-1',
+      baseObjectVersion: objectVersion, baselineSnapshot: {}, userCorrections: {},
+      candidates: candidates().map((candidate) => ({ ...candidate, status: 'pending', evidence: [{ kind: 'user_message', sequence: 1, excerpt: '旧批次的酒店报价' }] })),
+    }), count: jest.fn() },
   }
   const prisma = {
     ...store,
@@ -156,16 +161,40 @@ describe('AiCreateTaskService.proposeSegmentResourceReviewPackageForAgent #449',
       runId,
       objectVersion,
       candidates: candidates(),
+      reviewPackageId: 'review-1', expectedPackageVersion: 2,
     })
 
     expect(result).toMatchObject({
       status: 'accepted',
       confirmationUnit: 'segment_resource',
       payloadSchema: 'departure.segment_resource@v1',
+      reviewPackageId: 'review-1', expectedPackageVersion: 2,
       objectVersion,
     })
     expect(writes.actionCreate).not.toHaveBeenCalled()
     expect(writes.reviewCreate).not.toHaveBeenCalled()
+  })
+
+  it('validates an amount-only revision against its scoped pending item while checking only new evidence', async () => {
+    const { service, prisma } = createService()
+    const changed = candidates().filter((candidate) => candidate.fieldKey === 'amountCents')
+    await expect(service.proposeSegmentResourceReviewPackageForAgent(caller, {
+      taskId, runId, objectVersion, candidates: changed,
+      reviewPackageId: 'review-1', expectedPackageVersion: 2,
+    })).resolves.toMatchObject({ status: 'accepted', candidates: changed })
+    expect(prisma.aiReviewPackage.findFirst).toHaveBeenCalledWith({ where: {
+      id: 'review-1', organizationId, taskId, conversationId, status: 'pending', version: 2,
+      confirmationUnit: 'segment_resource', targetKind: 'departure', targetId: 'departure-1',
+      payloadSchema: 'departure.segment_resource@v1',
+    } })
+    expect(prisma.itinerarySegment.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      id: 'seg-1', departureId: 'departure-1', departure: { organizationId },
+    } }))
+    prisma.aiReviewPackage.findFirst.mockResolvedValue(null)
+    await expect(service.proposeSegmentResourceReviewPackageForAgent(caller, {
+      taskId, runId, objectVersion, candidates: changed,
+      reviewPackageId: 'review-1', expectedPackageVersion: 2,
+    })).rejects.toThrow()
   })
 
   it('retains an unmatched supplier candidate for review without writing formal resources (R7)', async () => {
