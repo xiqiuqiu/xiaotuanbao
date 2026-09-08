@@ -483,6 +483,12 @@ export {
 } from './runtime/departure-collaboration-definitions'
 export { sanitizeVisibleReasoning } from './runtime/visible-reasoning'
 export {
+  PUBLIC_REPLY_FALLBACK,
+  createThinkTagSplitter,
+  selectPublicReply,
+  stripThinkTags,
+} from './runtime/public-reply'
+export {
   AI_EVIDENCE_SCHEMA_VERSION,
   AI_EVIDENCE_NORMALIZATION_VERSION,
   AI_EVIDENCE_POLICY_VERSION,

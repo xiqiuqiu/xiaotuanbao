@@ -664,7 +664,7 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await readHeadlessOutcome(response)).toEqual({
+      expect(await readHeadlessOutcome(response)).toMatchObject({
         kind: 'completed',
         message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
         diagnostic: {

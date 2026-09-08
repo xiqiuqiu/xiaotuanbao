@@ -161,8 +161,17 @@ function readChunkText(chunk: unknown): string {
   if (!chunk || typeof chunk !== 'object') {
     return ''
   }
-  const payload = (chunk as { payload?: { text?: unknown } }).payload
-  return typeof payload?.text === 'string' ? payload.text : ''
+  const record = chunk as {
+    delta?: unknown
+    payload?: { text?: unknown; delta?: unknown }
+  }
+  if (typeof record.payload?.text === 'string' && record.payload.text.length > 0) {
+    return record.payload.text
+  }
+  if (typeof record.payload?.delta === 'string' && record.payload.delta.length > 0) {
+    return record.payload.delta
+  }
+  return typeof record.delta === 'string' ? record.delta : ''
 }
 
 function readChunkToolCallId(chunk: unknown): string | undefined {

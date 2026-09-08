@@ -8,6 +8,7 @@ import { capabilitiesForPendingReview } from '../tools/review-package'
 import {
   CONVERSATION_GENERAL_AGENT_DEFINITION,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  CONVERSATION_GENERAL_INSTRUCTIONS,
   conversationGeneralCapabilityDefinitionRegistry,
 } from './conversation-general-definitions'
 
@@ -23,6 +24,11 @@ const requestContext = requestContextSchema.parse({
 })
 
 describe('通用无任务会话 Definition', () => {
+  it('面向用户只说明业务结果，不把思考过程写进公开回复', () => {
+    expect(CONVERSATION_GENERAL_INSTRUCTIONS).toContain('不输出分析过程')
+    expect(CONVERSATION_GENERAL_INSTRUCTIONS).not.toContain('思考过程只写给 User')
+  })
+
   it('登记纯文本回复 Capability，且不依赖建团任务或 departure:write', () => {
     expect(CONVERSATION_GENERAL_AGENT_DEFINITION.key).toBe('conversation.general')
     expect(CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS.map((definition) => ({

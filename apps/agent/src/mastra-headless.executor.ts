@@ -10,6 +10,8 @@ import {
   submitSegmentResourceReviewModelInputSchema,
   submitSourceOrderReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
+  createThinkTagSplitter,
+  selectPublicReply,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -62,6 +64,9 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const streamed = deps.stream ? await deps.stream(userText, options?.signal) : null
       let sequence = 1
       let stepReasoning = ''
+      let streamedPublicText = ''
+      const streamedReasoning: string[] = []
+      const thinkTags = createThinkTagSplitter()
       const streamedToolResults: unknown[] = []
       const stepLatencies: number[] = []
       let stepStartedAt: number | undefined
@@ -82,6 +87,9 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
             streamedToolResults.push(chunk)
           }
           if (isStepBoundaryChunk(chunk)) {
+            if (stepReasoning) {
+              streamedReasoning.push(stepReasoning)
+            }
             stepReasoning = ''
             continue
           }
@@ -96,12 +104,27 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
           if (!text) {
             continue
           }
-          yield { type: 'message.delta', sequence, text }
-          sequence += 1
+          for (const part of thinkTags.push(text)) {
+            if (part.channel === 'reasoning') {
+              stepReasoning += part.text
+              yield { type: 'reasoning.delta', sequence, text: stepReasoning }
+              sequence += 1
+              continue
+            }
+            streamedPublicText += part.text
+            yield { type: 'message.delta', sequence, text: part.text }
+            sequence += 1
+          }
         }
       }
+      if (stepReasoning) {
+        streamedReasoning.push(stepReasoning)
+      }
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
-      const result = resultFromGenerate({ ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] })
+      const result = resultFromGenerate(
+        { ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] },
+        { streamedPublicText, streamedReasoning },
+      )
       if (result.kind === 'completed' && sequence === 1) {
         yield { type: 'message.delta', sequence: 1, text: result.message }
       }
@@ -137,7 +160,13 @@ function requireGenerate(deps: MastraHeadlessExecutorDeps): (userText: string) =
   return deps.generate
 }
 
-function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult {
+function resultFromGenerate(
+  output: MastraGenerateLike,
+  publicReply: { streamedPublicText: string; streamedReasoning: readonly string[] } = {
+    streamedPublicText: '',
+    streamedReasoning: [],
+  },
+): HeadlessExecutionResult {
   const toolSteps = toolStepsFromCalls(output.toolCalls, output.toolResults)
   const diagnostic = diagnosticFromMastraGenerate(output, toolSteps)
   if (isCapacityTripwire(output)) {
@@ -154,7 +183,11 @@ function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult
   if (rejectedReview) {
     return { kind: 'failed', error: new AiCollaborationError('INVALID_FORMAT', '审核建议未能生成，资料引用或字段校验未通过，请重试整理。').toJSON(), diagnostic }
   }
-  const message = output.text?.trim() || '已处理当前说明。'
+  const message = selectPublicReply({
+    streamedPublicText: publicReply.streamedPublicText,
+    streamedReasoning: publicReply.streamedReasoning,
+    fullOutputText: output.text ?? '',
+  })
   const routing = acceptedConversationRoutingFromGenerate(output)
   if (
     routing &&
@@ -226,10 +259,17 @@ function deltaTextFromChunk(chunk: unknown, expectedType: string): string | null
   const record = chunk as {
     textDelta?: unknown
     text?: unknown
-    payload?: { text?: unknown }
+    delta?: unknown
+    payload?: { text?: unknown; delta?: unknown }
   }
   if (typeof record.payload?.text === 'string' && record.payload.text.length > 0) {
     return record.payload.text
+  }
+  if (typeof record.payload?.delta === 'string' && record.payload.delta.length > 0) {
+    return record.payload.delta
+  }
+  if (typeof record.delta === 'string' && record.delta.length > 0) {
+    return record.delta
   }
   if (typeof record.textDelta === 'string' && record.textDelta.length > 0) {
     return record.textDelta

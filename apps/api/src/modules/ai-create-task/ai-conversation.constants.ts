@@ -31,7 +31,7 @@ export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v4
 export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v10'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v10'
 /** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
-export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v6'
+export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v7'
 /** 无任务会话向模型暴露会话原文回读工具；Manifest 必须与 recall schema 对齐。 */
 export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-routing-recall/v2'
 export const DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION = 'departure-collaboration/v3'

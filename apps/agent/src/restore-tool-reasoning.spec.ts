@@ -67,7 +67,7 @@ describe('recordReasoningFromStream', () => {
       recordReasoningFromStream(
         (async function* () {
           yield { type: 'reasoning-delta', payload: { text: 'check dates then ' } }
-          yield { type: 'reasoning-delta', payload: { text: 'submit candidates' } }
+          yield { type: 'reasoning-delta', delta: 'submit candidates' }
           yield {
             type: 'tool-call',
             payload: { toolCallId: 'call-submit', toolName: 'proposeReviewPackage', args: {} },

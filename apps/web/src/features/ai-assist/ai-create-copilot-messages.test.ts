@@ -857,6 +857,31 @@ describe('projectConversationFrame live reasoning #416', () => {
     },
   ]
 
+  it('projects live public text as assistant even when the wording looks like 思考过程', () => {
+    const soliloquy =
+      '用户要建喀纳斯三日团。我先核团名、出团日期和人数，再决定是否提交审核建议。'
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 1,
+        reasoningText: '',
+        text: soliloquy,
+      },
+    })
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: soliloquy,
+      },
+    ])
+    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([])
+  })
+
   it('shows collapsible 思考过程 after the first reasoning token before any public reply', () => {
     const messages = projectConversationFrame({
       events: runningEvents,
