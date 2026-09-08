@@ -1,4 +1,4 @@
-import { sanitizeVisibleReasoning } from '@xiaotuanbao/ai-contracts'
+import { sanitizeVisibleReasoning, stripEnglishChainOfThought } from '@xiaotuanbao/ai-contracts'
 import {
   LIVE_OUTPUT_EARLY_FLUSH_CHARS,
   LIVE_OUTPUT_FLUSH_MS,
@@ -96,7 +96,7 @@ export class LiveOutputFlusher {
       if (this.disposed) {
         return
       }
-      const text = this.pendingText
+      const text = stripEnglishChainOfThought(this.pendingText)
       const reasoningText = sanitizeVisibleReasoning(this.pendingReasoning)
       if (this.lastFlushedText === text && this.lastFlushedReasoning === reasoningText) {
         return

@@ -29,6 +29,8 @@ describe('已有发团协作 Agent Definition #449 #450', () => {
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('proposeDepartureResourceReviewPackage')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不自动提交应付')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要把所有打包报价自动归为拼出')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不输出分析过程')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要用英文推理')
     expect(
       DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS.map((definition) => ({
         key: definition.key,

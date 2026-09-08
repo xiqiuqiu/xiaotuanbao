@@ -505,7 +505,7 @@ export {
   type ProposeSegmentResourceReviewPackageOutput,
   type ProposeDepartureResourceReviewPackageOutput,
 } from './runtime/departure-collaboration-definitions'
-export { sanitizeVisibleReasoning } from './runtime/visible-reasoning'
+export { sanitizeVisibleReasoning, stripEnglishChainOfThought } from './runtime/visible-reasoning'
 export {
   PUBLIC_REPLY_FALLBACK,
   createThinkTagSplitter,

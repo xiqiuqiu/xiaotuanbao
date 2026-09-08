@@ -44,6 +44,25 @@ describe('selectPublicReply', () => {
       }),
     ).toBe('已处理当前说明。')
   })
+
+  it('does not persist English thinking-disabled soliloquy as the public reply', () => {
+    const englishSoliloquy =
+      "I'll check the current task context first, then help add a vehicle departure resource. The user wants to add a vehicle."
+    expect(
+      selectPublicReply({
+        streamedPublicText: `${englishSoliloquy}\n${PUBLIC_REPLY}`,
+        streamedReasoning: '',
+        fullOutputText: `${englishSoliloquy}\n${PUBLIC_REPLY}`,
+      }),
+    ).toBe(PUBLIC_REPLY)
+    expect(
+      selectPublicReply({
+        streamedPublicText: englishSoliloquy,
+        streamedReasoning: '',
+        fullOutputText: englishSoliloquy,
+      }),
+    ).toBe('已处理当前说明。')
+  })
 })
 
 describe('createThinkTagSplitter', () => {

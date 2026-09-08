@@ -13,6 +13,7 @@ import {
   uniqueCapabilityDefinitions,
   createThinkTagSplitter,
   selectPublicReply,
+  stripEnglishChainOfThought,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -66,6 +67,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       let sequence = 1
       let stepReasoning = ''
       let streamedPublicText = ''
+      let visiblePublicText = ''
       const streamedReasoning: string[] = []
       const thinkTags = createThinkTagSplitter()
       const streamedToolResults: unknown[] = []
@@ -113,7 +115,15 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
               continue
             }
             streamedPublicText += part.text
-            yield { type: 'message.delta', sequence, text: part.text }
+            const visible = stripEnglishChainOfThought(streamedPublicText.replace(/\u0000/g, ''))
+            const delta = visible.startsWith(visiblePublicText)
+              ? visible.slice(visiblePublicText.length)
+              : visible
+            visiblePublicText = visible
+            if (!delta) {
+              continue
+            }
+            yield { type: 'message.delta', sequence, text: delta }
             sequence += 1
           }
         }

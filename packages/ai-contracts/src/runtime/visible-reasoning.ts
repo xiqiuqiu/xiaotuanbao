@@ -23,6 +23,19 @@ const DEFAULT_INSTRUCTION_SNIPPETS = [
   AI_CREATE_SYSTEM_INSTRUCTIONS,
 ] as const
 
+function collapseReasoningWhitespace(text: string): string {
+  return text
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+/** 去掉 thinking 关闭时写进正文的英文 chain-of-thought，保留中文业务回复。 */
+export function stripEnglishChainOfThought(text: string): string {
+  return collapseReasoningWhitespace(text.replace(ENGLISH_RUN, ''))
+}
+
 function stripNeedle(haystack: string, needle: string): string {
   const trimmed = needle.trim()
   if (trimmed.length < 24) {
@@ -51,10 +64,5 @@ export function sanitizeVisibleReasoning(
   for (const name of INTERNAL_IDENTIFIERS) {
     next = next.replaceAll(name, '')
   }
-  next = next.replace(ENGLISH_RUN, '')
-  return next
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
+  return stripEnglishChainOfThought(next)
 }
