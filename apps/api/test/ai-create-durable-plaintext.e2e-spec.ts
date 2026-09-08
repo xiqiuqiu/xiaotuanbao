@@ -6,6 +6,7 @@ import { DepartureType, PrismaClient } from '@prisma/client'
 import {
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
+  PLAINTEXT_CONTEXT_BUILDER_VERSION,
 } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
@@ -229,7 +230,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       status: 'completed',
       contextManifest: {
         conversationVersion: expect.any(Number),
-        builderVersion: 'ai-create-frozen-projection/v2',
+        builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
         inputHash: expect.any(String),
         summaryVersion: null,
         excerptDigests: [],
