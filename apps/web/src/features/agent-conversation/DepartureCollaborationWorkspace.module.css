@@ -38,6 +38,14 @@
   grid-template-columns: 240px minmax(360px, 0.95fr) minmax(420px, 1.15fr);
   border: 0;
 }
+
+/*
+  CopilotKit 加号菜单/提示用 Radix Portal 挂到 document.body，默认 z-50。
+  展开工作区是独立层叠上下文 1001，不抬菜单的话点加号等于点到看不见的层。
+*/
+:global([data-radix-popper-content-wrapper]) {
+  z-index: 1100 !important;
+}
 .surface[data-expanded] .conversation {
   position: relative;
   inset: auto;

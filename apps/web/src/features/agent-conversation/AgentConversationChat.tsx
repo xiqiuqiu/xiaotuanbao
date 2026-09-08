@@ -67,6 +67,7 @@ import {
 import { useCurrentPageAttachment } from './use-current-page-locator'
 import { formatReviewFieldList } from '@/features/ai-assist/review-field-labels'
 import { ComposerSendButton } from '@/features/ai-assist/composer-send-button'
+import { ComposerAddFileButton } from '@/features/ai-assist/composer-add-file-button'
 import {
   DEFAULT_TASKLESS_ATTACHMENT_TEXT,
   filesFromAttachmentSources,
@@ -148,7 +149,7 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
         isRunning={stoppable && !hasDraft}
         onStop={onStop}
         textArea={{ 'aria-label': '询问小团宝业务' }}
-        addMenuButton={{ 'aria-label': '添加附件' }}
+        addMenuButton={ComposerAddFileButton}
         sendButton={(buttonProps) => (
           <ComposerSendButton
             {...buttonProps}

@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { useState } from 'react'
 import { DepartureCollaborationWorkspace } from './DepartureCollaborationWorkspace'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -255,4 +258,13 @@ it('opens a confirmed departure resource from the execution tab highlight', asyn
     params: { departureId: 'dep-1' },
     search: { tab: 'execution', highlightDepartureResourceId: 'dep-res-9' },
   })
+})
+
+it('keeps CopilotKit attachment menus above the expanded workspace overlay', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'DepartureCollaborationWorkspace.module.css'),
+    'utf8',
+  )
+  expect(css).toMatch(/\[data-expanded\][\s\S]*?z-index:\s*1001/)
+  expect(css).toMatch(/data-radix-popper-content-wrapper[\s\S]*?z-index:\s*1100\s*!important/)
 })

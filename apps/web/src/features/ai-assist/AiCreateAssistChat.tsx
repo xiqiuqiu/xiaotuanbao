@@ -59,6 +59,7 @@ import {
 } from './ai-create-assist-polling'
 import styles from './AiCreateAssistChat.module.css'
 import { ComposerSendButton } from './composer-send-button'
+import { ComposerAddFileButton } from './composer-add-file-button'
 import {
   filesFromAttachmentSources,
   MATERIAL_ACCEPT,
@@ -481,6 +482,7 @@ function DepartureAssistChatInputView(props: CopilotChatInputProps) {
       {...props}
       isRunning={Boolean(props.isRunning) && !hasDraft}
       textArea={{ 'aria-label': '询问当前发团草稿' }}
+      addMenuButton={ComposerAddFileButton}
       sendButton={(buttonProps) => (
         <ComposerSendButton
           {...buttonProps}
