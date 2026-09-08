@@ -19,6 +19,9 @@ type ReviewCaller = Parameters<AiCreateTaskService['proposeReviewPackageForAgent
 type SegmentResourceReviewCaller = Parameters<
   AiCreateTaskService['proposeSegmentResourceReviewPackageForAgent']
 >[0]
+type DepartureResourceReviewCaller = Parameters<
+  AiCreateTaskService['proposeDepartureResourceReviewPackageForAgent']
+>[0]
 type SubmitReviewOptions = Parameters<AiCreateTaskService['submitReviewPackageForAgent']>[2]
 type ReferenceCaller = Parameters<AiCreateTaskService['searchRouteTemplatesForAgent']>[0]
 type RelatedSearchCaller = Parameters<AiCreateTaskService['searchUsersForAgent']>[0]
@@ -73,6 +76,13 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
   proposeSegmentResourceReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
     return this.tasks.proposeSegmentResourceReviewPackageForAgent(
       caller as SegmentResourceReviewCaller,
+      input,
+    )
+  }
+
+  proposeDepartureResourceReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.proposeDepartureResourceReviewPackageForAgent(
+      caller as DepartureResourceReviewCaller,
       input,
     )
   }

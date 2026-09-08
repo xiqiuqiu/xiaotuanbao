@@ -19,6 +19,7 @@ import {
 import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   resolveReviewField,
 } from '@xiaotuanbao/ai-contracts'
 import type {
@@ -36,6 +37,7 @@ import { canEditDeparture } from '@/features/departure/utils/departure-permissio
 import { DepartureSourceOrderReview } from '@/features/departure/components/DepartureSourceOrderReview'
 import { AgentConversationChat } from './AgentConversationChat'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
+import { DepartureResourceReviewPanel } from './DepartureResourceReviewPanel'
 import { ReviewMaterialConflicts, ReviewRevisionHistory } from './ReviewRevisionHistory'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { currentPageAttachmentFromLocation } from './page-locator-attachment'
@@ -52,8 +54,47 @@ const statusLabels: Record<string, string> = {
 }
 function categoryOf(pkg: AiReviewPackageView) {
   if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA) return '客源管理'
-  if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) return '执行安排'
+  if (
+    pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ||
+    pkg.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+  ) {
+    return '执行安排'
+  }
   return /receivable|payable|finance/.test(pkg.payloadSchema) ? '财务' : '发团信息'
+}
+
+function isResourceReviewSchema(payloadSchema: string) {
+  return (
+    payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ||
+    payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+  )
+}
+
+function formalResourceSearch(
+  selected: AiReviewPackageView,
+  confirmations: ReviewConfirmationView[],
+) {
+  if (selected.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
+    const objectId = confirmations
+      .flatMap((entry) => entry.items)
+      .find((item) => item.packageId === selected.id && item.status === 'succeeded')
+      ?.resultRef?.objectId
+    return {
+      tab: 'execution' as const,
+      ...(typeof objectId === 'string' ? { highlightDepartureResourceId: objectId } : {}),
+    }
+  }
+  const segment = selected.candidates.find(
+    (candidate) => candidate.fieldKey === 'itinerarySegmentId',
+  )
+  const segmentId =
+    segment?.userCorrectedValue !== undefined
+      ? segment.userCorrectedValue
+      : segment?.proposedValue
+  return {
+    tab: 'execution' as const,
+    ...(typeof segmentId === 'string' ? { segmentId } : {}),
+  }
 }
 function itemTitle(pkg: AiReviewPackageView, ordinal: number) {
   const candidate = pkg.candidates.find(
@@ -489,7 +530,7 @@ function WorkspaceReviewItem({
       ) : null}
       <ReviewRevisionHistory pkg={selected} focused={focused} />
       <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
-      {selected.payloadSchema !== SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ? (
+      {!isResourceReviewSchema(selected.payloadSchema) ? (
         <Collapse
           size="small"
           className={styles.evidence}
@@ -545,6 +586,15 @@ function WorkspaceReviewItem({
           focusedReviewPackageId={focused ? selected.id : null}
         />
       ) : null}
+      {selected.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA && conversationId ? (
+        <DepartureResourceReviewPanel
+          key={selected.id}
+          departureId={departureId}
+          conversationId={conversationId}
+          onlyPackageId={selected.id}
+          focusedReviewPackageId={focused ? selected.id : null}
+        />
+      ) : null}
       {selected.status !== 'pending' ? (
         <section className={styles.snapshot} aria-label="审核时的确认内容">
           <Descriptions
@@ -567,25 +617,14 @@ function WorkspaceReviewItem({
           </Typography.Paragraph>
         </section>
       ) : null}
-      {selected.status === 'confirmed' &&
-      selected.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ? (
+      {selected.status === 'confirmed' && isResourceReviewSchema(selected.payloadSchema) ? (
         <Button
           onClick={() => {
             useAgentConversationStore.getState().closeGlobalForBusinessNavigation()
-            const segment = selected.candidates.find(
-              (candidate) => candidate.fieldKey === 'itinerarySegmentId',
-            )
-            const segmentId =
-              segment?.userCorrectedValue !== undefined
-                ? segment.userCorrectedValue
-                : segment?.proposedValue
             void navigate({
               to: '/departure/$departureId',
               params: { departureId },
-              search: {
-                tab: 'execution',
-                ...(typeof segmentId === 'string' ? { segmentId } : {}),
-              },
+              search: formalResourceSearch(selected, confirmations),
             })
           }}
         >

@@ -1247,6 +1247,55 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     expect(store.records[0]?.targetRef).toEqual({ kind: 'departure', id: 'departure-1' })
   })
 
+  it('forwards proposeDepartureResourceReviewPackage onto the current departure object version', async () => {
+    const collabActor: AiActionActor = {
+      ...actor,
+      agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+      grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL),
+    }
+    const { store, gateway } = createGateway(
+      new InMemoryAiActionTargetAuthority({
+        tasks: [
+          {
+            id: 'task-1',
+            organizationId: 'org-1',
+            ownerUserId: 'user-1',
+            draftId: null,
+            draftVersion: null,
+            departureId: 'departure-1',
+            departureVersion: 1_700_000_000_000,
+          },
+        ],
+      }),
+    )
+    const seen: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'proposeDepartureResourceReviewPackage',
+      actor: collabActor,
+      input: { objectVersion: 1_700_000_000_000 },
+      forward: async ({ target }) => {
+        seen.push(target)
+        return { status: 'accepted' }
+      },
+    })
+
+    expect(seen).toEqual([
+      {
+        kind: 'departure',
+        id: 'departure-1',
+        organizationId: 'org-1',
+        version: 1_700_000_000_000,
+      },
+    ])
+    expect(result.action).toMatchObject({
+      name: 'proposeDepartureResourceReviewPackage',
+      decision: 'review',
+      targetRef: { kind: 'departure', id: 'departure-1' },
+    })
+    expect(store.records[0]?.targetRef).toEqual({ kind: 'departure', id: 'departure-1' })
+  })
+
   it('does not forward proposeSegmentResourceReviewPackage when the claimed object version is stale', async () => {
     const collabActor: AiActionActor = {
       ...actor,

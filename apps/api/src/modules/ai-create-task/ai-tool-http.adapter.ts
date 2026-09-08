@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
+  ProposeDepartureResourceReviewPackageOutput,
   ProposeReviewPackageOutput,
   ProposeSegmentResourceReviewPackageOutput,
   ProposeSourceOrderReviewPackageOutput,
@@ -176,6 +177,14 @@ export class AiToolHttpAdapter {
     return this.domain.proposeSegmentResourceReview(caller, body)
   }
 
+  proposeDepartureResourceReviewPackage(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ProposeDepartureResourceReviewPackageOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.domain.proposeDepartureResourceReview(caller, body)
+  }
+
   submitReviewPackage(
     user: AiToolRequestUser,
     body: unknown,
@@ -209,6 +218,7 @@ export class AiToolHttpAdapter {
       | 'getMaterialParseResult'
       | 'proposeReviewPackage'
       | 'proposeSegmentResourceReviewPackage'
+      | 'proposeDepartureResourceReviewPackage'
       | 'readConversationHistory'
       | 'readConversationSource',
     user: AiToolRequestUser,

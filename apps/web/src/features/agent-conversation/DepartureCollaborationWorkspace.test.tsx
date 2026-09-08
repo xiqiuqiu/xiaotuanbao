@@ -32,6 +32,11 @@ vi.mock('./SegmentResourceReviewPanel', () => ({
     <div>资源审核 {onlyPackageId}</div>
   ),
 }))
+vi.mock('./DepartureResourceReviewPanel', () => ({
+  DepartureResourceReviewPanel: ({ onlyPackageId }: { onlyPackageId: string }) => (
+    <div>发团级资源审核 {onlyPackageId}</div>
+  ),
+}))
 vi.mock('./AgentConversationChat', () => ({
   AgentConversationChat: ({ onReviewRequested, reviewPackageId, onReviewMessageSent }: {
     onReviewRequested: (id: string) => void
@@ -64,6 +69,7 @@ const item = (id: string, payloadSchema: string, status = 'pending') => ({
 })
 const source = 'source_order.create@v1'
 const resource = 'departure.segment_resource@v1'
+const departureResource = 'departure.departure_resource@v1'
 function view(expanded: boolean, onExpand = vi.fn()) {
   return (
     <DepartureCollaborationWorkspace
@@ -92,7 +98,12 @@ beforeEach(() => {
     items:
       conversationId === 'conv-2'
         ? []
-        : [item('source-1', source), item('source-2', source), item('resource-1', resource)],
+        : [
+            item('source-1', source),
+            item('source-2', source),
+            item('resource-1', resource),
+            item('departure-resource-1', departureResource),
+          ],
     confirmations: [],
   }))
 })
@@ -194,4 +205,54 @@ it('shows query failures without presenting a misleading empty state', async () 
   expect(await screen.findByText('事项加载失败')).toBeVisible()
   expect(screen.getByText('协作记录加载失败')).toBeVisible()
   expect(screen.queryByText('从材料开始协作')).not.toBeInTheDocument()
+})
+
+it('keeps source, segment, and departure resource reviews independent', async () => {
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  expect(await screen.findByText('客源审核 source-1')).toBeVisible()
+  expect(screen.getByRole('tab', { name: 'source-1 待审核' })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: 'resource-1 待审核' })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: 'departure-resource-1 待审核' })).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'resource-1 待审核' }))
+  expect(screen.getByText('资源审核 resource-1')).toBeVisible()
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
+  expect(screen.getByText('客源审核 source-1')).not.toBeVisible()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'departure-resource-1 待审核' }))
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).toBeVisible()
+  expect(screen.getByText('资源审核 resource-1')).not.toBeVisible()
+  expect(screen.getByText('客源审核 source-1')).not.toBeVisible()
+  expect(within(screen.getByRole('tabpanel')).getByText('执行安排')).toBeVisible()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'source-1 待审核' }))
+  expect(screen.getByText('客源审核 source-1')).toBeVisible()
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
+})
+
+it('opens a confirmed departure resource from the execution tab highlight', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [item('departure-resource-1', departureResource, 'confirmed')],
+    confirmations: [
+      {
+        decisionCommandId: 'decision-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'departure-resource-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'departure_resource', objectId: 'dep-res-9' },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
+  expect(navigate).toHaveBeenCalledWith({
+    to: '/departure/$departureId',
+    params: { departureId: 'dep-1' },
+    search: { tab: 'execution', highlightDepartureResourceId: 'dep-res-9' },
+  })
 })

@@ -23,6 +23,7 @@ import {
   createSearchUsersTool,
 } from './search-related-objects.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
+import { createProposeDepartureResourceReviewTool } from './propose-departure-resource-review.tool'
 import { createProposeSegmentResourceReviewTool } from './propose-segment-resource-review.tool'
 import { createConversationRoutingTool } from './conversation-routing.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
@@ -66,6 +67,7 @@ function createMastra(
     searchPartners: createSearchPartnersTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
     proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
+    proposeDepartureResourceReviewPackage: createProposeDepartureResourceReviewTool(config),
     proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),

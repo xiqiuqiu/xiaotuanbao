@@ -2193,6 +2193,776 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
     ],
     "additionalProperties": false
   },
+  "proposeDepartureResourceReviewPackage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "objectVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "reviewPackageId": {
+        "description": "修订已有事项时填写当前审核包 ID；新事项省略",
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "description": "与 reviewPackageId 同时填写当前审核包版本",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "candidates": {
+        "minItems": 1,
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "resourceKind"
+                },
+                "proposedValue": {
+                  "type": "string",
+                  "enum": [
+                    "transport",
+                    "hotel",
+                    "guide",
+                    "outsource",
+                    "ticket",
+                    "meal",
+                    "insurance",
+                    "other"
+                  ]
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "supplierId"
+                },
+                "proposedValue": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "title"
+                },
+                "proposedValue": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "amountCents"
+                },
+                "proposedValue": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "notes"
+                },
+                "proposedValue": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 5000
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fieldKey": {
+                  "type": "string",
+                  "const": "capacityWarning"
+                },
+                "proposedValue": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "needs_confirmation",
+                    "undetermined"
+                  ]
+                },
+                "evidence": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "user_message"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "messageId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "excerpt",
+                          "sequence"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "system_derivation"
+                          },
+                          "rule": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "rule"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "material_region"
+                          },
+                          "materialId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "parseResultVersion": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "materialId",
+                          "parseResultVersion",
+                          "pageNumber",
+                          "excerpt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fieldKey",
+                "proposedValue",
+                "clarity",
+                "evidence"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "description": "每个字段最多一条候选；跨日整体费用写备注，不要拆价或挂到某一天"
+      }
+    },
+    "required": [
+      "objectVersion",
+      "candidates"
+    ],
+    "additionalProperties": false
+  },
   "proposeSourceOrderReviewPackage": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",

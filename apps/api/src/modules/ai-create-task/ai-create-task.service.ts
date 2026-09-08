@@ -45,6 +45,9 @@ import {
   submitSegmentResourceReviewInputSchema,
   resolveSegmentResourceReviewDraft,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  submitDepartureResourceReviewInputSchema,
+  resolveDepartureResourceReviewDraft,
+  DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   DEPARTURE_REVIEW_TARGET_KIND,
@@ -59,6 +62,7 @@ import {
   type SearchPartnersOutput,
   type ProposeReviewPackageOutput,
   type ProposeSegmentResourceReviewPackageOutput,
+  type ProposeDepartureResourceReviewPackageOutput,
   type SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, Departure, DepartureCreationDraft, Prisma } from '@prisma/client'
@@ -920,6 +924,125 @@ export class AiCreateTaskService {
       objectVersion: input.objectVersion,
       confirmationUnit: input.confirmationUnit,
       payloadSchema: SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+      reviewPackageId: input.reviewPackageId,
+      expectedPackageVersion: input.expectedPackageVersion,
+      candidates: input.candidates,
+      normalizedProposal: validated.normalizedProposal,
+    }
+  }
+
+  async proposeDepartureResourceReviewPackageForAgent(
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      conversationId: string
+      inputBatchId: string
+      attemptId?: string
+      contextManifestId?: string
+    },
+    rawInput: unknown,
+  ): Promise<ProposeDepartureResourceReviewPackageOutput> {
+    let input: ReturnType<typeof submitDepartureResourceReviewInputSchema.parse>
+    try {
+      input = submitDepartureResourceReviewInputSchema.parse(rawInput)
+    } catch {
+      throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (!caller.conversationId || !caller.inputBatchId || !caller.attemptId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const task = await this.prisma.agentTask.findFirst({
+      where: { id: caller.taskId, organizationId: caller.organizationId },
+      include: { departure: { select: { id: true, updatedAt: true } } },
+    })
+    if (!task || task.type !== AgentTaskType.departure_collaboration || !task.departure) {
+      throw new NotFoundException('发团协作任务不存在')
+    }
+    if (task.ownerUserId !== caller.userId) {
+      throw new ForbiddenException('仅任务创建者可提交审核包')
+    }
+    if (
+      task.status !== AgentTaskStatus.active &&
+      task.status !== AgentTaskStatus.waiting
+    ) {
+      throw new BadRequestException('仅进行中的发团协作任务可提交审核包')
+    }
+    await this.requireRunningAttempt(caller)
+    if (departureObjectVersion(task.departure.updatedAt) !== input.objectVersion) {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
+
+    const authority = await loadEvidenceAuthority(this.prisma, {
+      organizationId: caller.organizationId,
+      conversationId: caller.conversationId,
+      inputBatchId: caller.inputBatchId,
+      attemptId: caller.attemptId,
+      contextManifestId: caller.contextManifestId,
+    })
+    if (!authority) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const validated = validateReviewProposal({
+      proposal: {
+        objectVersion: input.objectVersion,
+        confirmationUnit: input.confirmationUnit,
+        candidates: input.candidates,
+      },
+      authority,
+    })
+    if (!validated.success) {
+      return { status: 'rejected', errors: validated.errors }
+    }
+    let reviewCandidates: { fieldKey: string; proposedValue: unknown }[] = input.candidates
+    let corrections: Partial<Record<string, unknown>> | undefined
+    if (input.reviewPackageId) {
+      const current = await this.prisma.aiReviewPackage.findFirst({
+        where: {
+          id: input.reviewPackageId,
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          conversationId: caller.conversationId,
+          status: AiReviewPackageStatus.pending,
+          version: input.expectedPackageVersion,
+          confirmationUnit: input.confirmationUnit,
+          targetKind: 'departure',
+          targetId: task.departure.id,
+          payloadSchema: DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+        },
+      })
+      if (!current) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      const view = toReviewPackageView(current)
+      if (!view.schemaSupported) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+      corrections = reviewConfirmValues(view.candidates).corrections
+      const merged = new Map(view.candidates.map((candidate) => [candidate.fieldKey, { fieldKey: candidate.fieldKey, proposedValue: candidate.proposedValue }]))
+      for (const candidate of input.candidates) merged.set(candidate.fieldKey, candidate)
+      reviewCandidates = [...merged.values()]
+    }
+    const resolution = resolveDepartureResourceReviewDraft(reviewCandidates, corrections)
+    if (resolution.status === 'invalid' && resolution.fieldKey !== 'supplierId') {
+      return {
+        status: 'rejected',
+        errors: [
+          {
+            candidateIndex: 0,
+            evidenceIndex: 0,
+            code: 'DEPARTURE_RESOURCE_INVALID',
+            message: resolution.reason,
+          },
+        ],
+      }
+    }
+    return {
+      status: 'accepted',
+      objectVersion: input.objectVersion,
+      confirmationUnit: input.confirmationUnit,
+      payloadSchema: DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
       reviewPackageId: input.reviewPackageId,
       expectedPackageVersion: input.expectedPackageVersion,
       candidates: input.candidates,

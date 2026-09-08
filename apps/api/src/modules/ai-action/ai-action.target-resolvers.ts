@@ -40,6 +40,7 @@ const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   searchPartners: resolvePartnerCatalog,
   proposeReviewPackage: resolveDepartureDraft,
   proposeSegmentResourceReviewPackage: resolveDepartureObject,
+  proposeDepartureResourceReviewPackage: resolveDepartureObject,
   proposeSourceOrderReviewPackage: resolveDepartureObject,
   getMaterialParseResult: resolvePinnedMaterial,
   readConversationHistory: resolveConversation,

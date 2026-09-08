@@ -256,6 +256,25 @@ export {
   type ReviewSchemaCandidate,
 } from './review/review-schema'
 export {
+  DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
+  DEPARTURE_RESOURCE_REVIEW_FIELDS,
+  DEPARTURE_RESOURCE_REVIEW_KINDS,
+  DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+  DEPARTURE_RESOURCE_REVIEW_SCHEMA,
+  departureResourceReviewCandidateSchema,
+  resolveDepartureResourceReviewDraft,
+  submitDepartureResourceReviewInputSchema,
+  submitDepartureResourceReviewModelInputSchema,
+  type DepartureResourceReviewCandidate,
+  type DepartureResourceReviewDraft,
+  type DepartureResourceReviewField,
+  type DepartureResourceReviewKind,
+  type DepartureResourceReviewResolution,
+  type DepartureResourceReviewWarning,
+  type SubmitDepartureResourceReviewInput,
+  type SubmitDepartureResourceReviewModelInput,
+} from './review/departure-resource-schema'
+export {
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_REVIEW_FIELDS,
   SEGMENT_RESOURCE_REVIEW_KINDS,
@@ -476,10 +495,15 @@ export {
   type ProposeSourceOrderReviewPackageOutput,
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
+  DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY,
+  DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY_REF,
   PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL,
+  PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL,
   departureCollaborationCapabilityDefinitionRegistry,
   proposeSegmentResourceReviewPackageOutputSchema,
+  proposeDepartureResourceReviewPackageOutputSchema,
   type ProposeSegmentResourceReviewPackageOutput,
+  type ProposeDepartureResourceReviewPackageOutput,
 } from './runtime/departure-collaboration-definitions'
 export { sanitizeVisibleReasoning } from './runtime/visible-reasoning'
 export {

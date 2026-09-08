@@ -8,6 +8,7 @@ import {
   registeredTaskDescriptors,
   submitReviewPackageModelInputSchema,
   submitSegmentResourceReviewModelInputSchema,
+  submitDepartureResourceReviewModelInputSchema,
   submitSourceOrderReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   createThinkTagSplitter,
@@ -176,7 +177,12 @@ function resultFromGenerate(
   if (reviewPackages.length > 0) {
     return { kind: 'awaiting_review', reviewPackage: reviewPackages[0]!, reviewPackages, diagnostic }
   }
-  const rejectedReview = ['proposeReviewPackage', 'proposeSourceOrderReviewPackage', 'proposeSegmentResourceReviewPackage'].some((name) => {
+  const rejectedReview = [
+    'proposeReviewPackage',
+    'proposeSourceOrderReviewPackage',
+    'proposeSegmentResourceReviewPackage',
+    'proposeDepartureResourceReviewPackage',
+  ].some((name) => {
     const result = lastToolResult(output.toolResults, name)
     return result && typeof result === 'object' && 'status' in result && result.status === 'rejected'
   })
@@ -378,13 +384,15 @@ function acceptedReviewPackagesFromGenerate(output: MastraGenerateLike) {
   const seenCalls = new Set<string>()
   for (const item of output.toolResults ?? []) {
     const { toolName, toolCallId, result } = toolPayload(item)
-    if (!['proposeReviewPackage', 'proposeSegmentResourceReviewPackage', 'proposeSourceOrderReviewPackage'].includes(toolName ?? '')) continue
+    if (!['proposeReviewPackage', 'proposeSegmentResourceReviewPackage', 'proposeDepartureResourceReviewPackage', 'proposeSourceOrderReviewPackage'].includes(toolName ?? '')) continue
     if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'accepted') continue
     if (toolCallId && seenCalls.has(toolCallId)) continue
     const schema = toolName === 'proposeReviewPackage'
       ? submitReviewPackageModelInputSchema
       : toolName === 'proposeSegmentResourceReviewPackage'
         ? submitSegmentResourceReviewModelInputSchema
+        : toolName === 'proposeDepartureResourceReviewPackage'
+          ? submitDepartureResourceReviewModelInputSchema
         : submitSourceOrderReviewPackageModelInputSchema
     const parsed = schema.safeParse(result)
     if (!parsed.success) continue

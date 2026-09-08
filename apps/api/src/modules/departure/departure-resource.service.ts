@@ -20,6 +20,7 @@ import {
   type Departure,
   type DepartureResource,
   type Partner,
+  type Prisma,
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -55,7 +56,7 @@ export class DepartureResourceService {
     departureId: string,
     query: ListDepartureResourcesQueryDto,
   ): Promise<DepartureResourceListResult> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    const departure = await this.findDepartureOrThrow(this.prisma, organizationId, departureId)
     const keyword = query.keyword?.trim()
 
     const resources = await this.prisma.departureResource.findMany({
@@ -106,7 +107,16 @@ export class DepartureResourceService {
     departureId: string,
     dto: CreateDepartureResourceDto,
   ): Promise<DepartureResourceSummary> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    return this.createInTx(this.prisma, organizationId, departureId, dto)
+  }
+
+  async createInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    departureId: string,
+    dto: CreateDepartureResourceDto,
+  ): Promise<DepartureResourceSummary> {
+    const departure = await this.findDepartureOrThrow(tx, organizationId, departureId)
     this.ensureDepartureEditable(departure)
 
     const counterparty = resolveSegmentResourceCounterparty({
@@ -116,12 +126,13 @@ export class DepartureResourceService {
     })
 
     await this.ensureSelectableSupplier(
+      tx,
       organizationId,
       counterparty.supplierId!,
       dto.resourceKind,
     )
 
-    const created = await this.prisma.departureResource.create({
+    const created = await tx.departureResource.create({
       data: {
         departureId: departure.id,
         resourceKind: dto.resourceKind,
@@ -189,6 +200,7 @@ export class DepartureResourceService {
 
     if (counterparty.supplierId) {
       await this.ensureSelectableSupplier(
+        this.prisma,
         organizationId,
         counterparty.supplierId,
         resourceKind,
@@ -269,9 +281,16 @@ export class DepartureResourceService {
     }
   }
 
-  private async findDepartureOrThrow(organizationId: string, departureId: string) {
-    const departure = await this.prisma.departure.findFirst({
-      where: { id: departureId, organizationId },
+  private async findDepartureOrThrow(
+    db: Prisma.TransactionClient | PrismaService,
+    organizationId: string,
+    departureId: string,
+  ) {
+    const departure = await db.departure.findFirst({
+      where: {
+        id: departureId,
+        organizationId,
+      },
     })
 
     if (!departure) {
@@ -305,11 +324,12 @@ export class DepartureResourceService {
   }
 
   private async ensureSelectableSupplier(
+    db: Prisma.TransactionClient | PrismaService,
     organizationId: string,
     supplierId: string,
     resourceKind: ResourceKind,
   ) {
-    const supplier = await this.prisma.supplier.findFirst({
+    const supplier = await db.supplier.findFirst({
       where: { id: supplierId, organizationId },
     })
 
