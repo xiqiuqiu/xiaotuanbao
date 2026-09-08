@@ -1793,7 +1793,8 @@ model AiContextManifest {
   inputBatch               AiInputBatch   @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
   conversationVersion      Int            @map("conversation_version")
   eventSequences           Json           @map("event_sequences")
-  businessSnapshotVersion  Int            @map("business_snapshot_version")
+  /// 发团协作为 updatedAt 毫秒时间戳；无业务快照的闲聊会话为 0。
+  businessSnapshotVersion  Float          @map("business_snapshot_version") @db.DoublePrecision
   builderVersion           String         @map("builder_version")
   systemPromptVersion      String         @map("system_prompt_version")
   toolSchemaVersion        String         @map("tool_schema_version")
