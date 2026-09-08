@@ -295,6 +295,8 @@ function renderUserText(input: {
     ...(input.projection.pinnedMaterials.length > 0 ? [
       '【本轮附件指向】上述指令中的“这个/这份文件”指向以下本轮附件，除非用户明确指定其他来源。先读取这些附件，不要沿用历史截图的名单；没有所需信息时如实说明。',
       ...input.projection.pinnedMaterials.map((item) => formatSource({ ...item, excerpt: '' }, input.sourceReader, '本轮附件')),
+    ] : (input.projection.availableSources?.length ?? 0) > 1 ? [
+      '【历史附件指向】本轮没有上传或选定附件。历史来源不等于本轮指定来源；用户仅说“这个/这里面”而没有文件名或明确的文件类型、先后顺序时，先询问要使用哪份文件，不得根据上一条助手回复擅自选旧来源。',
     ] : []),
   ].join('\n')
 }
@@ -376,7 +378,7 @@ function formatTail(events: ConversationEventForAgent[]): string {
     if (!event.text) {
       return []
     }
-    return [`${event.kind === 'user_message' ? 'User' : 'Assistant'}: ${event.text}`]
+    return [`${event.kind === 'user_message' ? 'User' : 'Assistant'} [sequence=${event.sequence}]: ${event.text}`]
   })
   return lines.length > 0 ? lines.join('\n') : '（无）'
 }

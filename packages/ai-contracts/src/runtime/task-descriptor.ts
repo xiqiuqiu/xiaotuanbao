@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-definitions'
-import { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-definitions'
+import { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-ref'
 import { versionedDefinitionRefSchema, type VersionedDefinitionRef } from './agent-platform'
 
 export const DEPARTURE_CREATION_TASK_TYPE = 'departure_creation' as const

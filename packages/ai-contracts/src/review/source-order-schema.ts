@@ -263,10 +263,16 @@ const UNIQUE_FIELD_KEY_MESSAGE = '同一审核包内每个字段最多一条候�
 export const submitSourceOrderReviewPackageModelInputSchema = z
   .object({
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT),
     candidates: z.array(sourceOrderReviewCandidateInputSchema).min(1),
   })
   .strip()
+  .refine((value) => (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+    message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+    path: ['reviewPackageId'],
+  })
   .refine((value) => uniqueFieldKeys(value.candidates), {
     message: UNIQUE_FIELD_KEY_MESSAGE,
     path: ['candidates'],
@@ -277,10 +283,16 @@ export const submitSourceOrderReviewPackageInputSchema = z
     taskId: z.string().min(1),
     runId: z.string().min(1),
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT),
     candidates: z.array(sourceOrderReviewCandidateInputSchema).min(1),
   })
   .strip()
+  .refine((value) => (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+    message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+    path: ['reviewPackageId'],
+  })
   .refine((value) => uniqueFieldKeys(value.candidates), {
     message: UNIQUE_FIELD_KEY_MESSAGE,
     path: ['candidates'],

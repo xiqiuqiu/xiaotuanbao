@@ -3,7 +3,12 @@ import type {
   AcceptReviewConfirmationDto,
   DepartureCollaborationView,
   ReviewConfirmationView,
+  ReviewRevisionView,
 } from '@/types/api'
+
+export async function listReviewRevisions(packageId: string): Promise<ReviewRevisionView[]> {
+  return request.get<ReviewRevisionView[]>(`/agent/review-packages/${packageId}/revisions`)
+}
 
 export async function getDepartureCollaboration(
   departureId: string,

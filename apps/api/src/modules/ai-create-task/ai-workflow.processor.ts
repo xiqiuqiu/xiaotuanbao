@@ -101,7 +101,7 @@ import {
   type AgentExecutionRoutingInput,
   type FrozenAgentAssociation,
 } from './agent-execution-router'
-import { lockConversationRuntime } from './ai-create-task.lock'
+import { lockAiCreateTask, lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
@@ -903,6 +903,9 @@ export class AiWorkflowProcessor {
       },
       ...(pageAttachment ? { pageAttachment } : {}),
     }
+    // A task created by this batch owns its continuation, even if the batch began on another task.
+    const createdTask = input.associations.taskRefs.find((ref) => ref.role === InputBatchTaskRole.created && ref.taskId === job.taskId)
+    if (createdTask) input.associations = { taskRefs: [createdTask] }
     return {
       route: this.executionRouter.route(input),
       input,
@@ -1392,6 +1395,23 @@ export class AiWorkflowProcessor {
         },
         ...(pageAttachment ? { page: pageAttachment.facts } : {}),
       }
+      const pendingReviews = await tx.aiReviewPackage.findMany({
+        where: {
+          organizationId: job.organizationId,
+          conversationId: job.conversationId,
+          taskId,
+          status: AiReviewPackageStatus.pending,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, version: true, confirmationUnit: true, candidates: true, userCorrections: true },
+      })
+      const messagePayload = userEvent.payload as Record<string, unknown>
+      const unresolvedState = {
+        hasPendingReview: pendingReviews.length > 0,
+        reviewPackageId: messagePayload.reviewPackageId ?? null,
+        expectedPackageVersion: messagePayload.expectedPackageVersion ?? null,
+        pendingReviews,
+      }
       const availableToolNames = [...DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES]
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
@@ -1405,7 +1425,7 @@ export class AiWorkflowProcessor {
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState,
         modelId,
         toolNames: availableToolNames,
         systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
@@ -1428,7 +1448,7 @@ export class AiWorkflowProcessor {
         toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
         currentUserText: modelInput.currentUserText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState,
         projection: withSourceIndexTruncation(
           preparedProjection.projection,
           modelInput.truncationReasons,
@@ -1913,6 +1933,8 @@ export class AiWorkflowProcessor {
     if (result.kind === 'registered_intent') {
       const intentRoute = this.executionRouter.route({
         ...routingInput,
+        // A newly registered goal is a new task proposal, not a continuation of the old task.
+        associations: { taskRefs: [] },
         registeredIntent: result.intent,
       })
       if (intentRoute.kind === 'task_creation_proposal') {
@@ -1938,6 +1960,9 @@ export class AiWorkflowProcessor {
 
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
+      if (job.taskId) {
+        await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      }
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       if (!(await this.ownsClaimedJob(tx, job.id))) {
         return
@@ -1992,10 +2017,13 @@ export class AiWorkflowProcessor {
             }
           : null
 
-      const reviewPackageId =
-        result.kind === 'awaiting_review' && job.taskId
-          ? await this.projectReviewPackageViaGateway(tx, job, attemptId, result.reviewPackage)
-          : null
+      const reviewPackageIds: string[] = []
+      if (result.kind === 'awaiting_review' && job.taskId) {
+        for (const proposal of result.reviewPackages ?? [result.reviewPackage]) {
+          reviewPackageIds.push(await this.projectReviewPackageViaGateway(tx, job, attemptId, proposal))
+        }
+      }
+      const reviewPackageId = reviewPackageIds[0] ?? null
       const reviewPackageCoordinates = reviewPackageId
         ? await tx.aiReviewPackage.findUniqueOrThrow({
             where: { id: reviewPackageId },
@@ -2021,6 +2049,7 @@ export class AiWorkflowProcessor {
           ...(reviewPackageId
             ? {
                 reviewPackageId,
+                reviewPackageIds,
                 payloadSchema: reviewPackageCoordinates?.payloadSchema,
                 confirmationUnit: reviewPackageCoordinates?.confirmationUnit,
                 fieldKeys:
@@ -2746,6 +2775,16 @@ export class AiWorkflowProcessor {
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
+    }
+    const userEvent = await tx.aiConversationEvent.findUniqueOrThrow({
+      where: { id: job.inputBatch.userMessageEventId },
+      select: { payload: true },
+    })
+    const messagePayload = userEvent.payload as Record<string, unknown>
+    if (typeof messagePayload.reviewPackageId === 'string' &&
+        (reviewPackage.reviewPackageId !== messagePayload.reviewPackageId ||
+         reviewPackage.expectedPackageVersion !== messagePayload.expectedPackageVersion)) {
+      throw new Error('REVIEW_PACKAGE_REFERENCE_MISMATCH')
     }
     const taskId = job.taskId
     const attempt = await tx.aiAgentAttempt.findUniqueOrThrow({

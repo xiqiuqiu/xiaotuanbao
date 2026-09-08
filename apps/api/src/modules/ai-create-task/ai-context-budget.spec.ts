@@ -217,6 +217,15 @@ describe('buildBudgetedContext', () => {
     expect(current).toContain('本轮附件')
   })
 
+  it('无本轮附件且历史有多份来源时明确要求确认指向', () => {
+    const result = buildBudgetedContext({ modelId: 'deterministic', toolNames: ['readConversationSource'], currentUserText: '从这个里面取客人信息', businessFacts: {}, unresolvedState: {}, projection: {
+      conversationBackground: { summary: null, summaryVersion: null }, recentTail: [], pinnedMaterials: [], truncationReasons: [],
+      availableSources: ['旧截图.jpg', '报价.pdf'].map((originalFilename, index) => ({ materialId: `source-${index}`, parseResultVersion: 1, status: 'ready' as const, pageCount: 1, excerpt: '', truncated: false, originalFilename })),
+    } })
+    expect(result.userText).toContain('【历史附件指向】本轮没有上传或选定附件')
+    expect(result.userText).toContain('先询问要使用哪份文件')
+  })
+
   it('追加任何实际模型输入都会改变 manifest input hash', () => {
     const base = {
       modelId: 'deterministic',

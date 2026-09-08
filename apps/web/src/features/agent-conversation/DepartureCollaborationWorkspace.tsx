@@ -36,6 +36,7 @@ import { canEditDeparture } from '@/features/departure/utils/departure-permissio
 import { DepartureSourceOrderReview } from '@/features/departure/components/DepartureSourceOrderReview'
 import { AgentConversationChat } from './AgentConversationChat'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
+import { ReviewMaterialConflicts, ReviewRevisionHistory } from './ReviewRevisionHistory'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { currentPageAttachmentFromLocation } from './page-locator-attachment'
 import styles from './DepartureCollaborationWorkspace.module.css'
@@ -93,6 +94,25 @@ export function DepartureCollaborationWorkspace({
     id: string
   } | null>(null)
   const scope = `${departureId}:${conversationId ?? 'new'}`
+  const [questionTarget, setQuestionTarget] = useState<{ scope: string; id: string | null } | null>(null)
+  const questionPackageId = questionTarget?.scope === scope
+    ? questionTarget.id
+    : sessionStorage.getItem(`collaboration-question:${scope}`)
+  const restoreQuestionTarget = useCallback((id: string | null) => {
+    if (id) sessionStorage.setItem(`collaboration-question:${scope}`, id)
+    else sessionStorage.removeItem(`collaboration-question:${scope}`)
+    setQuestionTarget({ scope, id })
+  }, [scope])
+  const clearQuestionTarget = useCallback((id: string) => {
+    if (sessionStorage.getItem(`collaboration-question:${scope}`) !== id) return
+    restoreQuestionTarget(null)
+  }, [scope, restoreQuestionTarget])
+  const askAboutItem = (pkg: AiReviewPackageView) => {
+    restoreQuestionTarget(pkg.id)
+    setCompactPanel('来源会话')
+    requestAnimationFrame(() => document
+      .querySelector<HTMLTextAreaElement>('[aria-label="询问小团宝业务"]')?.focus())
+  }
   useEffect(() => {
     if (!expanded) return
     const location =
@@ -139,6 +159,7 @@ export function DepartureCollaborationWorkspace({
     refetchInterval: expanded ? 2500 : false,
   })
   const items = conversationId ? (collaboration.data?.items ?? []) : []
+  const questionItem = items.find((pkg) => pkg.id === questionPackageId)
   const visible = items.filter((pkg) => category === '全部事项' || categoryOf(pkg) === category)
   const selectedId =
     selection?.scope === scope
@@ -296,8 +317,23 @@ export function DepartureCollaborationWorkspace({
           </div>
         ) : null}
         <div className={styles.chat}>
-          <AgentConversationChat onReviewRequested={requestReview} />
+          <AgentConversationChat
+            onReviewRequested={requestReview}
+            reviewPackageId={questionPackageId ?? undefined}
+            onReviewMessageSent={clearQuestionTarget}
+            onReviewMessageRestored={restoreQuestionTarget}
+          />
         </div>
+        {questionPackageId ? (
+          <div className={styles.entry} role="status">
+            <Space wrap>
+              <Typography.Text>针对：{questionItem
+                ? itemTitle(questionItem, items.indexOf(questionItem) + 1)
+                : '已引用的审核事项'}</Typography.Text>
+              <Button size="small" onClick={() => clearQuestionTarget(questionPackageId)}>取消引用</Button>
+            </Space>
+          </div>
+        ) : null}
       </section>
       <section hidden={!expanded} className={styles.review} aria-label="事项与审核">
         <header className={styles.heading}>
@@ -392,6 +428,7 @@ export function DepartureCollaborationWorkspace({
                       canEdit={canEdit}
                       focused={expanded && pkg.id === selected?.id}
                       confirmations={collaboration.data?.confirmations ?? []}
+                      onAsk={() => askAboutItem(pkg)}
                     />
                   </div>
                 </div>
@@ -411,6 +448,7 @@ function WorkspaceReviewItem({
   canEdit,
   focused,
   confirmations,
+  onAsk,
 }: {
   selected: AiReviewPackageView
   departureId: string
@@ -418,6 +456,7 @@ function WorkspaceReviewItem({
   canEdit: boolean
   focused: boolean
   confirmations: ReviewConfirmationView[]
+  onAsk: () => void
 }) {
   const navigate = useNavigate()
   const failure = confirmations
@@ -441,10 +480,15 @@ function WorkspaceReviewItem({
         >
           {statusLabels[selected.status] ?? selected.status}
         </Tag>
+        {selected.status === 'pending' || selected.status === 'conflict' ? (
+          <Button size="small" onClick={onAsk}>针对此项提问</Button>
+        ) : null}
       </Space>
       {failure ? (
         <Alert type="error" showIcon title={failure.reason ?? '此项未完成，请核对后重试'} />
       ) : null}
+      <ReviewRevisionHistory pkg={selected} focused={focused} />
+      <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
       {selected.payloadSchema !== SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ? (
         <Collapse
           size="small"

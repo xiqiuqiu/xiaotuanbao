@@ -15,6 +15,7 @@ import type {
   ReviewRevisionView,
 } from '@xiaotuanbao/shared'
 import {
+  AiInputBatchStatus,
   AiReviewPackageStatus,
   AiReviewRecordAction,
   AiReviewWriteResult,
@@ -50,6 +51,15 @@ import {
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   resolveSegmentResourceReviewDraft,
 } from '@xiaotuanbao/ai-contracts'
+
+const REVISION_PENDING_REASON = '助手正在核对该事项，请等待更新后再确认'
+const REVISING_BATCH_STATUSES: AiInputBatchStatus[] = [
+  AiInputBatchStatus.waiting_for_materials,
+  AiInputBatchStatus.ready_for_agent,
+  AiInputBatchStatus.preparing_context,
+  AiInputBatchStatus.agent_running,
+  AiInputBatchStatus.awaiting_user_input,
+]
 
 @Injectable()
 export class ReviewCollaborationService {
@@ -166,6 +176,7 @@ export class ReviewCollaborationService {
         if (!current.conversationId || !current.inputBatchId || !current.taskId) {
           throw new BadRequestException('审核事项缺少来源会话，无法受理确认')
         }
+        await this.assertNoPendingRevision(tx, organizationId, current)
         const jobKey = reviewConfirmJobKey(dto.decisionCommandId, current.id)
         const inFlight = await findInFlightReviewConfirmJob(tx, current.id, jobKey)
         if (inFlight) {
@@ -353,6 +364,17 @@ export class ReviewCollaborationService {
           orderBy: { createdAt: 'asc' },
         })
       : []
+    const pendingRevisions = conversationIds.length
+      ? await this.prisma.aiInputBatch.findMany({
+          where: { organizationId, conversationId: { in: conversationIds }, status: { in: REVISING_BATCH_STATUSES } },
+          select: { userMessageEvent: { select: { payload: true } } },
+        })
+      : []
+    const revisingIds = new Set(pendingRevisions.flatMap((batch) => {
+      const payload = batch.userMessageEvent.payload
+      return payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.reviewPackageId === 'string'
+        ? [payload.reviewPackageId] : []
+    }))
     const packageIds = packages.map((pkg) => pkg.id)
     const jobs = packageIds.length
       ? await this.prisma.aiWorkflowJob.findMany({
@@ -393,14 +415,36 @@ export class ReviewCollaborationService {
         title: link.conversation.title,
         lastActivityAt: link.conversation.lastActivityAt.toISOString(),
       })),
-      items: packages.map((pkg) =>
-        toReviewPackageView({
-          ...pkg,
-          baselineSnapshot: pkg.baselineSnapshot,
-        }),
-      ),
+      items: packages.map((pkg) => ({
+        ...toReviewPackageView(pkg),
+        ...(pkg.status === AiReviewPackageStatus.pending && revisingIds.has(pkg.id)
+          ? { confirmationBlockedReason: REVISION_PENDING_REASON } : {}),
+      })),
       confirmations,
     }
+  }
+
+  private async assertNoPendingRevision(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<void> {
+    const baseline = pkg.baselineSnapshot
+    if (baseline && typeof baseline === 'object' && !Array.isArray(baseline)
+      && Array.isArray(baseline.reviewConflicts) && baseline.reviewConflicts.length > 0) {
+      throw new ConflictException('该事项存在尚未处理的差异，请核对后再确认')
+    }
+    if (!pkg.conversationId) return
+    const pending = await tx.aiInputBatch.findFirst({
+      where: {
+        organizationId,
+        conversationId: pkg.conversationId,
+        status: { in: REVISING_BATCH_STATUSES },
+        userMessageEvent: { payload: { path: ['reviewPackageId'], equals: pkg.id } },
+      },
+      select: { id: true },
+    })
+    if (pending) throw new ConflictException(REVISION_PENDING_REASON)
   }
 
   async listRevisions(
@@ -530,6 +574,7 @@ export class ReviewCollaborationService {
       if (current.version !== expectedPackageVersion) {
         throw new ConflictException('审核包版本已变化，请刷新后重试')
       }
+      await this.assertNoPendingRevision(tx, organizationId, current)
       const departure = await tx.departure.findFirst({
         where: { id: current.targetId, organizationId },
         select: { updatedAt: true },

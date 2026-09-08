@@ -62,7 +62,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const streamed = deps.stream ? await deps.stream(userText, options?.signal) : null
       let sequence = 1
       let stepReasoning = ''
-      const toolErrors: unknown[] = []
+      const streamedToolResults: unknown[] = []
       const stepLatencies: number[] = []
       let stepStartedAt: number | undefined
       if (streamed?.fullStream) {
@@ -76,7 +76,10 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
           }
           if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-error') {
             const { toolCallId, toolName } = toolPayload(chunk)
-            toolErrors.push({ toolCallId, toolName, isError: true })
+            streamedToolResults.push({ toolCallId, toolName, isError: true })
+          }
+          if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-result') {
+            streamedToolResults.push(chunk)
           }
           if (isStepBoundaryChunk(chunk)) {
             stepReasoning = ''
@@ -98,7 +101,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
         }
       }
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
-      const result = resultFromGenerate({ ...output, toolResults: [...toolErrors, ...(output.toolResults ?? [])] })
+      const result = resultFromGenerate({ ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] })
       if (result.kind === 'completed' && sequence === 1) {
         yield { type: 'message.delta', sequence: 1, text: result.message }
       }
@@ -140,9 +143,16 @@ function resultFromGenerate(output: MastraGenerateLike): HeadlessExecutionResult
   if (isCapacityTripwire(output)) {
     return capacityFailure(diagnostic)
   }
-  const reviewPackage = acceptedReviewPackageFromGenerate(output)
-  if (reviewPackage) {
-    return { kind: 'awaiting_review', reviewPackage, diagnostic }
+  const reviewPackages = acceptedReviewPackagesFromGenerate(output)
+  if (reviewPackages.length > 0) {
+    return { kind: 'awaiting_review', reviewPackage: reviewPackages[0]!, reviewPackages, diagnostic }
+  }
+  const rejectedReview = ['proposeReviewPackage', 'proposeSourceOrderReviewPackage', 'proposeSegmentResourceReviewPackage'].some((name) => {
+    const result = lastToolResult(output.toolResults, name)
+    return result && typeof result === 'object' && 'status' in result && result.status === 'rejected'
+  })
+  if (rejectedReview) {
+    return { kind: 'failed', error: new AiCollaborationError('INVALID_FORMAT', '审核建议未能生成，资料引用或字段校验未通过，请重试整理。').toJSON(), diagnostic }
   }
   const message = output.text?.trim() || '已处理当前说明。'
   const routing = acceptedConversationRoutingFromGenerate(output)
@@ -292,7 +302,7 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
   })
 }
 
-function toolPayload(value: unknown): { toolCallId?: string; toolName?: string; isError?: boolean; error?: unknown } {
+function toolPayload(value: unknown): { toolCallId?: string; toolName?: string; isError?: boolean; error?: unknown; result?: unknown } {
   if (!value || typeof value !== 'object') return {}
   const item = value as { payload?: object }
   return item.payload ?? value
@@ -323,27 +333,25 @@ function toolNameFromCall(call: unknown): string | null {
   return null
 }
 
-function acceptedReviewPackageFromGenerate(output: MastraGenerateLike) {
-  const accepted = lastAcceptedProposeResult(output.toolResults)
-  if (!accepted) {
-    return null
+function acceptedReviewPackagesFromGenerate(output: MastraGenerateLike) {
+  const packages: Extract<HeadlessExecutionResult, { kind: 'awaiting_review' }>['reviewPackage'][] = []
+  const seenCalls = new Set<string>()
+  for (const item of output.toolResults ?? []) {
+    const { toolName, toolCallId, result } = toolPayload(item)
+    if (!['proposeReviewPackage', 'proposeSegmentResourceReviewPackage', 'proposeSourceOrderReviewPackage'].includes(toolName ?? '')) continue
+    if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'accepted') continue
+    if (toolCallId && seenCalls.has(toolCallId)) continue
+    const schema = toolName === 'proposeReviewPackage'
+      ? submitReviewPackageModelInputSchema
+      : toolName === 'proposeSegmentResourceReviewPackage'
+        ? submitSegmentResourceReviewModelInputSchema
+        : submitSourceOrderReviewPackageModelInputSchema
+    const parsed = schema.safeParse(result)
+    if (!parsed.success) continue
+    if (toolCallId) seenCalls.add(toolCallId)
+    packages.push(parsed.data)
   }
-  const parsed = submitReviewPackageModelInputSchema.safeParse({
-    objectVersion: accepted.objectVersion,
-    confirmationUnit: accepted.confirmationUnit,
-    candidates: accepted.candidates,
-  })
-  if (parsed.success) {
-    return parsed.data
-  }
-  const segmentResource = submitSegmentResourceReviewModelInputSchema.safeParse({
-    objectVersion: accepted.objectVersion,
-    confirmationUnit: accepted.confirmationUnit,
-    candidates: accepted.candidates,
-  })
-  if (segmentResource.success) return segmentResource.data
-  const sourceOrder = submitSourceOrderReviewPackageModelInputSchema.safeParse(accepted)
-  return sourceOrder.success ? sourceOrder.data : null
+  return packages
 }
 
 function acceptedConversationRoutingFromGenerate(output: MastraGenerateLike) {
@@ -374,59 +382,6 @@ function lastToolResult(toolResults: unknown[] | undefined, expectedToolName: st
           : null
     if (toolName === expectedToolName) {
       last = candidate.result ?? candidate.payload?.result ?? null
-    }
-  }
-  return last
-}
-
-function lastAcceptedProposeResult(toolResults: unknown[] | undefined) {
-  if (!toolResults) {
-    return null
-  }
-  let last: {
-    objectVersion: number
-    confirmationUnit: string
-    candidates: unknown
-  } | null = null
-  for (const item of toolResults) {
-    if (!item || typeof item !== 'object') {
-      continue
-    }
-    const candidate = item as {
-      toolName?: unknown
-      payload?: { toolName?: unknown; result?: unknown }
-      result?: unknown
-    }
-    const toolName =
-      typeof candidate.toolName === 'string'
-        ? candidate.toolName
-        : typeof candidate.payload?.toolName === 'string'
-          ? candidate.payload.toolName
-          : null
-    if (toolName !== 'proposeReviewPackage' && toolName !== 'proposeSegmentResourceReviewPackage' && toolName !== 'proposeSourceOrderReviewPackage') {
-      continue
-    }
-    const result = candidate.result ?? candidate.payload?.result
-    if (!result || typeof result !== 'object') {
-      continue
-    }
-    const parsed = result as {
-      status?: unknown
-      objectVersion?: unknown
-      confirmationUnit?: unknown
-      candidates?: unknown
-    }
-    if (parsed.status !== 'accepted') {
-      last = null
-      continue
-    }
-    if (typeof parsed.objectVersion !== 'number' || typeof parsed.confirmationUnit !== 'string') {
-      continue
-    }
-    last = {
-      objectVersion: parsed.objectVersion,
-      confirmationUnit: parsed.confirmationUnit,
-      candidates: parsed.candidates,
     }
   }
   return last

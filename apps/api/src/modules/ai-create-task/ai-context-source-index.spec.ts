@@ -77,7 +77,9 @@ describe('resolveModelCurrentInput', () => {
       plan,
     })
     expect(plan.currentInputOverflow).toBe(false)
-    expect(resolved.currentUserText).toBe(plannerBase.currentUserText)
+    expect(resolved.currentUserText).toContain(plannerBase.currentUserText)
+    expect(resolved.currentUserText).toContain('sequence=1')
+    expect(resolved.currentUserText).toContain('event-1')
     expect(resolved.sourceIndexVersion).toBeNull()
     expect(created).toEqual([])
   })

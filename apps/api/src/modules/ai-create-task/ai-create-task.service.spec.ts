@@ -447,6 +447,7 @@ describe('AiCreateTaskService review disposition #440', () => {
     const pkg = {
       ...unsupportedPackage,
       id: 'pkg-merge-corrections',
+      baselineSnapshot: { preserved: true, reviewConflicts: [{ fieldKey: nextField, proposedValue: nextValue, userCorrectedValue: nextValue }] },
       targetKind: confirmationUnit === 'segment_resource' ? 'departure' : unsupportedPackage.targetKind,
       payloadSchema,
       confirmationUnit,
@@ -480,8 +481,13 @@ describe('AiCreateTaskService review disposition #440', () => {
       where: { id: pkg.id, status: AiReviewPackageStatus.pending, version: 1 },
       data: expect.objectContaining({
         userCorrections: { [firstField]: firstValue, [nextField]: nextValue },
+        baselineSnapshot: { preserved: true, reviewConflicts: [] },
       }),
     })
+    expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      beforeSnapshot: { [firstField]: firstValue, [nextField]: nextValue },
+      afterSnapshot: { [firstField]: firstValue, [nextField]: nextValue },
+    }) })
   })
 
   it('applies a valid registered proposal to the draft on confirm', async () => {
@@ -1446,6 +1452,7 @@ describe('source-order proposal entry', () => {
     )
     const caller = { userId: 'user-1', organizationId: 'org-1', taskId: 'task-1', runId: 'run-1', conversationId: 'conv-1', inputBatchId: 'batch-1', attemptId: 'attempt-1' }
     const input = { taskId: 'task-1', runId: 'run-1', objectVersion: 1780000000000,
+      reviewPackageId: 'review-source', expectedPackageVersion: 2,
       confirmationUnit: 'source_order_create', candidates: [{ fieldKey: 'partnerId', proposedValue: 'partner-1', clarity: 'clear',
         evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户甲' }] }] }
     const validate = jest.spyOn(service, 'proposeReviewPackageForAgent').mockResolvedValue({
@@ -1458,7 +1465,7 @@ describe('source-order proposal entry', () => {
     expect(validate).toHaveBeenCalledWith(caller, input)
     expect(partner).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'partner-1', organizationId: 'org-1', status: 'active' } }))
     partner.mockResolvedValue({ id: 'partner-1' })
-    await expect(service.proposeSourceOrderReviewPackageForAgent(caller, input)).resolves.toMatchObject({ status: 'accepted', payloadSchema: 'source_order.create@v1', candidates: input.candidates })
+    await expect(service.proposeSourceOrderReviewPackageForAgent(caller, input)).resolves.toMatchObject({ status: 'accepted', payloadSchema: 'source_order.create@v1', candidates: input.candidates, reviewPackageId: 'review-source', expectedPackageVersion: 2 })
     validate.mockRejectedValueOnce(new ForbiddenException('仅任务创建者可提交审核包'))
     await expect(service.proposeSourceOrderReviewPackageForAgent(caller, input)).rejects.toThrow(ForbiddenException)
     task.mockResolvedValue(null)

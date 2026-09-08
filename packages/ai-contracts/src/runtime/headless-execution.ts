@@ -171,14 +171,17 @@ export const headlessAwaitingUserInputResultSchema = z
   })
   .strip()
 
+const headlessReviewPackageSchema = z.union([
+  submitReviewPackageModelInputSchema,
+  submitSegmentResourceReviewModelInputSchema,
+  submitSourceOrderReviewPackageModelInputSchema,
+])
+
 export const headlessAwaitingReviewResultSchema = z
   .object({
     kind: z.literal('awaiting_review'),
-    reviewPackage: z.union([
-      submitReviewPackageModelInputSchema,
-      submitSegmentResourceReviewModelInputSchema,
-      submitSourceOrderReviewPackageModelInputSchema,
-    ]),
+    reviewPackage: headlessReviewPackageSchema,
+    reviewPackages: z.array(headlessReviewPackageSchema).min(1).optional(),
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()

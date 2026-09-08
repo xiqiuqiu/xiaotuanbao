@@ -226,3 +226,9 @@ describe('Agent Factory', () => {
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['getTaskContext'])
   })
 })
+
+ it('exposes routing for an explicitly granted departure collaboration goal', () => {
+   const routingContext = { ...context, agentDefinition: { key: 'departure.collaboration', version: 1 }, grantedCapabilities: [{ key: 'conversation.intent.route', version: 1 }] }
+   createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://localhost:3000', serviceSecret: 'test' }, routingContext)
+   expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
+ })

@@ -58,7 +58,9 @@ export async function resolveModelCurrentInput(
 ): Promise<ResolvedModelCurrentInput> {
   if (!input.plan.currentInputOverflow) {
     return {
-      currentUserText: input.originalText,
+      currentUserText: input.origin.kind === 'user_message'
+        ? `【本轮用户消息定位】sequence=${input.origin.sequence}，eventId=${input.origin.eventId}。引用本轮原文时使用此序号，不要按对话条数猜测。\n${input.originalText}`
+        : input.originalText,
       sourceIndexVersion: null,
       record: null,
       truncationReasons: [],

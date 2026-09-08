@@ -762,6 +762,8 @@ export class AiCreateTaskService {
     }
     return proposeSourceOrderReviewPackageOutputSchema.parse({
       ...proposal, payloadSchema: SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+      reviewPackageId: input.data.reviewPackageId,
+      expectedPackageVersion: input.data.expectedPackageVersion,
     })
   }
 
@@ -833,7 +835,32 @@ export class AiCreateTaskService {
     if (!validated.success) {
       return { status: 'rejected', errors: validated.errors }
     }
-    const resolution = resolveSegmentResourceReviewDraft(input.candidates)
+    let reviewCandidates: { fieldKey: string; proposedValue: unknown }[] = input.candidates
+    let corrections: Partial<Record<string, unknown>> | undefined
+    if (input.reviewPackageId) {
+      const current = await this.prisma.aiReviewPackage.findFirst({
+        where: {
+          id: input.reviewPackageId,
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          conversationId: caller.conversationId,
+          status: AiReviewPackageStatus.pending,
+          version: input.expectedPackageVersion,
+          confirmationUnit: input.confirmationUnit,
+          targetKind: 'departure',
+          targetId: task.departure.id,
+          payloadSchema: SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+        },
+      })
+      if (!current) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      const view = toReviewPackageView(current)
+      if (!view.schemaSupported) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+      corrections = reviewConfirmValues(view.candidates).corrections
+      const merged = new Map(view.candidates.map((candidate) => [candidate.fieldKey, { fieldKey: candidate.fieldKey, proposedValue: candidate.proposedValue }]))
+      for (const candidate of input.candidates) merged.set(candidate.fieldKey, candidate)
+      reviewCandidates = [...merged.values()]
+    }
+    const resolution = resolveSegmentResourceReviewDraft(reviewCandidates, corrections)
     if (resolution.status === 'incomplete' && resolution.missingFieldKeys.includes('itinerarySegmentId')) {
       return {
         status: 'rejected',
@@ -863,7 +890,7 @@ export class AiCreateTaskService {
     const itinerarySegmentId =
       resolution.status === 'ready'
         ? resolution.draft.itinerarySegmentId
-        : input.candidates.find((candidate) => candidate.fieldKey === 'itinerarySegmentId')
+        : corrections?.itinerarySegmentId ?? reviewCandidates.find((candidate) => candidate.fieldKey === 'itinerarySegmentId')
             ?.proposedValue
     if (typeof itinerarySegmentId === 'string' && itinerarySegmentId.trim() !== '') {
       const segment = await this.prisma.itinerarySegment.findFirst({
@@ -893,6 +920,8 @@ export class AiCreateTaskService {
       objectVersion: input.objectVersion,
       confirmationUnit: input.confirmationUnit,
       payloadSchema: SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
+      reviewPackageId: input.reviewPackageId,
+      expectedPackageVersion: input.expectedPackageVersion,
       candidates: input.candidates,
       normalizedProposal: validated.normalizedProposal,
     }
@@ -1058,6 +1087,15 @@ export class AiCreateTaskService {
       )
       const corrections = this.parseCorrections(dto.corrections, pkg)
       const mergedCorrections = { ...beforeCorrections, ...corrections }
+      const candidateValues = Object.fromEntries(originalCandidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue]))
+      const baseline = pkg.baselineSnapshot && typeof pkg.baselineSnapshot === 'object' && !Array.isArray(pkg.baselineSnapshot)
+        ? pkg.baselineSnapshot : {}
+      const remainingConflicts = Array.isArray(baseline.reviewConflicts)
+        ? baseline.reviewConflicts.filter((conflict) => {
+            if (!conflict || typeof conflict !== 'object' || Array.isArray(conflict)) return false
+            return typeof conflict.fieldKey === 'string' && !Object.hasOwn(corrections, conflict.fieldKey)
+          })
+        : undefined
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
@@ -1066,6 +1104,7 @@ export class AiCreateTaskService {
         },
         data: {
           userCorrections: mergedCorrections as Prisma.InputJsonValue,
+          ...(remainingConflicts ? { baselineSnapshot: { ...baseline, reviewConflicts: remainingConflicts } as Prisma.InputJsonValue } : {}),
           version: { increment: 1 },
         },
       })
@@ -1083,8 +1122,8 @@ export class AiCreateTaskService {
         objectVersion: pkg.baseObjectVersion,
         writeResult: AiReviewWriteResult.success,
         packageVersion: dto.expectedPackageVersion + 1,
-        beforeSnapshot: beforeCorrections,
-        afterSnapshot: mergedCorrections,
+        beforeSnapshot: { ...candidateValues, ...beforeCorrections },
+        afterSnapshot: { ...candidateValues, ...mergedCorrections },
       })
       return this.toSummaryAfterReviewWrite(tx, organizationId, taskId)
     })

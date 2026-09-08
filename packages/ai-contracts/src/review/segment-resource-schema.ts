@@ -330,10 +330,16 @@ export function resolveSegmentResourceReviewDraft(
 export const submitSegmentResourceReviewModelInputSchema = z
   .object({
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(SEGMENT_RESOURCE_CONFIRMATION_UNIT).default(SEGMENT_RESOURCE_CONFIRMATION_UNIT),
     candidates: z.array(segmentResourceReviewCandidateSchema).min(1),
   })
   .strip()
+  .refine((value) => (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+    message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+    path: ['reviewPackageId'],
+  })
   .refine(
     (value) => new Set(value.candidates.map((candidate) => candidate.fieldKey)).size === value.candidates.length,
     { message: '同一审核包内每个字段最多一条候选', path: ['candidates'] },
@@ -348,10 +354,16 @@ export const submitSegmentResourceReviewInputSchema = z
     taskId: z.string().min(1),
     runId: z.string().min(1),
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(SEGMENT_RESOURCE_CONFIRMATION_UNIT).default(SEGMENT_RESOURCE_CONFIRMATION_UNIT),
     candidates: z.array(segmentResourceReviewCandidateSchema).min(1),
   })
   .strip()
+  .refine((value) => (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+    message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+    path: ['reviewPackageId'],
+  })
   .refine(
     (value) => new Set(value.candidates.map((candidate) => candidate.fieldKey)).size === value.candidates.length,
     { message: '同一审核包内每个字段最多一条候选', path: ['candidates'] },

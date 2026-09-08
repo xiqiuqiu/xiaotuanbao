@@ -47,13 +47,14 @@ import {
 import { AgentReasoningMessage } from './agent-reasoning-message'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
+  CONVERSATION_ACTIVE_CATCH_UP_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
 } from '@/features/ai-assist/ai-create-assist-polling'
 import { ASSIST_ERROR_TEXT, getAssistErrorText } from '@/features/ai-assist/assist-error-text'
 import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
-import { useAgentConversationDraft } from './use-agent-conversation-draft'
+import { clearPendingConversationDraft, readPendingConversationDraft, useAgentConversationDraft } from './use-agent-conversation-draft'
 import {
   conversationSendContextFromAttachment,
   currentPageAttachmentLabel,
@@ -516,6 +517,9 @@ function mergeEvents(
 
 function useAgentConversationChatController(
   onReviewRequested?: (packageId: string, departureId?: string) => void,
+  reviewPackageId?: string,
+  onReviewMessageSent?: (packageId: string) => void,
+  onReviewMessageRestored?: (packageId: string | null) => void,
 ) {
   const [focusedReviewPackageId, setFocusedReviewPackageId] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -601,7 +605,7 @@ function useAgentConversationChatController(
         useAgentConversationRuntimeStore.getState().hydrate({
           conversationId,
           events: mergeEvents(live.events, conversation.events),
-          draft: live.draft !== '' ? live.draft : (conversation.draft?.text ?? ''),
+          draft: readPendingConversationDraft(conversationId)?.text ?? (live.draft !== '' ? live.draft : (conversation.draft?.text ?? '')),
           draftEpoch: conversation.draft?.draftEpoch ?? live.draftEpoch,
           revision: conversation.draft?.revision ?? live.revision,
         })
@@ -631,8 +635,10 @@ function useAgentConversationChatController(
     const abort = new AbortController()
     let cancelled = false
     let errorDebounce: ReturnType<typeof setTimeout> | undefined
-    const catchUp = () =>
-      listAgentConversationEvents(conversationId, lastSequenceRef.current, {
+    let lastCatchUpAt = 0
+    const catchUp = () => {
+      lastCatchUpAt = Date.now()
+      return listAgentConversationEvents(conversationId, lastSequenceRef.current, {
         signal: abort.signal,
         silentError: true,
       })
@@ -651,6 +657,7 @@ function useAgentConversationChatController(
           }
         })
         .catch(() => undefined)
+    }
 
     const source = new EventSource(
       `${env.apiBaseUrl}/agent/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
@@ -704,10 +711,12 @@ function useAgentConversationChatController(
     }
     document.addEventListener('visibilitychange', onVisible)
     const idleCatchUp = window.setInterval(() => {
-      if (source.readyState === EventSource.CLOSED) {
+      const current = useAgentConversationRuntimeStore.getState()
+      if (currentStoppableBatchId(current.events) || projectQueuedConversationMessages(current.events).messages.length > 0 ||
+        Date.now() - lastCatchUpAt >= CONVERSATION_IDLE_CATCH_UP_MS) {
         void catchUp()
       }
-    }, CONVERSATION_IDLE_CATCH_UP_MS)
+    }, CONVERSATION_ACTIVE_CATCH_UP_MS)
     void catchUp()
     return () => {
       cancelled = true
@@ -745,6 +754,7 @@ function useAgentConversationChatController(
           conversationIdRef.current,
           {
             text: outboundText,
+            ...(reviewPackageId ? { reviewPackageId } : {}),
             ...(files.length > 0 ? { files } : {}),
             ...conversationSendContextFromAttachment(attachment),
           },
@@ -761,6 +771,8 @@ function useAgentConversationChatController(
           sendIdempotencyKey: null,
         })
         setPendingUploadCount(0)
+        clearPendingConversationDraft(result.conversationId, current.draft)
+        if (reviewPackageId) onReviewMessageSent?.(reviewPackageId)
         if (!conversationIdRef.current) {
           persistConversation({
             id: result.conversationId,
@@ -780,7 +792,7 @@ function useAgentConversationChatController(
         await restoreFiles?.()
       }
     },
-    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation, updateDraft],
+    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation, updateDraft, reviewPackageId, onReviewMessageSent],
   )
 
   const stop = useCallback(async () => {
@@ -836,6 +848,11 @@ function useAgentConversationChatController(
         })
         if (result.draft) {
           applyServerDraft(result.draft)
+          const restoredTarget = result.events.find((event) =>
+            event.kind === 'batch_status' && event.payload.reason === 'queue_retracted'
+              && event.payload.batchId === batchId,
+          )?.payload.reviewPackageId
+          onReviewMessageRestored?.(typeof restoredTarget === 'string' ? restoredTarget : null)
         }
       } catch (error) {
         setErrorText(getAssistErrorText(error))
@@ -843,7 +860,7 @@ function useAgentConversationChatController(
         setEditingQueueBatchId(null)
       }
     },
-    [applyServerDraft, conversationIdRef, draft, editingQueueBatchId],
+    [applyServerDraft, conversationIdRef, draft, editingQueueBatchId, onReviewMessageRestored],
   )
 
   const runInteractionCommand = useCallback(
@@ -1136,7 +1153,15 @@ function AgentConversationComposer({
 
 export function AgentConversationChat({
   onReviewRequested,
-}: { onReviewRequested?: (packageId: string, departureId?: string) => void } = {}) {
+  reviewPackageId,
+  onReviewMessageSent,
+  onReviewMessageRestored,
+}: {
+  onReviewRequested?: (packageId: string, departureId?: string) => void
+  reviewPackageId?: string
+  onReviewMessageSent?: (packageId: string) => void
+  onReviewMessageRestored?: (packageId: string | null) => void
+} = {}) {
   const {
     activityRenderers,
     attachCurrentPage,
@@ -1160,7 +1185,7 @@ export function AgentConversationChat({
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
-  } = useAgentConversationChatController(onReviewRequested)
+  } = useAgentConversationChatController(onReviewRequested, reviewPackageId, onReviewMessageSent, onReviewMessageRestored)
   const queuedMessagesContextValue = useMemo(
     () => ({
       editingBatchId: editingQueueBatchId,

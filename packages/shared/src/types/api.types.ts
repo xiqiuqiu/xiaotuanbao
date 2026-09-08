@@ -1016,6 +1016,7 @@ export interface AiConversationView {
 }
 
 export interface SendAiConversationMessageDto {
+  reviewPackageId?: string
   text?: string
   replyToEventId?: string
   interactionId?: string
@@ -1153,6 +1154,8 @@ export interface AiReviewPackageView {
   targetId: string
   proposalHash: string
   itemIdentity?: string
+  confirmationBlockedReason?: string
+  conflicts?: { fieldKey: string; proposedValue: unknown; userCorrectedValue: unknown }[]
   candidates: AiReviewCandidateView[]
   /** 候选提交时的发团创建草稿快照；确认前自动保存不得覆盖这些候选字段。 */
   baselineSnapshot: DepartureCreationDraftSnapshot

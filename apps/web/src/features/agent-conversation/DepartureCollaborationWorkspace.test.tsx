@@ -33,7 +33,11 @@ vi.mock('./SegmentResourceReviewPanel', () => ({
   ),
 }))
 vi.mock('./AgentConversationChat', () => ({
-  AgentConversationChat: ({ onReviewRequested }: { onReviewRequested: (id: string) => void }) => {
+  AgentConversationChat: ({ onReviewRequested, reviewPackageId, onReviewMessageSent }: {
+    onReviewRequested: (id: string) => void
+    reviewPackageId?: string
+    onReviewMessageSent?: (id: string) => void
+  }) => {
     const [text, setText] = useState('')
     return (
       <>
@@ -43,6 +47,8 @@ vi.mock('./AgentConversationChat', () => ({
           onChange={(event) => setText(event.target.value)}
         />
         <ButtonForTest onClick={() => onReviewRequested('resource-1')} />
+        <button onClick={() => reviewPackageId && onReviewMessageSent?.(reviewPackageId)}
+          data-review-package-id={reviewPackageId}>发送定向问题</button>
       </>
     )
   },
@@ -91,6 +97,26 @@ beforeEach(() => {
   }))
 })
 afterEach(cleanup)
+it('binds questions to a package ID while retaining the draft, and clears only after sending', async () => {
+  const client = new QueryClient()
+  const rendered = render(<QueryClientProvider client={client}>{view(true)}</QueryClientProvider>)
+  fireEvent.change(screen.getByLabelText('会话输入'), { target: { value: '请核对早餐' } })
+  fireEvent.click(await screen.findByRole('tab', { name: 'resource-1 待审核' }))
+  fireEvent.click(screen.getByRole('button', { name: '针对此项提问' }))
+  expect(screen.getByLabelText('会话输入')).toHaveValue('请核对早餐')
+  expect(screen.getByRole('button', { name: '发送定向问题' })).toHaveAttribute('data-review-package-id', 'resource-1')
+  expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBe('resource-1')
+  rendered.unmount()
+  render(<QueryClientProvider client={client}>{view(true)}</QueryClientProvider>)
+  expect(screen.getByText('针对：resource-1')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '协作二' }))
+  expect(screen.getByRole('button', { name: '发送定向问题' })).not.toHaveAttribute('data-review-package-id')
+  fireEvent.click(await screen.findByRole('button', { name: '协作一' }))
+  expect(screen.getByRole('button', { name: '发送定向问题' })).toHaveAttribute('data-review-package-id', 'resource-1')
+  fireEvent.click(screen.getByRole('button', { name: '发送定向问题' }))
+  expect(screen.queryByText('针对：resource-1')).not.toBeInTheDocument()
+  expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBeNull()
+})
 it('keeps one chat mounted when switching between sidebar and three columns', async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },

@@ -12,11 +12,8 @@ import {
   CONVERSATION_SOURCE_READ_CAPABILITY,
   CONVERSATION_SOURCE_READ_CAPABILITY_REF,
 } from './conversation-recall-definitions'
-import {
-  CONVERSATION_ROUTING_TOOL,
-  conversationRoutingInputSchema,
-  conversationRoutingOutputSchema,
-} from './conversation-routing'
+import { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
+export { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
 
 export const CONVERSATION_GENERAL_AGENT_DEFINITION_REF = {
   key: 'conversation.general',
@@ -28,10 +25,7 @@ export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF = {
   version: 1,
 } as const
 
-export const CONVERSATION_ROUTING_CAPABILITY_REF = {
-  key: 'conversation.intent.route',
-  version: 1,
-} as const
+
 
 export const CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION = {
   ...CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
@@ -65,23 +59,7 @@ export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY = {
   },
 } as const satisfies CapabilityDefinition
 
-export const CONVERSATION_ROUTING_CAPABILITY = {
-  ...CONVERSATION_ROUTING_CAPABILITY_REF,
-  toolName: CONVERSATION_ROUTING_TOOL.name,
-  kind: 'propose',
-  risk: 'low',
-  requiredPermissionKeys: [],
-  requiredObjectScopes: [{ kind: 'agent_conversation', idFromContext: 'conversationId' }],
-  inputSchema: conversationRoutingInputSchema,
-  outputSchema: conversationRoutingOutputSchema,
-  contextSchema: requestContextSchema,
-  gateway: {
-    actionKind: 'read',
-    decision: 'allow',
-    targetKind: 'agent_conversation',
-    denyCodes: ['TARGET_MISSING', 'CROSS_ORGANIZATION', 'OBJECT_SCOPE_DENIED', 'TARGET_MISMATCH'],
-  },
-} as const satisfies CapabilityDefinition
+
 
 export const CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS = [
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY,

@@ -1,3 +1,4 @@
+import { DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES } from '../runtime/departure-collaboration-definitions'
 import {
   GET_TASK_CONTEXT_TOOL,
   getTaskContextInputSchema,
@@ -143,4 +144,8 @@ describe('getTaskContext contract v2', () => {
       }),
     ).toThrow()
   })
+})
+
+it('accepts every capability actually returned by a departure collaboration context', () => {
+  expect(() => getTaskContextOutputSchema.parse({ ...BASE, availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES })).not.toThrow()
 })

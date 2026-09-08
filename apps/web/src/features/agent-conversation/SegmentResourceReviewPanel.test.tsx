@@ -185,6 +185,26 @@ describe('SegmentResourceReviewPanel #449', () => {
     cleanup()
   })
 
+  it('blocks only the item whose new materials are still processing', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([
+      packageView({ confirmationBlockedReason: '正在处理此项新材料，请稍候' }),
+      packageView({ id: 'pkg-2' }),
+    ]))
+    renderPanel()
+    const buttons = await screen.findAllByRole('button', { name: '确认写入资源' })
+    expect(buttons[0]).toBeDisabled()
+    expect(buttons[1]).toBeEnabled()
+    expect(screen.getByText('正在处理此项新材料，请稍候')).toBeVisible()
+  })
+
+  it('requires material conflicts to be resolved before confirming', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView({
+      conflicts: [{ fieldKey: 'amountCents', proposedValue: 26000, userCorrectedValue: 23000 }],
+    })]))
+    renderPanel()
+    expect(await screen.findByRole('button', { name: '确认写入资源' })).toBeDisabled()
+  })
+
   it('keeps confirm enabled when capacity warning is present and does not generate payable', async () => {
     const user = userEvent.setup()
     getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))

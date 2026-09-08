@@ -27,6 +27,7 @@ export interface SourceOrderReviewPanelProps {
   error?: string
   saving?: boolean
   confirming?: boolean
+  confirmationBlockedReason?: string
   createdSourceOrderId?: string | null
   onSaveGroup?: (corrections: Record<string, unknown>) => Promise<void>
   onConfirm?: () => Promise<void>
@@ -40,6 +41,7 @@ export function SourceOrderReviewPanel({
   saving,
   error,
   confirming,
+  confirmationBlockedReason,
   createdSourceOrderId,
   onSaveGroup,
   onConfirm,
@@ -57,7 +59,7 @@ export function SourceOrderReviewPanel({
   const missing = missingSourceOrderLabels(values)
   const missingLabels = new Set(missing)
   const confirmReasonId = useId()
-  const confirmDisabledReason = sourceOrderConfirmDisabledReason(readOnly, saving, editingGroup, missing)
+  const confirmDisabledReason = confirmationBlockedReason ?? sourceOrderConfirmDisabledReason(readOnly, saving, editingGroup, missing)
 
   if (createdSourceOrderId) {
     return (

@@ -1,3 +1,4 @@
+import { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
 import { z } from 'zod'
 import { AI_CREATE_CAPABILITY_DEFINITIONS, AI_CREATE_CAPABILITY_REFS_BY_TOOL } from './ai-create-definitions'
 import { GET_TASK_CONTEXT_TOOL } from '../tools/get-task-context'
@@ -37,10 +38,8 @@ import { sourceOrderReviewCandidateInputSchema, submitSourceOrderReviewPackageMo
 import { reviewProposalErrorSchema } from '../tools/review-package'
 import { normalizedEvidenceProposalSchemaV1 } from '../evidence/evidence-contract'
 
-export const DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF = {
-  key: 'departure.collaboration',
-  version: 1,
-} as const
+export { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-ref'
+import { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-ref'
 
 export const PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL = {
   name: 'proposeSegmentResourceReviewPackage',
@@ -58,6 +57,7 @@ export const DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY_REF = {
 } as const
 
 export const DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL = {
+  routeConversation: CONVERSATION_ROUTING_CAPABILITY_REF,
   getTaskContext: AI_CREATE_CAPABILITY_REFS_BY_TOOL.getTaskContext,
   searchPartners: { key: 'departure.partner.search', version: SEARCH_PARTNERS_TOOL.version },
   proposeSourceOrderReviewPackage: DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY_REF,
@@ -79,6 +79,8 @@ export const proposeSegmentResourceReviewPackageOutputSchema = z.discriminatedUn
     .object({
       status: z.literal('accepted'),
       objectVersion: z.number().int().positive(),
+      reviewPackageId: z.string().min(1).optional(),
+      expectedPackageVersion: z.number().int().positive().optional(),
       confirmationUnit: z.literal(SEGMENT_RESOURCE_CONFIRMATION_UNIT),
       payloadSchema: z.literal(SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA),
       candidates: z.array(segmentResourceReviewCandidateSchema).min(1),
@@ -91,7 +93,9 @@ export const proposeSegmentResourceReviewPackageOutputSchema = z.discriminatedUn
       errors: z.array(reviewProposalErrorSchema).min(1),
     })
     .strip(),
-])
+]).refine((value) => value.status !== 'accepted' || (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+  message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+})
 
 export type ProposeSegmentResourceReviewPackageOutput = z.infer<
   typeof proposeSegmentResourceReviewPackageOutputSchema
@@ -101,13 +105,17 @@ export const proposeSourceOrderReviewPackageOutputSchema = z.discriminatedUnion(
   z.object({
     status: z.literal('accepted'),
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT),
     payloadSchema: z.literal(SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA),
     candidates: z.array(sourceOrderReviewCandidateInputSchema).min(1),
     normalizedProposal: normalizedEvidenceProposalSchemaV1,
   }).strip(),
   z.object({ status: z.literal('rejected'), errors: z.array(reviewProposalErrorSchema).min(1) }).strip(),
-])
+]).refine((value) => value.status !== 'accepted' || (value.reviewPackageId == null) === (value.expectedPackageVersion == null), {
+  message: '修订审核包时必须同时提供 reviewPackageId 和 expectedPackageVersion',
+})
 export type ProposeSourceOrderReviewPackageOutput = z.infer<typeof proposeSourceOrderReviewPackageOutputSchema>
 
 export const DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION = {
@@ -197,6 +205,7 @@ export const DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY = {
 } as const satisfies CapabilityDefinition
 
 export const DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS = [
+  CONVERSATION_ROUTING_CAPABILITY,
   AI_CREATE_CAPABILITY_DEFINITIONS[0],
   {
     ...searchSuppliersCapability,
@@ -215,6 +224,7 @@ export const DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS = [
 ] as const satisfies readonly CapabilityDefinition[]
 
 export const DEPARTURE_COLLABORATION_INSTRUCTIONS = [
+  '用户明确要求新建另一个发团时，调用 routeConversation 登记 propose_departure_creation 和 goal，交给建团流程；不得把新团候选写入当前发团，也不要声称没有建团入口。该调用仅登记目标，不能声称已创建正式发团。',
   '你是小团宝已有发团协作助手，根据用户提供的对话和材料整理客源单或行程段资源费用。不得凭空生成业务记录。',
   '必须先调用 getTaskContext 查询当前正式发团。snapshot.sourceOrders 是已写入客源，guestCount、adultGuestCount、childGuestCount 是客源合计人数；expectedGuestCountHint 仅为建团时的预计提示，不能代替实际人数。查询客源或人数时依据这些正式事实回答，不得因草稿提示缺失而说没有客源或人数；已有客源不代表本次待新增客源，不能擅自沿用其报价或收款约定。',
   '【当前业务事实】含本团正式行程段列表。材料确定某日服务时，itinerarySegmentId 必须是该列表中的 id；不存在对应段时向 User 核实，不能凭页面日期或交流背景默认挂靠。',
@@ -227,7 +237,8 @@ export const DEPARTURE_COLLABORATION_INSTRUCTIONS = [
   '客源单客户必须通过 searchPartners 匹配，多个结果、hasMore 或无结果时先核实，不能编造客户 ID。',
   '客源单只采用已有字段：客户、成人和儿童人数及单价、团款调整、优惠、收款约定、备注及客人名单。金额均为整数分。没有提供的字段保持缺失，不得默认儿童为 0、无调整或无优惠。明确没有调整时 fareAdjustments=[]；优惠只支持 none 或 lump_sum。',
   '客源单 collectionMode 为 partner_settled（客户结算）、guest_only（全部我方代收）或 split（分拆收款）；定金尾款是收款约定，不是到账记录。不要强制其合计等于结算金额。',
-  '客源单候选调用 proposeSourceOrderReviewPackage；资源候选调用 proposeSegmentResourceReviewPackage。一次只提交一个事项，工具 accepted 后结束本轮；材料包含多个事项时先核实本次处理哪一项，其余可在同一会话后续整理。',
+  '客源单候选调用 proposeSourceOrderReviewPackage；资源候选调用 proposeSegmentResourceReviewPackage。每次工具调用提交一个事项；材料明确包含多个独立事项时逐项调用工具，全部提交后才结束本轮，不得遗漏前面的事项。',
+  'unresolved_state.pendingReviews 是当前待审核事项及版本、候选和人工修改。定向提问的 reviewPackageId 表示本轮所指事项；修改该事项时必须传同一个 reviewPackageId 及 expectedPackageVersion，不创建副本。无定向引用时，仅在用户明确指出唯一已有事项时修订；无法唯一对应先询问。只提交有新依据的变更字段，未变化字段由系统保留；保留人工修改，冲突交由用户决定。',
   '确认只在右侧审核完成，不在聊天里提供写入确认。不得自动创建应收、应付、流水或核销；客源单创建后再由用户选择后续应收。',
 ].join('')
 
@@ -242,6 +253,7 @@ export const departureCollaborationCapabilityDefinitionRegistry = new Capability
 )
 
 export const DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES = [
+  'routeConversation',
   GET_TASK_CONTEXT_TOOL.name,
   SEARCH_PARTNERS_TOOL.name,
   'proposeSourceOrderReviewPackage',

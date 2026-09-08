@@ -181,6 +181,12 @@ export class PatchAiReviewPackageDto {
 export class SendAiConversationMessageDto {
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  reviewPackageId?: string
+
+  @IsOptional()
+  @IsString()
   @MaxLength(CONVERSATION_TEXT_MAX_CHARS, {
     message: `消息内容不能超过 ${CONVERSATION_TEXT_MAX_CHARS} 个字符`,
   })

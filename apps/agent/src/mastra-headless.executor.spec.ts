@@ -48,6 +48,20 @@ describe('createMastraHeadlessExecutor', () => {
     }
   })
 
+  it('keeps an accepted routing result from the stream when the final model step only returns text', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '创建指定发团',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'tool-result', payload: { toolName: 'routeConversation', toolCallId: 'route-1', result: { status: 'accepted', decision: 'propose_departure_creation', registeredIntent: { key: 'task.departure-creation.requested', confidence: 'high', goal: '创建指定发团' } } } }
+          yield { type: 'text-delta', payload: { text: '参数已确认' } }
+        })(),
+        getFullOutput: async () => ({ text: '参数已确认', toolCalls: [{ toolName: 'routeConversation', toolCallId: 'route-1' }], toolResults: [] }),
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({ result: { kind: 'registered_intent', intent: { goal: '创建指定发团' } } })
+  })
+
   it('records streamed tool errors even when final output omits the failed result', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '读取附件',
@@ -79,6 +93,7 @@ describe('createMastraHeadlessExecutor', () => {
   it('preserves source-order candidates from accepted tools through headless execution', async () => {
     const reviewPackage = {
       objectVersion: 1780000000000, confirmationUnit: 'source_order_create',
+      reviewPackageId: 'review-source-order', expectedPackageVersion: 3,
       candidates: [{ fieldKey: 'adultGuestCount', proposedValue: 2, clarity: 'clear',
         evidence: [{ kind: 'user_message', sequence: 1, excerpt: '两位成人' }] }],
     }
@@ -90,6 +105,42 @@ describe('createMastraHeadlessExecutor', () => {
     })
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: { kind: 'awaiting_review', reviewPackage },
+    })
+  })
+
+  it('preserves both accepted items and deduplicates replayed tool calls', async () => {
+    const packages = ['A', 'B'].map((title) => ({
+      ...REVIEW_ARGS,
+      candidates: [{ ...REVIEW_ARGS.candidates[0], proposedValue: title }],
+    }))
+    const results = packages.map((reviewPackage, index) => ({
+      toolName: 'proposeReviewPackage', toolCallId: `proposal-${index}`,
+      result: { status: 'accepted', ...reviewPackage },
+    }))
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '分别整理 A 和 B',
+      stream: async () => ({
+        fullStream: (async function* () {
+          for (const result of results) yield { type: 'tool-result', payload: result }
+        })(),
+        getFullOutput: async () => ({ text: '请审核', toolResults: [results[1]] }),
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage: packages[0], reviewPackages: packages },
+    })
+  })
+
+  it('keeps identical proposals from distinct calls as separate accepted items', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '分别整理两项',
+      generate: async () => ({ toolResults: ['first', 'second'].map((toolCallId) => ({
+        toolName: 'proposeReviewPackage', toolCallId,
+        result: { status: 'accepted', ...REVIEW_ARGS },
+      })) }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackages: [REVIEW_ARGS, REVIEW_ARGS] },
     })
   })
 
@@ -336,7 +387,7 @@ describe('createMastraHeadlessExecutor', () => {
     })
   })
 
-  it('stays in the current attempt when proposeReviewPackage is rejected', async () => {
+  it('does not mark an unresolved rejected review as completed', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个喀纳斯3日团',
       generate: async () => ({
@@ -363,8 +414,8 @@ describe('createMastraHeadlessExecutor', () => {
 
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: {
-        kind: 'completed',
-        message: '摘录对不上冻结消息，请修正后再提。',
+        kind: 'failed',
+        error: { code: 'INVALID_FORMAT', retryable: false },
         diagnostic: {
           processorVersion: 'mastra-token-limiter-contiguous/v1',
           usageSource: 'missing',

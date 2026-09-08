@@ -16,6 +16,8 @@ export interface StoredReviewCandidate<FieldKey extends string = string> {
 
 export type ReviewPackageProposal = {
   objectVersion: number
+  reviewPackageId?: string
+  expectedPackageVersion?: number
   confirmationUnit: string
   candidates: Array<{
     fieldKey: string
@@ -197,6 +199,14 @@ export function toReviewPackageView(pkg: {
       status: candidate.status,
       evidence: candidate.evidence,
     })),
+    conflicts: parseReviewConflicts(pkg.baselineSnapshot),
     baselineSnapshot: pkg.baselineSnapshot as AiReviewPackageView['baselineSnapshot'],
   }
+}
+
+export function parseReviewConflicts(snapshot: unknown): NonNullable<AiReviewPackageView['conflicts']> {
+  if (!snapshot || typeof snapshot !== 'object' || !('reviewConflicts' in snapshot) || !Array.isArray(snapshot.reviewConflicts)) return []
+  return snapshot.reviewConflicts.filter((value): value is NonNullable<AiReviewPackageView['conflicts']>[number] =>
+    Boolean(value && typeof value === 'object' && typeof value.fieldKey === 'string' && 'proposedValue' in value && 'userCorrectedValue' in value),
+  )
 }

@@ -70,9 +70,7 @@ function createMastra(
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),
-    ...(definition.key === 'conversation.general'
-      ? { routeConversation: createConversationRoutingTool() }
-      : {}),
+    routeConversation: createConversationRoutingTool(),
   }
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),

@@ -345,6 +345,8 @@ function SegmentResourceReviewItem({
     !canEdit || !pending || confirmMutation.isPending || rejectMutation.isPending
   const confirmDisabled =
     !canEdit ||
+    Boolean(pkg.confirmationBlockedReason) ||
+    Boolean(pkg.conflicts?.length) ||
     !pending ||
     !schemaSupported ||
     resolution.status !== 'ready' ||
@@ -385,6 +387,9 @@ function SegmentResourceReviewItem({
 
   return (
     <article ref={rootRef} className={styles.item} data-review-package-id={pkg.id}>
+      {pkg.confirmationBlockedReason ? (
+        <Alert type="info" showIcon title={pkg.confirmationBlockedReason} />
+      ) : null}
       {!canEdit && pending ? (
         <Alert
           type="info"

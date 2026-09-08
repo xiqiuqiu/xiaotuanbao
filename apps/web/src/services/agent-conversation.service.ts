@@ -68,6 +68,7 @@ type SendAgentConversationPayload = {
   text: string
   files?: File[]
   replyToEventId?: string
+  reviewPackageId?: string
   interactionId?: string
   interactionVersion?: number
   selectedOptionId?: string
@@ -80,6 +81,7 @@ type SendAgentConversationPayload = {
 function appendConversationMessageFields(form: FormData, payload: SendAgentConversationPayload) {
   form.append('text', payload.text)
   if (payload.replyToEventId) form.append('replyToEventId', payload.replyToEventId)
+  if (payload.reviewPackageId) form.append('reviewPackageId', payload.reviewPackageId)
   if (payload.interactionId) form.append('interactionId', payload.interactionId)
   if (payload.interactionVersion != null) {
     form.append('interactionVersion', String(payload.interactionVersion))
@@ -113,6 +115,7 @@ export async function sendAgentConversationText(
     path,
     {
       text: payload.text,
+      ...(payload.reviewPackageId ? { reviewPackageId: payload.reviewPackageId } : {}),
       ...(payload.replyToEventId ? { replyToEventId: payload.replyToEventId } : {}),
       ...(payload.interactionId ? { interactionId: payload.interactionId } : {}),
       ...(payload.interactionVersion != null

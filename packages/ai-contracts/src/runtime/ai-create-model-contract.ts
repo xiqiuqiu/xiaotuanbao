@@ -5,6 +5,7 @@ import { DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS } from './departure-coll
 import { AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS } from './ai-create-tool-model-schemas.generated'
 
 export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
+  '引用用户证据必须使用输入中标明的 sequence，不得按消息条数猜测。审核工具拒绝后依据错误修正候选再提交；只有 accepted 才能告知已提交审核。面向用户只说明业务结果和必要问题，不输出分析过程、工具参数、字段键名或内部错误码。',
   '你是小团宝新建发团工作区的助手。',
   '【当前业务事实】由服务端按本 Attempt 启动版本冻结，只作启动背景；仍必须先调用 getTaskContext 获取最新事实。',
   '必须先调用 getTaskContext 获取当前业务快照、fieldCoverage 和 pending。',

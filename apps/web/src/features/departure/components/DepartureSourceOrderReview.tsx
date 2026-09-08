@@ -143,6 +143,9 @@ export function DepartureSourceOrderReview({
         }
         saving={saveGroup.isPending}
         confirming={confirm.isPending}
+        confirmationBlockedReason={pendingReview.confirmationBlockedReason ?? (
+          pendingReview.conflicts?.length ? '请先核对新建议与人工修改的差异。' : undefined
+        )}
         onSaveGroup={(corrections) => saveGroup.mutateAsync(corrections)}
         onConfirm={() => confirm.mutateAsync().then(() => undefined)}
       />

@@ -1311,6 +1311,17 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
         "exclusiveMinimum": 0,
         "maximum": 9007199254740991
       },
+      "reviewPackageId": {
+        "description": "修订已有事项时填写当前审核包 ID；新事项省略",
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "description": "与 reviewPackageId 同时填写当前审核包版本",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
       "candidates": {
         "minItems": 1,
         "type": "array",
@@ -2187,6 +2198,17 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
     "type": "object",
     "properties": {
       "objectVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "reviewPackageId": {
+        "description": "修订已有事项时填写当前审核包 ID；新事项省略",
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "description": "与 reviewPackageId 同时填写当前审核包版本",
         "type": "integer",
         "exclusiveMinimum": 0,
         "maximum": 9007199254740991

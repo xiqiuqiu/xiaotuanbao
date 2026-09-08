@@ -58,6 +58,8 @@ export function createProposeSourceOrderReviewTool(config: ProposeSegmentResourc
     description: AI_CREATE_TOOL_DESCRIPTIONS.proposeSourceOrderReviewPackage,
     inputSchema: z.object({
       objectVersion: z.number().int().positive(),
+      reviewPackageId: z.string().min(1).optional().describe('修订已有事项时填写当前审核包 ID；新事项省略'),
+      expectedPackageVersion: z.number().int().positive().optional().describe('与 reviewPackageId 同时填写当前审核包版本'),
       candidates: z.array(candidateInputSchema).min(1),
     }),
     execute: async (input) => {

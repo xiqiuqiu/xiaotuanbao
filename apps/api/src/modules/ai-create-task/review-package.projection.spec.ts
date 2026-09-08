@@ -490,3 +490,84 @@ describe('projectPendingReviewPackage', () => {
     expect(reviewCreate).not.toHaveBeenCalled()
   })
 })
+
+
+describe('stable pending item revisions', () => {
+  function setup() {
+    const candidate = { fieldKey: 'amountCents', proposedValue: 20000, clarity: 'clear' as const,
+      status: 'pending' as const, evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '200元' }] }
+    const pkg = {
+      id: 'stable', status: 'pending', version: 2, task: { ownerUserId: 'owner' },
+      confirmationUnit: 'segment_resource', payloadSchema: 'departure.segment_resource@v1',
+      targetKind: 'departure', targetId: 'departure-1', baseObjectVersion: 1,
+      candidates: [candidate], baselineSnapshot: {}, userCorrections: { amountCents: 23000, notes: '人工备注' },
+    }
+    const tx = { aiReviewPackage: { findFirst: jest.fn().mockResolvedValue(pkg), updateMany: jest.fn().mockResolvedValue({ count: 1 }), create: jest.fn() },
+      aiReviewRecord: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() } }
+    const params = { organizationId: 'org-1', taskId: 'task-1', conversationId: 'conv-1', inputBatchId: 'new-batch',
+      sourceActionId: 'new-action', target: { kind: 'departure', id: 'departure-1', version: 1, snapshot: {} },
+      reviewPackage: { objectVersion: 1, confirmationUnit: 'segment_resource', reviewPackageId: 'stable', expectedPackageVersion: 2,
+        candidates: [{ ...candidate, proposedValue: 26000 }] } }
+    return { tx, pkg, params }
+  }
+
+  it('revises the same item with CAS, preserves human values and records effective changes', async () => {
+    const { tx, params, pkg } = setup()
+    expect(await projectPendingReviewPackage(tx as never, params)).toBe('stable')
+    const data = tx.aiReviewPackage.updateMany.mock.calls[0]![0].data
+    expect(tx.aiReviewPackage.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      id: 'stable', organizationId: 'org-1', taskId: 'task-1', conversationId: 'conv-1',
+      confirmationUnit: 'segment_resource', targetKind: 'departure', targetId: 'departure-1',
+    } }))
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'stable', organizationId: 'org-1', status: 'pending', version: 2 },
+    }))
+    expect(data).toMatchObject({ version: { increment: 1 }, sourceActionId: 'new-action',
+      userCorrections: pkg.userCorrections,
+      baselineSnapshot: { reviewConflicts: [{ fieldKey: 'amountCents', proposedValue: 26000, userCorrectedValue: 23000 }] },
+      candidates: [{ fieldKey: 'amountCents', proposedValue: 26000 }],
+    })
+    expect(data).not.toHaveProperty('inputBatchId')
+    expect(data).not.toHaveProperty('itemIdentity')
+    expect(data.candidates).toHaveLength(1)
+    expect(tx.aiReviewRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      action: 'revise', packageVersion: 3,
+      beforeSnapshot: { amountCents: 23000, notes: '人工备注' },
+      afterSnapshot: { amountCents: 23000, notes: '人工备注' },
+    }) })
+    expect(tx.aiReviewPackage.create).not.toHaveBeenCalled()
+  })
+
+  it('retains unresolved conflicts and clears them when the new proposal agrees with the human value', async () => {
+    const { tx, pkg, params } = setup()
+    pkg.candidates[0]!.proposedValue = 26000
+    pkg.baselineSnapshot = { reviewConflicts: [{ fieldKey: 'amountCents', proposedValue: 26000, userCorrectedValue: 23000 }] }
+    await projectPendingReviewPackage(tx as never, params)
+    expect(tx.aiReviewPackage.updateMany.mock.calls[0]![0].data.baselineSnapshot.reviewConflicts).toHaveLength(1)
+    params.reviewPackage.candidates[0]!.proposedValue = 23000
+    await projectPendingReviewPackage(tx as never, params)
+    expect(tx.aiReviewPackage.updateMany.mock.calls[1]![0].data.baselineSnapshot.reviewConflicts).toEqual([])
+  })
+
+  it('rejects stale versions, resolved items and a failed CAS without writing revision history', async () => {
+    const { tx, pkg, params } = setup()
+    pkg.version = 3
+    await expect(projectPendingReviewPackage(tx as never, params)).rejects.toThrow('VERSION_CONFLICT')
+    pkg.version = 2
+    pkg.status = 'confirmed'
+    await expect(projectPendingReviewPackage(tx as never, params)).rejects.toThrow('VERSION_CONFLICT')
+    pkg.status = 'pending'
+    tx.aiReviewPackage.updateMany.mockResolvedValue({ count: 0 })
+    await expect(projectPendingReviewPackage(tx as never, params)).rejects.toThrow('VERSION_CONFLICT')
+    expect(tx.aiReviewRecord.create).not.toHaveBeenCalled()
+  })
+
+  it('replays a revision action even after the package version has advanced', async () => {
+    const { tx, pkg, params } = setup()
+    pkg.version = 5
+    tx.aiReviewRecord.findFirst.mockResolvedValue({ id: 'revision-record' })
+    expect(await projectPendingReviewPackage(tx as never, params)).toBe('stable')
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiReviewRecord.create).not.toHaveBeenCalled()
+  })
+})
