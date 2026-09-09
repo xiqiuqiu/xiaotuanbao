@@ -312,4 +312,77 @@ describe('DepartureResourceReviewPanel #450', () => {
     expect(screen.getByText(/全程包车。写入时未自动提交应付/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入资源' })).not.toBeInTheDocument()
   })
+
+  it('shows the later success after an earlier confirmation for the same package failed', async () => {
+    getDepartureCollaboration.mockResolvedValue({
+      ...collaboration([packageView({ status: 'confirmed' })]),
+      confirmations: [
+        {
+          decisionCommandId: 'decision-fail',
+          accepted: true,
+          items: [
+            {
+              packageId: 'pkg-1',
+              status: 'failed',
+              reason: '资源种类「用车」不属于该供应商的类别集合',
+            },
+          ],
+        },
+        {
+          decisionCommandId: 'decision-ok',
+          accepted: true,
+          items: [
+            {
+              packageId: 'pkg-1',
+              status: 'succeeded',
+              resultRef: { objectKind: 'departure_resource', objectId: 'res-1' },
+            },
+          ],
+        },
+      ],
+    })
+    renderPanel()
+
+    expect(await screen.findByText('资源已写入')).toBeInTheDocument()
+    expect(screen.queryByText('资源种类「用车」不属于该供应商的类别集合')).not.toBeInTheDocument()
+    expect(screen.queryByText('写入失败，候选仍保留')).not.toBeInTheDocument()
+  })
+
+  it('clears an incompatible supplier when the resource kind changes', async () => {
+    const user = userEvent.setup()
+    const pkg = packageView({
+      candidates: packageView().candidates.map((candidate) =>
+        candidate.fieldKey === 'resourceKind'
+          ? { ...candidate, proposedValue: 'insurance' }
+          : candidate,
+      ),
+    })
+    getDepartureCollaboration.mockResolvedValue(collaboration([pkg]))
+    listSuppliers.mockResolvedValue({ items: [{ id: 'sup-1', name: '平安保险' }], total: 1 })
+    getSupplier.mockResolvedValue({
+      id: 'sup-1',
+      name: '平安保险',
+      categories: ['insurance'],
+    })
+    patchAiReviewPackage.mockResolvedValue({
+      pendingReviews: [pkg],
+      pendingReview: pkg,
+    })
+    renderPanel()
+
+    await user.click(await screen.findByRole('combobox', { name: '资源种类候选' }))
+    await user.click(await screen.findByText('用车'))
+    await waitFor(() =>
+      expect(patchAiReviewPackage).toHaveBeenCalledWith(
+        '',
+        'pkg-1',
+        expect.objectContaining({
+          corrections: expect.objectContaining({
+            resourceKind: 'transport',
+            supplierId: null,
+          }),
+        }),
+      ),
+    )
+  })
 })

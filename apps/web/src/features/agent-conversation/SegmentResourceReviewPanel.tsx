@@ -19,15 +19,13 @@ import {
   resolveReviewField,
   resolveSegmentResourceReviewDraft,
 } from '@xiaotuanbao/ai-contracts'
-import type {
-  AiReviewCandidateView,
-  AiReviewPackageView,
-  ReviewConfirmationView,
-} from '@/types/api'
+import { ResourceKind } from '@xiaotuanbao/shared'
+import type { AiReviewCandidateView, AiReviewPackageView } from '@/types/api'
 import { useAuthStore } from '@/app/store/auth.store'
 import { canEditDeparture } from '@/features/departure/utils/departure-permission'
 import { RESOURCE_KIND_OPTIONS } from '@/features/departure/catalog'
 import { formatSegmentDateRange } from '@/features/departure/utils/segment-form'
+import { resolveSupplierIdAfterKindChange } from '@/features/departure/utils/resource-supplier-filter'
 import { listSegments } from '@/services/segment.service'
 import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import {
@@ -36,6 +34,7 @@ import {
   getReviewConfirmation,
 } from '@/services/agent-collaboration.service'
 import { patchAiReviewPackage, rejectAiReviewPackage } from '@/services/ai-create-task.service'
+import { confirmationForPackage } from './review-confirmation-for-package'
 import styles from './SegmentResourceReviewPanel.module.css'
 
 const KIND_OPTIONS = RESOURCE_KIND_OPTIONS.map((option) => ({
@@ -50,14 +49,6 @@ function candidateValue(candidate: AiReviewCandidateView | undefined): string | 
       ? candidate.userCorrectedValue
       : candidate.proposedValue
   return typeof value === 'string' || typeof value === 'number' ? value : null
-}
-
-function confirmationForPackage(confirmations: ReviewConfirmationView[], packageId: string) {
-  for (const confirmation of confirmations) {
-    const item = confirmation.items.find((entry) => entry.packageId === packageId)
-    if (item) return item
-  }
-  return undefined
 }
 
 export function SegmentResourceReviewPanel({
@@ -464,7 +455,19 @@ function SegmentResourceReviewItem({
             value={typeof resourceKind === 'string' ? resourceKind : undefined}
             options={KIND_OPTIONS}
             disabled={editingDisabled}
-            onChange={(value) => patchField('resourceKind', value)}
+            onChange={(value) => {
+              const nextKind = value as ResourceKind
+              patchField('resourceKind', nextKind)
+              const currentId = typeof supplierId === 'string' ? supplierId : undefined
+              const nextSupplierId = resolveSupplierIdAfterKindChange({
+                nextKind,
+                currentSupplierId: currentId,
+                currentSupplierCategories: pinnedSupplierQuery.data?.categories,
+              })
+              if (nextSupplierId !== currentId) {
+                patchField('supplierId', nextSupplierId ?? null)
+              }
+            }}
           />
         </Form.Item>
         <Form.Item label="供应商" className={styles.field}>
