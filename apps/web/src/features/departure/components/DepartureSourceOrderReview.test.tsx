@@ -74,6 +74,44 @@ it('confirms the selected source order and reuses the command after an uncertain
   expect(accept.mock.calls[0][0].items).toEqual([{ packageId: 'second', expectedPackageVersion: 2 }])
 })
 
+it('lets finance without departure:write prepare receivables from the created result', async () => {
+  useAgentConversationStore.setState({ conversationId: 'conversation' })
+  const onPrepared = vi.fn()
+  listCollaboration.mockResolvedValue({
+    items: [{ id: 'second', version: 2, status: 'confirmed', payloadSchema: 'source_order.create@v1' }],
+    confirmations: [
+      {
+        items: [
+          {
+            packageId: 'second',
+            status: 'succeeded',
+            resultRef: { objectKind: 'source_order', objectId: 'so-1' },
+          },
+        ],
+      },
+    ],
+  })
+  prepareReceivable.mockResolvedValue({ id: 'pkg-recv' })
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <App>
+        <DepartureSourceOrderReview
+          departureId="departure"
+          canEdit={false}
+          packageId="second"
+          onPreparedReceivableReview={onPrepared}
+        />
+      </App>
+    </QueryClientProvider>,
+  )
+  fireEvent.click(await screen.findByText('继续提交应收'))
+  await waitFor(() => expect(prepareReceivable).toHaveBeenCalledWith('departure', {
+    sourceOrderId: 'so-1',
+    conversationId: 'conversation',
+  }))
+  expect(onPrepared).toHaveBeenCalledWith('pkg-recv')
+})
+
 it('prepares an independent receivable review instead of leaving for the ordinary tab', async () => {
   useAgentConversationStore.setState({ conversationId: 'conversation' })
   const onPrepared = vi.fn()

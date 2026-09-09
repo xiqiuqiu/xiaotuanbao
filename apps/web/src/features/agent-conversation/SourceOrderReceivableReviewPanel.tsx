@@ -248,7 +248,12 @@ function SourceOrderReceivableReviewItem({
     },
   })
 
-  if (!pending && confirmation?.status === 'succeeded') {
+  const writeSucceeded =
+    confirmation?.status === 'succeeded' ||
+    (pkg.status === 'confirmed' &&
+      confirmation?.status !== 'failed' &&
+      confirmation?.status !== 'conflict')
+  if (!pending && writeSucceeded) {
     return (
       <article className={styles.item} data-review-package-id={pkg.id} data-focused={focused || undefined}>
         <Alert

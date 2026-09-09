@@ -35,6 +35,8 @@ export interface SourceOrderReviewPanelProps {
   onViewSourceOrder?: (sourceOrderId: string) => void
   onContinueReceivables?: (sourceOrderId: string) => void
   onSkipReceivables?: () => void
+  /** 准备应收挂在 /departure（ADR-0023），与客源创建所需的 departure:write / readOnly 分开。 */
+  canContinueReceivables?: boolean
 }
 
 export function SourceOrderReviewPanel({
@@ -51,6 +53,7 @@ export function SourceOrderReviewPanel({
   onViewSourceOrder,
   onContinueReceivables,
   onSkipReceivables,
+  canContinueReceivables = true,
 }: SourceOrderReviewPanelProps) {
   const savedValues = useMemo(
     () => (pendingReview ? valuesFromReviewCandidates(pendingReview.candidates) : {}),
@@ -75,16 +78,29 @@ export function SourceOrderReviewPanel({
           description="创建时未自动提交应收。可暂不处理、查看客源单，或继续提交约定应收。"
         />
         {error ? <Alert type="error" showIcon title={error} style={{ marginTop: 12 }} /> : null}
+        {!canContinueReceivables ? (
+          <Alert
+            type="info"
+            showIcon
+            title="当前不能从这里准备应收"
+            description="可查看客源单，或稍后从有权限的会话继续。"
+            style={{ marginTop: 12 }}
+          />
+        ) : null}
         <Space style={{ marginTop: 12 }} wrap>
-          <Button onClick={() => onSkipReceivables?.()}>暂不处理</Button>
+          {canContinueReceivables ? (
+            <Button onClick={() => onSkipReceivables?.()}>暂不处理</Button>
+          ) : null}
           <Button onClick={() => onViewSourceOrder?.(createdSourceOrderId)}>查看客源单</Button>
-          <Button
-            type="primary"
-            loading={continuingReceivables}
-            onClick={() => onContinueReceivables?.(createdSourceOrderId)}
-          >
-            继续提交应收
-          </Button>
+          {canContinueReceivables ? (
+            <Button
+              type="primary"
+              loading={continuingReceivables}
+              onClick={() => onContinueReceivables?.(createdSourceOrderId)}
+            >
+              继续提交应收
+            </Button>
+          ) : null}
         </Space>
       </section>
     )

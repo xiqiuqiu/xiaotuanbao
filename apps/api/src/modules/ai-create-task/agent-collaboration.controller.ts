@@ -18,6 +18,7 @@ export class AgentCollaborationController {
 
   @Post('review-decisions')
   @HttpCode(200)
+  // ADR-0023：财务持 /departure、无 departure:write，须能确认应收；客源创建仍由服务层要 departure:write。
   @RequireMenu('/departure')
   acceptConfirmation(
     @Req() request: { user: { organizationId: string; userId: string } },

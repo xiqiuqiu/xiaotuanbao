@@ -1618,4 +1618,188 @@ describe('ReviewCollaborationService #447', () => {
       }),
     )
   })
+
+  it.each([
+    ['settled', '发团已结清，不可提交应收'],
+    ['closed', '发团已关闭，不可提交应收'],
+  ] as const)(
+    'refuses receivable confirm when the departure is %s',
+    async (status, reason) => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+      confirmationUnit: 'source_order_receivable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceOrderId: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1_000_000,
+        partnerId: 'partner-1',
+      },
+    }
+    const { service, prisma, tx, generation, finance } = createService({
+      packages: [receivablePackage],
+    })
+    finance.assertAllowsNewObligation.mockImplementation(
+      (departure: { status: string }, action = '创建收付款节点') => {
+        if (departure.status === 'settled') {
+          throw new ConflictException(`发团已结清，不可${action}`)
+        }
+        if (departure.status === 'closed') {
+          throw new ConflictException(`发团已关闭，不可${action}`)
+        }
+      },
+    )
+    tx.departure.findFirst.mockResolvedValue({
+      id: 'departure-1',
+      updatedAt: new Date(pendingPackage.baseObjectVersion),
+      status,
+    })
+    generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1_000_000,
+        partnerId: 'partner-1',
+      },
+      classification: { status: 'ready', paths: [] },
+    })
+    generation.generateReceivableSchedules.mockResolvedValue({
+      order: { id: 'source-order-1' },
+      schedules: [{ id: 'sch-1' }],
+      generation: 'created',
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: receivablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(receivablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateReceivableSchedules).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason,
+          }),
+        }),
+      }),
+    )
+    },
+  )
+
+  it('allows receivable confirm when only unrelated departure fields changed', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+      confirmationUnit: 'source_order_receivable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceOrderId: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1_000_000,
+        partnerId: 'partner-1',
+      },
+    }
+    const { service, prisma, tx, generation, finance } = createService({ packages: [receivablePackage] })
+    tx.departure.findFirst.mockResolvedValue({
+      id: 'departure-1',
+      updatedAt: new Date(99),
+      status: 'pending_settlement',
+    })
+    generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1_000_000,
+        partnerId: 'partner-1',
+      },
+      classification: { status: 'ready', paths: [] },
+    })
+    generation.generateReceivableSchedules.mockResolvedValue({
+      order: { id: 'source-order-1' },
+      schedules: [{ id: 'sch-1' }],
+      generation: 'created',
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: receivablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(receivablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateReceivableSchedules).toHaveBeenCalled()
+    expect(finance.assertAllowsNewObligation).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending_settlement' }),
+      '提交应收',
+    )
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({ status: 'succeeded' }),
+        }),
+      }),
+    )
+  })
+
+  it('rejects receivable confirm when the caller has departure:write but not /departure', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+    }
+    const { service, auth } = createService({ packages: [receivablePackage] })
+    auth.getPermissionKeysForUser.mockResolvedValue(['departure:write'])
+    await expect(
+      service.acceptReviewConfirmation(organizationId, userId, {
+        decisionCommandId: 'decision-write-only',
+        items: [{ packageId: 'pkg-receivable', expectedPackageVersion: 1 }],
+      }),
+    ).rejects.toThrow('无权确认该事项')
+  })
 })

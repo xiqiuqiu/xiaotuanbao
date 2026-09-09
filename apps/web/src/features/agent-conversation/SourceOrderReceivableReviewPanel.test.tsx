@@ -173,6 +173,13 @@ it('does not require departure write permission to confirm receivables', async (
   expect(await screen.findByRole('button', { name: '确认提交约定应收' })).toBeEnabled()
 })
 
+it('shows success when the package is confirmed even if confirmation items are missing', async () => {
+  renderPanel(pkg({ status: 'confirmed' }))
+  expect(await screen.findByText('约定应收已提交')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '查看应收' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '确认提交约定应收' })).not.toBeInTheDocument()
+})
+
 it('explains F2 anomalies and sends the user to ordinary receivables', async () => {
   renderPanel(
     pkg({

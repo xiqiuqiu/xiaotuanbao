@@ -128,6 +128,7 @@ export function DepartureSourceOrderReview({
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <SourceOrderReviewPanel
           createdSourceOrderId={succeeded.resultRef.objectId}
+          canContinueReceivables={Boolean(conversationId)}
           error={
             prepareReceivable.error
               ? (prepareReceivable.error.message ?? '准备应收审核失败')

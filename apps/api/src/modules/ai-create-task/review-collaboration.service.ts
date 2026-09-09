@@ -772,15 +772,15 @@ export class ReviewCollaborationService {
       await this.assertNoPendingRevision(tx, organizationId, current)
       const departure = await tx.departure.findFirst({
         where: { id: current.targetId, organizationId },
-        select: { updatedAt: true },
+        select: { updatedAt: true, status: true },
       })
       if (!departure) {
         throw new ConflictException('发团不存在或已变化，请刷新后重试')
       }
-      if (
-        current.payloadSchema !== SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA &&
-        departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion
-      ) {
+      if (current.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
+        // 应收确认有意不卡发团 updatedAt：无关字段变更应放行。关闭/结清仍须当场拒绝。
+        this.finance.assertAllowsNewObligation(departure, '提交应收')
+      } else if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
         throw new ConflictException('发团已变化，请刷新后重试')
       }
       const claimed = await tx.aiReviewPackage.updateMany({
