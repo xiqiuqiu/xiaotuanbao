@@ -165,6 +165,38 @@ describe('发团级资源抽取门禁 #450 回归', () => {
     )
   })
 
+  it('enriches the main price when evidence also has a smaller 税 amount in 元', () => {
+    const excerpt = '全程包车 8600 元含 50 元税，覆盖 4月2日至4月6日'
+    const enriched = enrichDepartureResourceCandidates([
+      {
+        fieldKey: 'notes',
+        proposedValue: '覆盖 4月2日至4月6日',
+        evidence: evidence(excerpt),
+      },
+    ])
+    expect(enriched).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: 'amountCents', proposedValue: 860000 }),
+      ]),
+    )
+  })
+
+  it('prefers 约定总价 over a later incidental 元 amount', () => {
+    const excerpt = '含 50 元税。约定总价8600元。服务日期2026-08-29至2026-09-01。'
+    const enriched = enrichDepartureResourceCandidates([
+      {
+        fieldKey: 'notes',
+        proposedValue: '服务日期2026-08-29至2026-09-01',
+        evidence: evidence(excerpt),
+      },
+    ])
+    expect(enriched).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: 'amountCents', proposedValue: 860000 }),
+      ]),
+    )
+  })
+
   it('accepts a grounded whole-fee proposal with dates only in notes', () => {
     const excerpt = '全程保险 1200 元，覆盖 4月2日至4月6日，挂平安保险'
     expect(
