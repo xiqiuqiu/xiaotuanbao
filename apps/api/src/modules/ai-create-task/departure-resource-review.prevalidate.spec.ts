@@ -114,6 +114,9 @@ function createService() {
     conversationSourceParseRun: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    supplier: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     aiAction: { create: writes.actionCreate, findFirst: jest.fn(), count: jest.fn() },
     aiReviewPackage: {
       create: writes.reviewCreate,
@@ -258,5 +261,99 @@ describe('AiCreateTaskService.proposeDepartureResourceReviewPackageForAgent #450
       ],
     })
     expect(result).toMatchObject({ status: 'accepted' })
+  })
+
+  it('accepts notes-only and fills name and kind from the material instead of failing the batch', async () => {
+    const { service, prisma } = createService()
+    const namedText = '请录入验收450-全程地接，覆盖4月2日至4月6日，金额待确认'
+    prisma.aiConversationEvent.findMany.mockResolvedValue([
+      {
+        id: eventId,
+        conversationId,
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: namedText },
+      },
+    ])
+    const named = [{ kind: 'user_message' as const, sequence: 3, excerpt: namedText }]
+    const result = await service.proposeDepartureResourceReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion,
+      candidates: [
+        {
+          fieldKey: 'notes' as const,
+          proposedValue: '覆盖4月2日至4月6日',
+          clarity: 'clear' as const,
+          evidence: named,
+        },
+      ],
+    })
+    expect(result.status).toBe('accepted')
+    if (result.status !== 'accepted') throw new Error('expected accepted')
+    expect(result.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: 'title', proposedValue: '验收450-全程地接' }),
+        expect.objectContaining({ fieldKey: 'resourceKind', proposedValue: 'outsource' }),
+      ]),
+    )
+  })
+
+  it('accepts explicit 种类其他 and 备用资源-其他类 from the 0909 backtest copy', async () => {
+    const { service, prisma } = createService()
+    const packagedText =
+      '请在当前已有发团录入一条发团级资源。供应商使用“备用资源-其他类”。资源名称“回测0909-全程地接”，资源种类其他，约定总价860元。这是覆盖2026-08-29到2026-09-01的整体地接费。'
+    prisma.aiConversationEvent.findMany.mockResolvedValue([
+      {
+        id: eventId,
+        conversationId,
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: packagedText },
+      },
+    ])
+    prisma.supplier.findFirst.mockResolvedValue({ name: '备用资源-其他类' })
+    const packaged = [{ kind: 'user_message' as const, sequence: 3, excerpt: packagedText }]
+    const result = await service.proposeDepartureResourceReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion,
+      candidates: [
+        {
+          fieldKey: 'resourceKind' as const,
+          proposedValue: 'other',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'supplierId' as const,
+          proposedValue: 'sup-fallback',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'title' as const,
+          proposedValue: '回测0909-全程地接',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'amountCents' as const,
+          proposedValue: 86000,
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+      ],
+    })
+    expect(result).toMatchObject({ status: 'accepted' })
+    if (result.status !== 'accepted') throw new Error('expected accepted')
+    expect(result.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: 'title', proposedValue: '回测0909-全程地接' }),
+        expect.objectContaining({ fieldKey: 'resourceKind', proposedValue: 'other' }),
+        expect.objectContaining({ fieldKey: 'supplierId', proposedValue: 'sup-fallback' }),
+        expect.objectContaining({ fieldKey: 'amountCents', proposedValue: 86000 }),
+      ]),
+    )
   })
 })

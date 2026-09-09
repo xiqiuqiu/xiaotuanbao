@@ -275,6 +275,14 @@ export {
   type SubmitDepartureResourceReviewModelInput,
 } from './review/departure-resource-schema'
 export {
+  DEPARTURE_RESOURCE_EXTRACTION_CODES,
+  enrichDepartureResourceCandidates,
+  evaluateDepartureResourceExtraction,
+  type DepartureResourceExtractionCandidate,
+  type DepartureResourceExtractionCode,
+  type DepartureResourceExtractionIssue,
+} from './review/departure-resource-extraction'
+export {
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_REVIEW_FIELDS,
   SEGMENT_RESOURCE_REVIEW_KINDS,

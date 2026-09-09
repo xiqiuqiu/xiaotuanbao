@@ -65,7 +65,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   proposeSegmentResourceReviewPackage:
     '提出已有发团行程段资源的待审核候选（行程段、种类、供应商、资源名称、正总价、备注、容量提醒）。itinerarySegmentId 必须来自当前业务事实中的正式行程段，不能凭页面日期默认挂靠。供应商 ID 必须来自 searchSuppliers。只做预校验，不写入资源，也不提交应付。',
   proposeDepartureResourceReviewPackage:
-    '提出已有发团的发团级资源待审核候选（种类、供应商、资源名称、正总价、备注、容量提醒）。用于明确全程或仅覆盖部分日期的整体费用；跨日日期写入备注，不拆价，不强挂某一天。整体多服务报价按业务含义归类，不要自动全部归为拼出。供应商 ID 必须来自 searchSuppliers。金额未知不要用 0；免费服务不生成费用行。只做预校验，不写入资源，也不提交应付。',
+    '提出已有发团的发团级资源待审核候选（种类、供应商、资源名称、正总价、备注、容量提醒）。用于明确全程或仅覆盖部分日期的整体费用；跨日日期写入备注，不拆价，不强挂某一天。材料已有的名称和种类必须提交，缺总价也不要只交备注。整体多服务报价按业务含义归类：地接/旅行社整体承接可归拼出；不要自动全部归为拼出。材料明确写种类其他时可以提交其他。供应商 ID 必须来自 searchSuppliers；材料点名的供应商可以使用。金额未知不要用 0；免费服务不生成费用行。只做预校验，不写入资源，也不提交应付。',
   getMaterialParseResult:
     '按冻结投影【本批资料】或【本会话来源】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。本批未固定但属于本会话的已解析来源也可以读取。不要用文件名、预览或未固定版本编造候选。',
   readConversationHistory:

@@ -29,6 +29,9 @@ describe('已有发团协作 Agent Definition #449 #450', () => {
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('proposeDepartureResourceReviewPackage')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不自动提交应付')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要把所有打包报价自动归为拼出')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要因此只交备注')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('明确写种类其他时可以提交其他')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要选用材料未出现的占位供应商')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不输出分析过程')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要用英文推理')
     expect(

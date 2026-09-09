@@ -47,6 +47,7 @@ import {
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   submitDepartureResourceReviewInputSchema,
   resolveDepartureResourceReviewDraft,
+  enrichDepartureResourceCandidates,
   DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
@@ -999,7 +1000,21 @@ export class AiCreateTaskService {
     if (!validated.success) {
       return { status: 'rejected', errors: validated.errors }
     }
-    let reviewCandidates: { fieldKey: string; proposedValue: unknown }[] = input.candidates
+    let submittedCandidates = input.candidates
+    if (!input.reviewPackageId) {
+      const supplierId = input.candidates.find((candidate) => candidate.fieldKey === 'supplierId')
+        ?.proposedValue
+      let matchedSupplierName: string | null | undefined
+      if (typeof supplierId === 'string' && supplierId.trim() !== '') {
+        const supplier = await this.prisma.supplier.findFirst({
+          where: { id: supplierId, organizationId: caller.organizationId },
+          select: { name: true },
+        })
+        matchedSupplierName = supplier?.name ?? null
+      }
+      submittedCandidates = enrichDepartureResourceCandidates(input.candidates, matchedSupplierName)
+    }
+    let reviewCandidates: { fieldKey: string; proposedValue: unknown }[] = submittedCandidates
     let corrections: Partial<Record<string, unknown>> | undefined
     if (input.reviewPackageId) {
       const current = await this.prisma.aiReviewPackage.findFirst({
@@ -1045,7 +1060,7 @@ export class AiCreateTaskService {
       payloadSchema: DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
       reviewPackageId: input.reviewPackageId,
       expectedPackageVersion: input.expectedPackageVersion,
-      candidates: input.candidates,
+      candidates: submittedCandidates,
       normalizedProposal: validated.normalizedProposal,
     }
   }
