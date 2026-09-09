@@ -16,6 +16,7 @@ export function ComposerAddFileButton({
   disabled,
   toolsMenu: _toolsMenu,
   children,
+  onClick: _ignoredOnClick,
   ...props
 }: ComposerAddFileButtonProps) {
   return (
@@ -23,9 +24,9 @@ export function ComposerAddFileButton({
       type="button"
       data-testid="copilot-add-menu-button"
       aria-label="添加附件"
+      {...props}
       disabled={disabled || !onAddFile}
       onClick={() => onAddFile?.()}
-      {...props}
     >
       {children ?? <PlusOutlined aria-hidden />}
     </button>
