@@ -256,6 +256,30 @@ describe('DepartureResourceReviewPanel #450', () => {
     )
   })
 
+  it('flushes pending corrections and uses the saved version when rejecting', async () => {
+    let stored = packageView()
+    getDepartureCollaboration.mockImplementation(async () => collaboration([stored]))
+    patchAiReviewPackage.mockImplementation(async (_taskId, _packageId, input) => {
+      stored = packageView({ version: input.expectedPackageVersion + 1 })
+      return { pendingReviews: [stored], pendingReview: stored }
+    })
+    rejectAiReviewPackage.mockResolvedValue({ pendingReviews: [], pendingReview: null })
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('备注候选'), {
+      target: { value: '修订备注' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '拒绝建议' }))
+    await waitFor(() =>
+      expect(rejectAiReviewPackage).toHaveBeenCalledWith('', 'pkg-1', {
+        expectedPackageVersion: 2,
+      }),
+    )
+    expect(patchAiReviewPackage).toHaveBeenCalledWith('', 'pkg-1', {
+      expectedPackageVersion: 1,
+      corrections: { notes: '修订备注' },
+    })
+  })
+
   it('disables supplier search until a resource kind is selected', async () => {
     const pkg = packageView()
     pkg.candidates = pkg.candidates.filter((item) => item.fieldKey !== 'resourceKind')

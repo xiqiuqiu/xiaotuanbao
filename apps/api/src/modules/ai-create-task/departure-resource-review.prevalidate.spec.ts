@@ -356,4 +356,141 @@ describe('AiCreateTaskService.proposeDepartureResourceReviewPackageForAgent #450
       ]),
     )
   })
+
+  it('rejects a free welcome-fruit fee row instead of accepting it as a resource', async () => {
+    const { service, prisma, writes } = createService()
+    const fruitText = '欢迎水果免费赠送'
+    prisma.aiConversationEvent.findMany.mockResolvedValue([
+      {
+        id: eventId,
+        conversationId,
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: fruitText },
+      },
+    ])
+    const fruit = [{ kind: 'user_message' as const, sequence: 3, excerpt: fruitText }]
+    const result = await service.proposeDepartureResourceReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion,
+      candidates: [
+        {
+          fieldKey: 'title' as const,
+          proposedValue: '欢迎水果',
+          clarity: 'clear' as const,
+          evidence: fruit,
+        },
+        {
+          fieldKey: 'resourceKind' as const,
+          proposedValue: 'other',
+          clarity: 'clear' as const,
+          evidence: fruit,
+        },
+        {
+          fieldKey: 'amountCents' as const,
+          proposedValue: 1,
+          clarity: 'clear' as const,
+          evidence: fruit,
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      errors: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'FREE_SERVICE_FEE_ROW',
+          message: '明确免费或已包含的服务只记入相关备注，不要单独生成费用行',
+        }),
+      ]),
+    })
+    expect(writes.actionCreate).not.toHaveBeenCalled()
+    expect(writes.reviewCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects classifying a packaged ground service as other', async () => {
+    const { service, prisma } = createService()
+    const packagedText = '打包服务含住宿、接送、用餐，由地接整体报价'
+    prisma.aiConversationEvent.findMany.mockResolvedValue([
+      {
+        id: eventId,
+        conversationId,
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: packagedText },
+      },
+    ])
+    const packaged = [{ kind: 'user_message' as const, sequence: 3, excerpt: packagedText }]
+    const result = await service.proposeDepartureResourceReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion,
+      candidates: [
+        {
+          fieldKey: 'resourceKind' as const,
+          proposedValue: 'other',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'title' as const,
+          proposedValue: '打包服务',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      errors: expect.arrayContaining([expect.objectContaining({ code: 'KIND_OTHER_BYPASS' })]),
+    })
+  })
+
+  it('rejects a catalog supplier that never appears in the material', async () => {
+    const { service, prisma } = createService()
+    const packagedText = '打包服务含住宿、接送、用餐'
+    prisma.aiConversationEvent.findMany.mockResolvedValue([
+      {
+        id: eventId,
+        conversationId,
+        sequence: 3,
+        kind: 'user_message',
+        payload: { text: packagedText },
+      },
+    ])
+    prisma.supplier.findFirst.mockResolvedValue({ name: '备用资源-其他类' })
+    const packaged = [{ kind: 'user_message' as const, sequence: 3, excerpt: packagedText }]
+    const result = await service.proposeDepartureResourceReviewPackageForAgent(caller, {
+      taskId,
+      runId,
+      objectVersion,
+      candidates: [
+        {
+          fieldKey: 'title' as const,
+          proposedValue: '打包服务',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'resourceKind' as const,
+          proposedValue: 'outsource',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+        {
+          fieldKey: 'supplierId' as const,
+          proposedValue: 'sup-fallback',
+          clarity: 'clear' as const,
+          evidence: packaged,
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      errors: expect.arrayContaining([expect.objectContaining({ code: 'SUPPLIER_NOT_IN_EVIDENCE' })]),
+    })
+  })
 })
