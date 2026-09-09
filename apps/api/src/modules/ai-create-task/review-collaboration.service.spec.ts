@@ -12,6 +12,16 @@ import {
   reviewConfirmJobKey,
 } from './review-collaboration.constants'
 
+function sqlTextFromQueryRaw(query: unknown): string {
+  if (typeof query === 'string') return query
+  if (Array.isArray(query)) return query.map(String).join(' ')
+  if (query && typeof query === 'object' && 'strings' in query) {
+    const strings = (query as { strings: unknown }).strings
+    if (Array.isArray(strings)) return strings.map(String).join(' ')
+  }
+  return String(query ?? '')
+}
+
 describe('ReviewCollaborationService #447', () => {
   const organizationId = 'org-1'
   const userId = 'user-1'
@@ -1330,6 +1340,20 @@ describe('ReviewCollaborationService #447', () => {
     await service.executeConfirmedItem('job-1')
 
     expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    const sourceOrderLockSqls = tx.$queryRaw.mock.calls
+      .map((call: unknown[]) => sqlTextFromQueryRaw(call[0]))
+      .filter((sql: string) => /source_orders/i.test(sql) && /FOR UPDATE/i.test(sql))
+    expect(sourceOrderLockSqls.length).toBeGreaterThan(0)
+    const lockCallOrder = tx.$queryRaw.mock.invocationCallOrder.find(
+      (_order: number, index: number) => {
+        const sql = sqlTextFromQueryRaw(tx.$queryRaw.mock.calls[index]?.[0])
+        return /source_orders/i.test(sql) && /FOR UPDATE/i.test(sql)
+      },
+    )
+    expect(lockCallOrder).toBeDefined()
+    expect(lockCallOrder).toBeLessThan(
+      generation.previewInitialReceivables.mock.invocationCallOrder[0],
+    )
     expect(generation.generateReceivableSchedules).toHaveBeenCalledWith(
       organizationId,
       'source-order-1',
@@ -1454,6 +1478,70 @@ describe('ReviewCollaborationService #447', () => {
     expect(view.payloadSchema).toBe('source_order.receivable@v1')
     expect(view.candidates.some((candidate) => candidate.fieldKey === 'paths')).toBe(true)
     expect(ready.generation.generateReceivableSchedules).not.toHaveBeenCalled()
+  })
+
+  it('refuses confirm when live convention diverges from the review baseline', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+      confirmationUnit: 'source_order_receivable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceOrderId: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1_000_000,
+        partnerId: 'partner-1',
+      },
+    }
+    const { service, prisma, tx, generation } = createService({ packages: [receivablePackage] })
+    generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 2_000_000,
+        partnerId: 'partner-1',
+      },
+      classification: { status: 'ready', paths: [] },
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: receivablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(receivablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateReceivableSchedules).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '正式来源或已有账款已变化，请刷新后重试',
+          }),
+        }),
+      }),
+    )
   })
 
   it('refuses F2 anomaly confirm without creating or backfilling receivables', async () => {

@@ -905,6 +905,13 @@ export class ReviewCollaborationService {
     if (!sourceOrderId) {
       throw new BadRequestException('应收审核缺少正式客源')
     }
+    // 先锁客源再 preview：否则 READ COMMITTED 下校验可能仍过，生成却按新约定落账。
+    await tx.$queryRaw`
+      SELECT id
+      FROM source_orders
+      WHERE id = ${sourceOrderId}
+      FOR UPDATE
+    `
     const preview = await this.generation.previewInitialReceivables(organizationId, sourceOrderId, tx)
     const baseline = receivableConventionFromBaseline(pkg.baselineSnapshot)
     if (!baseline || receivableConventionChanged(baseline, preview.order)) {
