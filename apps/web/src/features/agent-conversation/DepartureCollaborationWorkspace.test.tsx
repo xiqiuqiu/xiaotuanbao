@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { useState } from 'react'
 import { DepartureCollaborationWorkspace } from './DepartureCollaborationWorkspace'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -30,6 +33,11 @@ vi.mock('@/features/departure/components/DepartureSourceOrderReview', () => ({
 vi.mock('./SegmentResourceReviewPanel', () => ({
   SegmentResourceReviewPanel: ({ onlyPackageId }: { onlyPackageId: string }) => (
     <div>资源审核 {onlyPackageId}</div>
+  ),
+}))
+vi.mock('./DepartureResourceReviewPanel', () => ({
+  DepartureResourceReviewPanel: ({ onlyPackageId }: { onlyPackageId: string }) => (
+    <div>发团级资源审核 {onlyPackageId}</div>
   ),
 }))
 vi.mock('./AgentConversationChat', () => ({
@@ -64,6 +72,7 @@ const item = (id: string, payloadSchema: string, status = 'pending') => ({
 })
 const source = 'source_order.create@v1'
 const resource = 'departure.segment_resource@v1'
+const departureResource = 'departure.departure_resource@v1'
 function view(expanded: boolean, onExpand = vi.fn()) {
   return (
     <DepartureCollaborationWorkspace
@@ -92,7 +101,12 @@ beforeEach(() => {
     items:
       conversationId === 'conv-2'
         ? []
-        : [item('source-1', source), item('source-2', source), item('resource-1', resource)],
+        : [
+            item('source-1', source),
+            item('source-2', source),
+            item('resource-1', resource),
+            item('departure-resource-1', departureResource),
+          ],
     confirmations: [],
   }))
 })
@@ -194,4 +208,63 @@ it('shows query failures without presenting a misleading empty state', async () 
   expect(await screen.findByText('事项加载失败')).toBeVisible()
   expect(screen.getByText('协作记录加载失败')).toBeVisible()
   expect(screen.queryByText('从材料开始协作')).not.toBeInTheDocument()
+})
+
+it('keeps source, segment, and departure resource reviews independent', async () => {
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  expect(await screen.findByText('客源审核 source-1')).toBeVisible()
+  expect(screen.getByRole('tab', { name: 'source-1 待审核' })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: 'resource-1 待审核' })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: 'departure-resource-1 待审核' })).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'resource-1 待审核' }))
+  expect(screen.getByText('资源审核 resource-1')).toBeVisible()
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
+  expect(screen.getByText('客源审核 source-1')).not.toBeVisible()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'departure-resource-1 待审核' }))
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).toBeVisible()
+  expect(screen.getByText('资源审核 resource-1')).not.toBeVisible()
+  expect(screen.getByText('客源审核 source-1')).not.toBeVisible()
+  expect(within(screen.getByRole('tabpanel')).getByText('执行安排')).toBeVisible()
+
+  fireEvent.click(screen.getByRole('tab', { name: 'source-1 待审核' }))
+  expect(screen.getByText('客源审核 source-1')).toBeVisible()
+  expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
+})
+
+it('opens a confirmed departure resource from the execution tab highlight', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [item('departure-resource-1', departureResource, 'confirmed')],
+    confirmations: [
+      {
+        decisionCommandId: 'decision-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'departure-resource-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'departure_resource', objectId: 'dep-res-9' },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
+  expect(navigate).toHaveBeenCalledWith({
+    to: '/departure/$departureId',
+    params: { departureId: 'dep-1' },
+    search: { tab: 'execution', highlightDepartureResourceId: 'dep-res-9' },
+  })
+})
+
+it('keeps CopilotKit attachment menus above the expanded workspace overlay', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'DepartureCollaborationWorkspace.module.css'),
+    'utf8',
+  )
+  expect(css).toMatch(/\[data-expanded\][\s\S]*?z-index:\s*1001/)
+  expect(css).toMatch(/data-radix-popper-content-wrapper[\s\S]*?z-index:\s*1100\s*!important/)
 })

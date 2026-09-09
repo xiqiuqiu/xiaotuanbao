@@ -1,9 +1,17 @@
 import { CONVERSATION_GENERAL_INSTRUCTIONS } from './conversation-general-definitions'
-import { sanitizeVisibleReasoning } from './visible-reasoning'
+import { sanitizeVisibleReasoning, stripEnglishChainOfThought } from './visible-reasoning'
 
 describe('sanitizeVisibleReasoning', () => {
   it('keeps a Chinese business sketch', () => {
     expect(sanitizeVisibleReasoning('先核对该发团的团名和状态')).toBe('先核对该发团的团名和状态')
+  })
+
+  it('strips English chain-of-thought while keeping the Chinese business reply', () => {
+    const englishSoliloquy =
+      "I'll check the current task context first, then help add a vehicle departure resource."
+    expect(
+      stripEnglishChainOfThought(`${englishSoliloquy}\n已提交待审核建议，请在右侧审核确认。`),
+    ).toBe('已提交待审核建议，请在右侧审核确认。')
   })
 
   it('strips system prompt fragments, internal tool names and English chain-of-thought', () => {

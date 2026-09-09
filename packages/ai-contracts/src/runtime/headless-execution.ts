@@ -3,6 +3,7 @@ import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
 import { submitSourceOrderReviewPackageModelInputSchema } from '../review/source-order-schema'
 import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-resource-schema'
+import { submitDepartureResourceReviewModelInputSchema } from '../review/departure-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
 
 export const USAGE_SOURCES = ['missing', 'estimated', 'actual'] as const
@@ -174,6 +175,7 @@ export const headlessAwaitingUserInputResultSchema = z
 const headlessReviewPackageSchema = z.union([
   submitReviewPackageModelInputSchema,
   submitSegmentResourceReviewModelInputSchema,
+  submitDepartureResourceReviewModelInputSchema,
   submitSourceOrderReviewPackageModelInputSchema,
 ])
 

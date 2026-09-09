@@ -87,7 +87,12 @@ export const getTaskContextOutputSchema = z
     availableCapabilities: z
       .array(z.union([
         aiCreateToolNameSchema,
-        z.enum(['proposeSourceOrderReviewPackage', 'proposeSegmentResourceReviewPackage', 'routeConversation']),
+        z.enum([
+          'proposeSourceOrderReviewPackage',
+          'proposeSegmentResourceReviewPackage',
+          'proposeDepartureResourceReviewPackage',
+          'routeConversation',
+        ]),
       ]))
       .min(1),
     fieldCoverage: z

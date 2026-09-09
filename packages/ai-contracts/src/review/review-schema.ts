@@ -10,6 +10,7 @@ import {
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
 } from './envelope'
+import { DEPARTURE_RESOURCE_REVIEW_SCHEMA } from './departure-resource-schema'
 import { SEGMENT_RESOURCE_REVIEW_SCHEMA } from './segment-resource-schema'
 import { SOURCE_ORDER_CREATE_REVIEW_SCHEMA } from './source-order-schema'
 
@@ -186,6 +187,7 @@ export const DEPARTURE_BASIC_INFO_REVIEW_SCHEMA: ReviewSchema<AiReviewableBasicI
 export const registeredReviewSchemas = new ReviewSchemaRegistry([
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   SEGMENT_RESOURCE_REVIEW_SCHEMA,
+  DEPARTURE_RESOURCE_REVIEW_SCHEMA,
   SOURCE_ORDER_CREATE_REVIEW_SCHEMA,
 ])
 

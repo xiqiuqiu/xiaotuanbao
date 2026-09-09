@@ -197,6 +197,14 @@ describe('ReviewCollaborationService #447', () => {
         paymentScheduleId: null,
       }),
     }
+    const departureResources = {
+      createInTx: jest.fn().mockResolvedValue({
+        id: 'dep-resource-1',
+        departureId: 'departure-1',
+        payableStatus: 'not_generated',
+        paymentScheduleId: null,
+      }),
+    }
     const sourceOrders = {
       createWithSelectedGuests: jest.fn().mockResolvedValue({ id: 'source-order-1' }),
     }
@@ -206,9 +214,10 @@ describe('ReviewCollaborationService #447', () => {
       conversations as never,
       { getById: jest.fn().mockResolvedValue({ id: 'departure-1' }) } as never,
       segmentResources as never,
+      departureResources as never,
       sourceOrders as never,
     )
-    return { service, prisma, tx, tasks, conversations, segmentResources, sourceOrders, jobs, packages }
+    return { service, prisma, tx, tasks, conversations, segmentResources, departureResources, sourceOrders, jobs, packages }
   }
 
   it('accepts a multi-item confirmation and enqueues one job per item', async () => {
@@ -642,10 +651,11 @@ describe('ReviewCollaborationService #447', () => {
 
   it.each([
     ['departure.segment_resource@v1', 'segment_resource'],
+    ['departure.departure_resource@v1', 'departure_resource'],
     ['source_order.create@v1', 'source_order'],
   ])('does not invent a result for a confirmed %s package with no receipt', async (payloadSchema) => {
     const pkg = { ...pendingPackage, payloadSchema, status: AiReviewPackageStatus.confirmed }
-    const { service, prisma, tx, segmentResources, sourceOrders } = createService({ packages: [pkg] })
+    const { service, prisma, tx, segmentResources, departureResources, sourceOrders } = createService({ packages: [pkg] })
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({
       id: 'job-1', type: AiWorkflowJobType.review_confirm, organizationId, reviewPackage: pkg,
       idempotencyRecord: { operatorUserId: userId, resultJson: {} },
@@ -659,6 +669,7 @@ describe('ReviewCollaborationService #447', () => {
       }) }),
     }))
     expect(segmentResources.createInTx).not.toHaveBeenCalled()
+    expect(departureResources.createInTx).not.toHaveBeenCalled()
     expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
     expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
   })
@@ -903,6 +914,154 @@ describe('ReviewCollaborationService #447', () => {
           resultJson: expect.objectContaining({
             status: 'succeeded',
             resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' },
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('writes a confirmed departure-level resource without generating payable', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.departure_resource@v1',
+      confirmationUnit: 'departure_resource',
+      candidates: [
+        { fieldKey: 'resourceKind', proposedValue: 'insurance' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '全程旅行保险' },
+        { fieldKey: 'amountCents', proposedValue: 120_000 },
+        { fieldKey: 'notes', proposedValue: '覆盖 4月2日至4月6日' },
+      ],
+    }
+    const { service, prisma, tx, departureResources, segmentResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-1',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(departureResources.createInTx).toHaveBeenCalledWith(
+      tx,
+      organizationId,
+      'departure-1',
+      expect.objectContaining({
+        resourceKind: 'insurance',
+        supplierId: 'sup-1',
+        title: '全程旅行保险',
+        amountCents: 120_000,
+        notes: '覆盖 4月2日至4月6日',
+      }),
+    )
+    expect(departureResources.createInTx.mock.calls[0][3]).not.toHaveProperty('quantity')
+    expect(departureResources.createInTx.mock.calls[0][3]).not.toHaveProperty('unitPriceCents')
+    expect(segmentResources.createInTx).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'pkg-1',
+        status: AiReviewPackageStatus.pending,
+        version: 1,
+      },
+      data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }),
+    })
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'idem-item-1' },
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            resultRef: { objectKind: 'departure_resource', objectId: 'dep-resource-1' },
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('keeps a departure resource package pending when amount is missing', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.departure_resource@v1',
+      confirmationUnit: 'departure_resource',
+      candidates: [
+        { fieldKey: 'resourceKind', proposedValue: 'guide' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '全程导游' },
+      ],
+    }
+    const { service, prisma, tx, departureResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(departureResources.createInTx).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '发团级资源审核稿仍有待补充字段',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('replays an already confirmed departure resource without creating a second row', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.departure_resource@v1',
+      confirmationUnit: 'departure_resource',
+      status: AiReviewPackageStatus.confirmed,
+      candidates: [
+        { fieldKey: 'resourceKind', proposedValue: 'insurance' },
+        { fieldKey: 'supplierId', proposedValue: 'sup-1' },
+        { fieldKey: 'title', proposedValue: '全程旅行保险' },
+        { fieldKey: 'amountCents', proposedValue: 120_000 },
+      ],
+    }
+    const { service, prisma, tx, departureResources } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+        resultJson: { resultRef: { objectKind: 'departure_resource', objectId: 'dep-resource-1' } },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(departureResources.createInTx).not.toHaveBeenCalled()
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            resultRef: { objectKind: 'departure_resource', objectId: 'dep-resource-1' },
           }),
         }),
       }),

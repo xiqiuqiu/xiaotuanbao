@@ -108,6 +108,53 @@ describe('createMastraHeadlessExecutor', () => {
     })
   })
 
+  it('preserves departure-resource candidates from accepted tools through headless execution', async () => {
+    const reviewPackage = {
+      objectVersion: 1780000000000,
+      confirmationUnit: 'departure_resource',
+      candidates: [
+        {
+          fieldKey: 'resourceKind',
+          proposedValue: 'transport',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '全程包车 12800' }],
+        },
+        {
+          fieldKey: 'supplierId',
+          proposedValue: 'sup-1',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '全程包车 12800' }],
+        },
+        {
+          fieldKey: 'title',
+          proposedValue: '全程包车',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '全程包车 12800' }],
+        },
+        {
+          fieldKey: 'amountCents',
+          proposedValue: 1280000,
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '全程包车 12800' }],
+        },
+      ],
+    }
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '全程包车 12800',
+      generate: async () => ({
+        text: '请审核',
+        toolCalls: [{ toolName: 'proposeDepartureResourceReviewPackage' }],
+        toolResults: [{
+          toolName: 'proposeDepartureResourceReviewPackage',
+          result: { status: 'accepted', ...reviewPackage },
+        }],
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage },
+    })
+  })
+
   it('preserves both accepted items and deduplicates replayed tool calls', async () => {
     const packages = ['A', 'B'].map((title) => ({
       ...REVIEW_ARGS,

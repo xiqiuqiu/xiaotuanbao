@@ -52,6 +52,15 @@ export class AiToolController {
     return this.aiToolHttpAdapter.proposeSegmentResourceReviewPackage(request.user, body)
   }
 
+  @Post('v1/propose-departure-resource-review-package')
+  @HttpCode(200)
+  proposeDepartureResourceReviewPackage(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.proposeDepartureResourceReviewPackage(request.user, body)
+  }
+
   @Post('v1/submit-review-package')
   @HttpCode(200)
   submitReviewPackage(

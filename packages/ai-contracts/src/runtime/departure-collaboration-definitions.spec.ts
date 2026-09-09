@@ -22,10 +22,18 @@ const requestContext = requestContextSchema.parse({
   ],
 })
 
-describe('已有发团协作 Agent Definition #449', () => {
-  it('registers segment-resource propose without writing to conversation.general', () => {
+describe('已有发团协作 Agent Definition #449 #450', () => {
+  it('registers segment-resource and departure-resource propose without writing to conversation.general', () => {
     expect(DEPARTURE_COLLABORATION_AGENT_DEFINITION.key).toBe('departure.collaboration')
     expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不能凭页面日期')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('proposeDepartureResourceReviewPackage')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不自动提交应付')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要把所有打包报价自动归为拼出')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要因此只交备注')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('明确写种类其他时可以提交其他')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要选用材料未出现的占位供应商')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不输出分析过程')
+    expect(DEPARTURE_COLLABORATION_INSTRUCTIONS).toContain('不要用英文推理')
     expect(
       DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS.map((definition) => ({
         key: definition.key,
@@ -39,6 +47,10 @@ describe('已有发团协作 Agent Definition #449', () => {
         {
           key: 'departure.segment-resource.propose',
           toolName: 'proposeSegmentResourceReviewPackage',
+        },
+        {
+          key: 'departure.departure-resource.propose',
+          toolName: 'proposeDepartureResourceReviewPackage',
         },
       ]),
     )
@@ -59,6 +71,7 @@ describe('已有发团协作 Agent Definition #449', () => {
         { key: 'departure.partner.search', version: 1 },
         { key: 'departure.source-order.propose', version: 1 },
         { key: 'departure.segment-resource.propose', version: 1 },
+        { key: 'departure.departure-resource.propose', version: 1 },
       ]),
     )
     expect(result.denied).toEqual([])

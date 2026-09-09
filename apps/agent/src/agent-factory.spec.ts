@@ -173,13 +173,14 @@ describe('Agent Factory', () => {
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
   })
 
-  it('协作 Agent 只暴露已授权的段资源工具', () => {
+  it('协作 Agent 只暴露已授权的资源工具', () => {
     const collaborationContext = requestContextSchema.parse({
       ...context,
       agentDefinition: { key: 'departure.collaboration', version: 1 },
       grantedCapabilities: [
         { key: 'departure.supplier.search', version: 1 },
         { key: 'departure.segment-resource.propose', version: 1 },
+        { key: 'departure.departure-resource.propose', version: 1 },
         { key: 'departure.material-parse-result.read', version: 1 },
       ],
       objectScopes: [
@@ -190,6 +191,7 @@ describe('Agent Factory', () => {
     expect(toolNamesForRequestContext(collaborationContext)).toEqual([
       'searchSuppliers',
       'proposeSegmentResourceReviewPackage',
+      'proposeDepartureResourceReviewPackage',
       'getMaterialParseResult',
     ])
 
@@ -200,6 +202,7 @@ describe('Agent Factory', () => {
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([
       'searchSuppliers',
       'proposeSegmentResourceReviewPackage',
+      'proposeDepartureResourceReviewPackage',
       'getMaterialParseResult',
     ])
   })

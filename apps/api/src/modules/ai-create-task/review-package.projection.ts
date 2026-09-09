@@ -1,6 +1,8 @@
 import { AgentTaskType, type Prisma } from '@prisma/client'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
+  DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
+  DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
@@ -268,6 +270,8 @@ async function resolveReviewPackageTarget(
       payloadSchema:
         params.reviewPackage.confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT
           ? SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+          : params.reviewPackage.confirmationUnit === DEPARTURE_RESOURCE_CONFIRMATION_UNIT
+            ? DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
           : undefined,
     }
   }

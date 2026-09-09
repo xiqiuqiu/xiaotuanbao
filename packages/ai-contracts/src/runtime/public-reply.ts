@@ -1,3 +1,5 @@
+import { stripEnglishChainOfThought } from './visible-reasoning'
+
 export const PUBLIC_REPLY_FALLBACK = '已处理当前说明。'
 
 export type PublicStreamChannel = 'public' | 'reasoning'
@@ -15,12 +17,16 @@ export function stripThinkTags(text: string): string {
  * Prefer streamed text-delta; never keep 思考过程 that the stream already
  * classified, or `<think>` blocks from thinking-disabled content.
  */
+function visiblePublicText(text: string): string {
+  return stripEnglishChainOfThought(stripThinkTags(text.replace(/\u0000/g, '')))
+}
+
 export function selectPublicReply(input: {
   streamedPublicText: string
   streamedReasoning?: string | readonly string[]
   fullOutputText: string
 }): string {
-  const streamed = stripThinkTags(input.streamedPublicText.replace(/\u0000/g, '')).trim()
+  const streamed = visiblePublicText(input.streamedPublicText)
   if (streamed.length > 0) {
     return streamed
   }
@@ -30,7 +36,7 @@ export function selectPublicReply(input: {
   )
     .map((text) => text.trim())
     .filter((text) => text.length > 0)
-  let next = stripThinkTags(input.fullOutputText.replace(/\u0000/g, ''))
+  let next = visiblePublicText(input.fullOutputText)
   for (const reason of reasons) {
     next = next.split(reason).join('')
   }

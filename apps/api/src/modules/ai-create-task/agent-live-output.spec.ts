@@ -255,4 +255,24 @@ describe('LiveOutputFlusher', () => {
     expect(seen.at(-1)).toEqual({ text: early, revision: 3 })
     sub.unsubscribe()
   }, 1_000)
+
+  it('does not live-publish English thinking-disabled soliloquy as the public reply', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    const seen: string[] = []
+    const sub = live.observe(identity.conversationId).subscribe((snapshot) => {
+      seen.push(snapshot.text)
+    })
+    const flusher = new LiveOutputFlusher(live, identity)
+    const englishSoliloquy =
+      "I'll check the current task context first, then help add a vehicle departure resource."
+
+    flusher.push({ text: englishSoliloquy })
+    await flusher.flush()
+    expect(seen).toEqual([''])
+
+    flusher.push({ text: `${englishSoliloquy}\n已提交待审核建议，请在右侧审核确认。` })
+    await flusher.flush()
+    expect(seen.at(-1)).toBe('已提交待审核建议，请在右侧审核确认。')
+    sub.unsubscribe()
+  })
 })
