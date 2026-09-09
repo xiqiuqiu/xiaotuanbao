@@ -55,23 +55,28 @@ describe('selectPublicReply', () => {
     ).toBe('已处理当前说明。')
   })
 
-  it('does not persist English thinking-disabled soliloquy as the public reply', () => {
-    const englishSoliloquy =
-      "I'll check the current task context first, then help add a vehicle departure resource. The user wants to add a vehicle."
+  it('keeps an English-only business reply instead of falling back', () => {
+    const reply =
+      'The vehicle is booked for April 2 to April 6. Please confirm the supplier and total price in the review form.'
     expect(
       selectPublicReply({
-        streamedPublicText: `${englishSoliloquy}\n${PUBLIC_REPLY}`,
+        streamedPublicText: reply,
         streamedReasoning: '',
-        fullOutputText: `${englishSoliloquy}\n${PUBLIC_REPLY}`,
+        fullOutputText: reply,
       }),
-    ).toBe(PUBLIC_REPLY)
+    ).toBe(reply)
+  })
+
+  it('still strips think tags from a public English business reply', () => {
+    const reply =
+      'The vehicle is booked for April 2 to April 6. Please confirm the supplier and total price in the review form.'
     expect(
       selectPublicReply({
-        streamedPublicText: englishSoliloquy,
+        streamedPublicText: `<think>checking dates and supplier categories</think>${reply}`,
         streamedReasoning: '',
-        fullOutputText: englishSoliloquy,
+        fullOutputText: `<think>checking dates and supplier categories</think>${reply}`,
       }),
-    ).toBe('已处理当前说明。')
+    ).toBe(reply)
   })
 })
 

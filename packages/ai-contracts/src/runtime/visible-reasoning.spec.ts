@@ -14,6 +14,12 @@ describe('sanitizeVisibleReasoning', () => {
     ).toBe('已提交待审核建议，请在右侧审核确认。')
   })
 
+  it('still strips English chain-of-thought on the reasoning channel', () => {
+    const englishSoliloquy =
+      "I'll check the current task context first, then help add a vehicle departure resource."
+    expect(sanitizeVisibleReasoning(englishSoliloquy)).toBe('')
+  })
+
   it('strips system prompt fragments, internal tool names and English chain-of-thought', () => {
     const leaked = [
       'Let me reconsider: the conversation context is about 小团宝工作台 and I should follow the rules.',

@@ -380,18 +380,17 @@ describe('public reply channel vs hidden reasoning', () => {
     expect(channels.persisted).toBe(PUBLIC_REPLY)
   })
 
-  it('does not persist English thinking-disabled soliloquy as the public reply', async () => {
-    const englishSoliloquy =
-      "I'll check the current task context first, then help add a vehicle departure resource. The user wants to add a vehicle."
+  it('does not persist think-tag soliloquy; English-only business replies stay on the public channel', async () => {
+    const englishReply =
+      'The vehicle is booked for April 2 to April 6. Please confirm the supplier and total price in the review form.'
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => IDENTITY.userText,
       stream: async () => ({
         fullStream: (async function* () {
-          yield { type: 'text-delta', payload: { text: englishSoliloquy } }
-          yield { type: 'text-delta', payload: { text: PUBLIC_REPLY } }
+          yield { type: 'text-delta', payload: { text: englishReply } }
         })(),
         getFullOutput: async () => ({
-          text: `${englishSoliloquy}${PUBLIC_REPLY}`,
+          text: englishReply,
           toolCalls: [],
         }),
       }),
@@ -400,9 +399,8 @@ describe('public reply channel vs hidden reasoning', () => {
     const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
     const channels = publicChannels(frames, result)
 
-    expect(channels.persisted).toBe(PUBLIC_REPLY)
-    expect(channels.persisted).not.toContain("I'll check")
-    expect(channels.livePublic).not.toContain("I'll check")
+    expect(channels.persisted).toBe(englishReply)
+    expect(channels.livePublic).toBe(englishReply)
   })
 
   it('does not publish think-tag soliloquy from thinking-disabled content as the public reply', async () => {
