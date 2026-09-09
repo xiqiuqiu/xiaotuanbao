@@ -48,6 +48,7 @@ import {
   submitDepartureResourceReviewInputSchema,
   resolveDepartureResourceReviewDraft,
   enrichDepartureResourceCandidates,
+  evaluateDepartureResourceExtraction,
   DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
@@ -1013,6 +1014,21 @@ export class AiCreateTaskService {
         matchedSupplierName = supplier?.name ?? null
       }
       submittedCandidates = enrichDepartureResourceCandidates(input.candidates, matchedSupplierName)
+      const extractionIssues = evaluateDepartureResourceExtraction({
+        candidates: submittedCandidates,
+        matchedSupplierName,
+      })
+      if (extractionIssues.length > 0) {
+        return {
+          status: 'rejected',
+          errors: extractionIssues.map((issue) => ({
+            candidateIndex: 0,
+            evidenceIndex: 0,
+            code: issue.code,
+            message: issue.message,
+          })),
+        }
+      }
     }
     let reviewCandidates: { fieldKey: string; proposedValue: unknown }[] = submittedCandidates
     let corrections: Partial<Record<string, unknown>> | undefined
