@@ -25,6 +25,12 @@ export {
   type SourceOrderReceivablePathInput,
   type SourceOrderReceivablePathSpec,
 } from './source-order-receivable-paths'
+export {
+  classifySourceOrderInitialReceivables,
+  type SourceOrderExistingReceivableSchedule,
+  type SourceOrderInitialReceivableAnomalyCode,
+  type SourceOrderInitialReceivableClassification,
+} from './classify-source-order-initial-receivables'
 export { formatDepartureNo } from './format-departure-no'
 export { formatScheduleNo } from './format-schedule-no'
 export { formatTransactionNo } from './format-transaction-no'

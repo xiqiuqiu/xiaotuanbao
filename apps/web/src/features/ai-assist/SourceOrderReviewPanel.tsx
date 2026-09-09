@@ -29,10 +29,12 @@ export interface SourceOrderReviewPanelProps {
   confirming?: boolean
   confirmationBlockedReason?: string
   createdSourceOrderId?: string | null
+  continuingReceivables?: boolean
   onSaveGroup?: (corrections: Record<string, unknown>) => Promise<void>
   onConfirm?: () => Promise<void>
   onViewSourceOrder?: (sourceOrderId: string) => void
   onContinueReceivables?: (sourceOrderId: string) => void
+  onSkipReceivables?: () => void
 }
 
 export function SourceOrderReviewPanel({
@@ -43,10 +45,12 @@ export function SourceOrderReviewPanel({
   confirming,
   confirmationBlockedReason,
   createdSourceOrderId,
+  continuingReceivables,
   onSaveGroup,
   onConfirm,
   onViewSourceOrder,
   onContinueReceivables,
+  onSkipReceivables,
 }: SourceOrderReviewPanelProps) {
   const savedValues = useMemo(
     () => (pendingReview ? valuesFromReviewCandidates(pendingReview.candidates) : {}),
@@ -68,11 +72,17 @@ export function SourceOrderReviewPanel({
           type="success"
           showIcon
           title="客源单已创建"
-          description="创建时未自动提交应收。可查看客源单，或进入应收页面核对后继续处理。"
+          description="创建时未自动提交应收。可暂不处理、查看客源单，或继续提交约定应收。"
         />
+        {error ? <Alert type="error" showIcon title={error} style={{ marginTop: 12 }} /> : null}
         <Space style={{ marginTop: 12 }} wrap>
+          <Button onClick={() => onSkipReceivables?.()}>暂不处理</Button>
           <Button onClick={() => onViewSourceOrder?.(createdSourceOrderId)}>查看客源单</Button>
-          <Button type="primary" onClick={() => onContinueReceivables?.(createdSourceOrderId)}>
+          <Button
+            type="primary"
+            loading={continuingReceivables}
+            onClick={() => onContinueReceivables?.(createdSourceOrderId)}
+          >
             继续提交应收
           </Button>
         </Space>

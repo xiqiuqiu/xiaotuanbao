@@ -263,6 +263,7 @@ describe('SourceOrderReviewPanel', () => {
     )
 
     expect(screen.getByText('客源单已创建')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '暂不处理' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看客源单' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '继续提交应收' })).toBeInTheDocument()
   })

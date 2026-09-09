@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common'
 import { AiActionModule } from '../ai-action/ai-action.module'
 import { AuthModule } from '../auth/auth.module'
 import { DepartureModule } from '../departure/departure.module'
+import { FinanceModule } from '../finance/finance.module'
 import { PartnerModule } from '../partner/partner.module'
 import { StoredObjectModule } from '../stored-object/stored-object.module'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
@@ -34,6 +35,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AiActionModule,
     AuthModule,
     forwardRef(() => DepartureModule),
+    FinanceModule,
     PartnerModule,
     StoredObjectModule,
   ],

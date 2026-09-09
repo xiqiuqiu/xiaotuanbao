@@ -13,6 +13,7 @@ import {
 import { DEPARTURE_RESOURCE_REVIEW_SCHEMA } from './departure-resource-schema'
 import { SEGMENT_RESOURCE_REVIEW_SCHEMA } from './segment-resource-schema'
 import { SOURCE_ORDER_CREATE_REVIEW_SCHEMA } from './source-order-schema'
+import { SOURCE_ORDER_RECEIVABLE_REVIEW_SCHEMA } from './source-order-receivable-schema'
 
 export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'choice' | 'reference' | 'list'
 export type ReviewRiskLevel = 'standard' | 'sensitive' | 'high'
@@ -189,6 +190,7 @@ export const registeredReviewSchemas = new ReviewSchemaRegistry([
   SEGMENT_RESOURCE_REVIEW_SCHEMA,
   DEPARTURE_RESOURCE_REVIEW_SCHEMA,
   SOURCE_ORDER_CREATE_REVIEW_SCHEMA,
+  SOURCE_ORDER_RECEIVABLE_REVIEW_SCHEMA,
 ])
 
 export function resolveReviewField(

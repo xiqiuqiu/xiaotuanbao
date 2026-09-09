@@ -1,7 +1,9 @@
 import { request } from '@/lib/request'
 import type {
   AcceptReviewConfirmationDto,
+  AiReviewPackageView,
   DepartureCollaborationView,
+  PrepareSourceOrderReceivableReviewDto,
   ReviewConfirmationView,
   ReviewRevisionView,
 } from '@/types/api'
@@ -29,4 +31,14 @@ export async function getReviewConfirmation(
   decisionCommandId: string,
 ): Promise<ReviewConfirmationView> {
   return request.get<ReviewConfirmationView>(`/agent/review-decisions/${decisionCommandId}`)
+}
+
+export async function prepareSourceOrderReceivableReview(
+  departureId: string,
+  payload: PrepareSourceOrderReceivableReviewDto,
+): Promise<AiReviewPackageView> {
+  return request.post<AiReviewPackageView>(
+    `/agent/departures/${departureId}/source-order-receivable-reviews`,
+    payload,
+  )
 }

@@ -57,6 +57,24 @@ describe('ReviewCollaborationService #447', () => {
             return Promise.resolve(current ? { ...current } : null)
           },
         ),
+        findFirstOrThrow: jest.fn().mockImplementation(
+          ({ where }: { where?: { id?: string } }) => {
+            const current = packages.find((pkg) => pkg.id === where?.id) ?? packages[0]
+            return Promise.resolve(current)
+          },
+        ),
+        create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => {
+          const created = { id: 'pkg-receivable', version: 1, ...data }
+          packages.push(created)
+          return Promise.resolve(created)
+        }),
+        update: jest.fn().mockImplementation(
+          ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+            const current = packages.find((pkg) => pkg.id === where.id)
+            const next = { ...current, ...data, version: ((current?.version as number) ?? 1) + 1 }
+            return Promise.resolve(next)
+          },
+        ),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       aiCreateIdempotencyRecord: {
@@ -155,13 +173,26 @@ describe('ReviewCollaborationService #447', () => {
         }),
         update: jest.fn().mockResolvedValue({}),
       },
-      aiReviewRecord: { create: jest.fn().mockResolvedValue({}) },
+      aiReviewRecord: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       agentTask: { findFirst: jest.fn() },
       departure: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'departure-1',
           updatedAt: new Date(pendingPackage.baseObjectVersion),
         }),
+        findFirstOrThrow: jest.fn().mockResolvedValue({
+          id: 'departure-1',
+          updatedAt: new Date(pendingPackage.baseObjectVersion),
+        }),
+      },
+      aiConversation: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', creatorUserId: userId }),
+      },
+      sourceOrder: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'source-order-1' }),
       },
     }
     const prisma = {
@@ -208,6 +239,16 @@ describe('ReviewCollaborationService #447', () => {
     const sourceOrders = {
       createWithSelectedGuests: jest.fn().mockResolvedValue({ id: 'source-order-1' }),
     }
+    const auth = {
+      getPermissionKeysForUser: jest.fn().mockResolvedValue(['departure:write', '/departure']),
+    }
+    const finance = {
+      assertAllowsNewObligation: jest.fn(),
+    }
+    const generation = {
+      previewInitialReceivables: jest.fn(),
+      generateReceivableSchedules: jest.fn(),
+    }
     const service = new ReviewCollaborationService(
       prisma as never,
       tasks as never,
@@ -216,8 +257,25 @@ describe('ReviewCollaborationService #447', () => {
       segmentResources as never,
       departureResources as never,
       sourceOrders as never,
+      auth as never,
+      finance as never,
+      generation as never,
     )
-    return { service, prisma, tx, tasks, conversations, segmentResources, departureResources, sourceOrders, jobs, packages }
+    return {
+      service,
+      prisma,
+      tx,
+      tasks,
+      conversations,
+      segmentResources,
+      departureResources,
+      sourceOrders,
+      auth,
+      finance,
+      generation,
+      jobs,
+      packages,
+    }
   }
 
   it('accepts a multi-item confirmation and enqueues one job per item', async () => {
@@ -1062,6 +1120,411 @@ describe('ReviewCollaborationService #447', () => {
           resultJson: expect.objectContaining({
             status: 'succeeded',
             resultRef: { objectKind: 'departure_resource', objectId: 'dep-resource-1' },
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('does not generate receivables when confirming a source order', async () => {
+    const sourcePackage = {
+      ...pendingPackage,
+      payloadSchema: 'source_order.create@v1',
+      confirmationUnit: 'source_order_create',
+      candidates: [
+        {
+          fieldKey: 'partnerId',
+          proposedValue: 'partner-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户甲' }],
+        },
+        {
+          fieldKey: 'adultGuestCount',
+          proposedValue: 2,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '2成人' }],
+        },
+        {
+          fieldKey: 'childGuestCount',
+          proposedValue: 0,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无儿童' }],
+        },
+        {
+          fieldKey: 'adultUnitPriceCents',
+          proposedValue: 100000,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '单价1000' }],
+        },
+        {
+          fieldKey: 'fareAdjustments',
+          proposedValue: [],
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无调整' }],
+        },
+        {
+          fieldKey: 'discountType',
+          proposedValue: 'none',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '无优惠' }],
+        },
+        {
+          fieldKey: 'collectionMode',
+          proposedValue: 'partner_settled',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '客户结算' }],
+        },
+      ],
+    }
+    const { service, prisma, generation, sourceOrders } = createService({ packages: [sourcePackage] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: sourcePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-1',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).toHaveBeenCalled()
+    expect(generation.generateReceivableSchedules).not.toHaveBeenCalled()
+  })
+
+  it('writes all applicable receivable paths in the confirm transaction without recreating the source order', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+      confirmationUnit: 'source_order_receivable',
+      candidates: [
+        {
+          fieldKey: 'sourceOrderId',
+          proposedValue: 'source-order-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'displayName',
+          proposedValue: '华东旅行社客源',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'partnerName',
+          proposedValue: '华东旅行社',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'collectionMode',
+          proposedValue: 'split',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'netReceivableCents',
+          proposedValue: 6_100_000,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'paths',
+          proposedValue: [
+            {
+              sourceType: 'source_order_guest_balance_collection',
+              title: '尾款代收',
+              amountCents: 4_100_000,
+              counterpartyType: 'guest',
+              counterpartyName: '华东旅行社客源',
+            },
+            {
+              sourceType: 'source_order_customer_settlement',
+              title: '客户补款',
+              amountCents: 2_000_000,
+              counterpartyType: 'partner',
+              counterpartyName: '华东旅行社',
+            },
+          ],
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'historyMessage',
+          proposedValue: '以下为约定应收，确认后整单提交；不是到账或流水。',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceOrderId: 'source-order-1',
+        collectionMode: 'split',
+        depositCents: 2_000_000,
+        balanceCents: 4_100_000,
+        netReceivableCents: 6_100_000,
+        partnerId: 'partner-1',
+      },
+    }
+    const { service, prisma, tx, sourceOrders, generation } = createService({
+      packages: [receivablePackage],
+    })
+    generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        collectionMode: 'split',
+        depositCents: 2_000_000,
+        balanceCents: 4_100_000,
+        netReceivableCents: 6_100_000,
+        partnerId: 'partner-1',
+        displayName: '华东旅行社客源',
+        partner: { name: '华东旅行社' },
+      },
+      expectedPaths: [],
+      classification: { status: 'ready', paths: [] },
+    })
+    generation.generateReceivableSchedules.mockResolvedValue({
+      order: { id: 'source-order-1' },
+      schedules: [{ id: 'sch-1' }, { id: 'sch-2' }],
+      generation: 'created',
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: receivablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-receivable',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(receivablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(sourceOrders.createWithSelectedGuests).not.toHaveBeenCalled()
+    expect(generation.generateReceivableSchedules).toHaveBeenCalledWith(
+      organizationId,
+      'source-order-1',
+      expect.any(Function),
+      expect.objectContaining({ strategy: 'initial_only', client: tx }),
+    )
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            resultRef: expect.objectContaining({
+              objectKind: 'source_order_receivables',
+              objectId: 'source-order-1',
+              scheduleIds: ['sch-1', 'sch-2'],
+            }),
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('lets a /departure caller accept receivable confirm but not source-order create', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+    }
+    const sourcePackage = {
+      ...pendingPackage,
+      payloadSchema: 'source_order.create@v1',
+    }
+    const receivableService = createService({ packages: [receivablePackage] })
+    receivableService.auth.getPermissionKeysForUser.mockResolvedValue(['/departure'])
+    await expect(
+      receivableService.service.acceptReviewConfirmation(organizationId, userId, {
+        decisionCommandId: 'decision-recv',
+        items: [{ packageId: 'pkg-receivable', expectedPackageVersion: 1 }],
+      }),
+    ).resolves.toMatchObject({ accepted: true })
+
+    const sourceService = createService({ packages: [sourcePackage] })
+    sourceService.auth.getPermissionKeysForUser.mockResolvedValue(['/departure'])
+    await expect(
+      sourceService.service.acceptReviewConfirmation(organizationId, userId, {
+        decisionCommandId: 'decision-source',
+        items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
+      }),
+    ).rejects.toThrow('无权确认该事项')
+  })
+
+  it('prepares a receivable review only from a successful source-order result', async () => {
+    const { service, tx } = createService()
+    await expect(
+      service.prepareSourceOrderReceivableReview(organizationId, userId, 'departure-1', {
+        sourceOrderId: 'source-order-1',
+        conversationId: 'conv-1',
+      }),
+    ).rejects.toThrow('只能从本次成功创建的客源继续提交应收')
+
+    tx.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        afterSnapshot: { objectKind: 'source_order', objectId: 'source-order-1' },
+        package: {
+          ...pendingPackage,
+          payloadSchema: 'source_order.create@v1',
+          status: AiReviewPackageStatus.confirmed,
+        },
+      },
+    ])
+    const ready = createService()
+    ready.tx.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        afterSnapshot: { objectKind: 'source_order', objectId: 'source-order-1' },
+        package: {
+          ...pendingPackage,
+          payloadSchema: 'source_order.create@v1',
+          status: AiReviewPackageStatus.confirmed,
+        },
+      },
+    ])
+    ready.generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        displayName: '华东旅行社客源',
+        partner: { name: '华东旅行社' },
+        collectionMode: 'partner_settled',
+        netReceivableCents: 6_100_000,
+        depositCents: 0,
+        balanceCents: 0,
+        partnerId: 'partner-1',
+      },
+      expectedPaths: [
+        {
+          sourceType: 'source_order_customer_settlement',
+          title: '客户补款',
+          amountCents: 6_100_000,
+          counterpartyType: 'partner',
+          counterpartyName: '华东旅行社',
+        },
+      ],
+      classification: {
+        status: 'ready',
+        paths: [
+          {
+            sourceType: 'source_order_customer_settlement',
+            title: '客户补款',
+            amountCents: 6_100_000,
+            counterpartyType: 'partner',
+            counterpartyName: '华东旅行社',
+          },
+        ],
+      },
+    })
+
+    const view = await ready.service.prepareSourceOrderReceivableReview(
+      organizationId,
+      userId,
+      'departure-1',
+      { sourceOrderId: 'source-order-1', conversationId: 'conv-1' },
+    )
+    expect(view.payloadSchema).toBe('source_order.receivable@v1')
+    expect(view.candidates.some((candidate) => candidate.fieldKey === 'paths')).toBe(true)
+    expect(ready.generation.generateReceivableSchedules).not.toHaveBeenCalled()
+  })
+
+  it('refuses F2 anomaly confirm without creating or backfilling receivables', async () => {
+    const receivablePackage = {
+      ...pendingPackage,
+      id: 'pkg-receivable',
+      payloadSchema: 'source_order.receivable@v1',
+      confirmationUnit: 'source_order_receivable',
+      candidates: [
+        {
+          fieldKey: 'sourceOrderId',
+          proposedValue: 'source-order-1',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'anomaly',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式客源单当前收款约定' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceOrderId: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 6_100_000,
+        partnerId: 'partner-1',
+      },
+    }
+    const { service, prisma, tx, generation } = createService({ packages: [receivablePackage] })
+    generation.previewInitialReceivables.mockResolvedValue({
+      order: {
+        id: 'source-order-1',
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 6_100_000,
+        partnerId: 'partner-1',
+      },
+      classification: {
+        status: 'anomaly',
+        reason: 'incomplete',
+        message: '已有应收不完整，请到普通业务入口处理，系统不会自动补建。',
+      },
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: receivablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(receivablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateReceivableSchedules).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: expect.stringContaining('不会自动补建'),
           }),
         }),
       }),

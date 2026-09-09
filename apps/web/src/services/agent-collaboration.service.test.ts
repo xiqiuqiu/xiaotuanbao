@@ -12,7 +12,7 @@ vi.mock('@/lib/request', () => ({
   },
 }))
 
-import { acceptReviewConfirmation } from './agent-collaboration.service'
+import { acceptReviewConfirmation, prepareSourceOrderReceivableReview } from './agent-collaboration.service'
 
 describe('acceptReviewConfirmation', () => {
   beforeEach(() => {
@@ -29,5 +29,16 @@ describe('acceptReviewConfirmation', () => {
       decisionCommandId: 'd-1',
       items: [{ packageId: 'pkg-1', expectedPackageVersion: 2 }],
     })
+  })
+
+  it('posts source-order receivable review preparation on the departure', async () => {
+    await prepareSourceOrderReceivableReview('dep-1', {
+      sourceOrderId: 'so-1',
+      conversationId: 'conv-1',
+    })
+    expect(post).toHaveBeenCalledWith(
+      '/agent/departures/dep-1/source-order-receivable-reviews',
+      { sourceOrderId: 'so-1', conversationId: 'conv-1' },
+    )
   })
 })
