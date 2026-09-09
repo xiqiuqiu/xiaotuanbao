@@ -256,23 +256,35 @@ describe('LiveOutputFlusher', () => {
     sub.unsubscribe()
   }, 1_000)
 
-  it('does not live-publish English thinking-disabled soliloquy as the public reply', async () => {
+  it('keeps an English-only business reply on the public live channel', async () => {
     const live = new InMemoryAgentLiveOutput()
     const seen: string[] = []
     const sub = live.observe(identity.conversationId).subscribe((snapshot) => {
       seen.push(snapshot.text)
     })
     const flusher = new LiveOutputFlusher(live, identity)
-    const englishSoliloquy =
-      "I'll check the current task context first, then help add a vehicle departure resource."
+    const reply =
+      'The vehicle is booked for April 2 to April 6. Please confirm the supplier and total price in the review form.'
 
-    flusher.push({ text: englishSoliloquy })
+    flusher.push({ text: reply })
     await flusher.flush()
-    expect(seen).toEqual([''])
+    expect(seen).toEqual([reply])
+    sub.unsubscribe()
+  })
 
-    flusher.push({ text: `${englishSoliloquy}\n已提交待审核建议，请在右侧审核确认。` })
+  it('strips think tags from public live text without wiping English business copy', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    const seen: string[] = []
+    const sub = live.observe(identity.conversationId).subscribe((snapshot) => {
+      seen.push(snapshot.text)
+    })
+    const flusher = new LiveOutputFlusher(live, identity)
+    const reply =
+      'The vehicle is booked for April 2 to April 6. Please confirm the supplier and total price in the review form.'
+
+    flusher.push({ text: `<think>checking dates and supplier categories</think>${reply}` })
     await flusher.flush()
-    expect(seen.at(-1)).toBe('已提交待审核建议，请在右侧审核确认。')
+    expect(seen).toEqual([reply])
     sub.unsubscribe()
   })
 })

@@ -413,4 +413,69 @@ describe('SegmentResourceReviewPanel #449', () => {
     expect(screen.getByText(/未自动提交应付/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入资源' })).not.toBeInTheDocument()
   })
+
+  it('shows the later success after an earlier confirmation for the same package failed', async () => {
+    getDepartureCollaboration.mockResolvedValue({
+      ...collaboration([packageView({ status: 'confirmed' })]),
+      confirmations: [
+        {
+          decisionCommandId: 'decision-fail',
+          accepted: true,
+          items: [
+            {
+              packageId: 'pkg-1',
+              status: 'failed',
+              reason: '资源种类「酒店」不属于该供应商的类别集合',
+            },
+          ],
+        },
+        {
+          decisionCommandId: 'decision-ok',
+          accepted: true,
+          items: [
+            {
+              packageId: 'pkg-1',
+              status: 'succeeded',
+              resultRef: { objectKind: 'segment_resource', objectId: 'res-1' },
+            },
+          ],
+        },
+      ],
+    })
+    renderPanel()
+
+    expect(await screen.findByText('资源已写入')).toBeInTheDocument()
+    expect(screen.queryByText('资源种类「酒店」不属于该供应商的类别集合')).not.toBeInTheDocument()
+  })
+
+  it('clears an incompatible supplier when the resource kind changes', async () => {
+    const user = userEvent.setup()
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    listSuppliers.mockResolvedValue({ items: [{ id: 'sup-1', name: '华东酒店' }], total: 1 })
+    getSupplier.mockResolvedValue({
+      id: 'sup-1',
+      name: '华东酒店',
+      categories: ['hotel'],
+    })
+    patchAiReviewPackage.mockResolvedValue({
+      pendingReviews: [packageView()],
+      pendingReview: packageView(),
+    })
+    renderPanel()
+
+    await user.click(await screen.findByRole('combobox', { name: '资源种类候选' }))
+    await user.click(await screen.findByText('用车'))
+    await waitFor(() =>
+      expect(patchAiReviewPackage).toHaveBeenCalledWith(
+        '',
+        'pkg-1',
+        expect.objectContaining({
+          corrections: expect.objectContaining({
+            resourceKind: 'transport',
+            supplierId: null,
+          }),
+        }),
+      ),
+    )
+  })
 })

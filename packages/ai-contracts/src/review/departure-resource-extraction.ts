@@ -170,14 +170,38 @@ function inferKind(text: string): 'outsource' | 'insurance' | 'hotel' | 'transpo
   return undefined
 }
 
-function parseYuanCents(text: string): number | undefined {
-  const matches = [...text.matchAll(/(\d+(?:\.\d+)?)\s*元/g)]
-  const last = matches.at(-1)?.[1]
-  if (!last) return undefined
-  const yuan = Number(last)
+function yuanToCents(raw: string): number | undefined {
+  const yuan = Number(raw)
   if (!Number.isFinite(yuan) || yuan <= 0) return undefined
   const cents = Math.round(yuan * 100)
   return cents >= 1 ? cents : undefined
+}
+
+function parseYuanCents(text: string): number | undefined {
+  const labeled = text.match(
+    /(?:约定总价|约定金额|合计|共计|总价|报价)\s*[为是:：]?\s*(\d+(?:\.\d+)?)\s*元/,
+  )
+  if (labeled?.[1]) {
+    const cents = yuanToCents(labeled[1])
+    if (cents != null) return cents
+  }
+
+  const matches = [...text.matchAll(/(\d+(?:\.\d+)?)\s*元/g)]
+  const primary = matches.filter((match) => {
+    const start = match.index ?? 0
+    const after = text.slice(start + match[0].length, start + match[0].length + 4)
+    const before = text.slice(Math.max(0, start - 2), start)
+    if (/^\s*税/.test(after)) return false
+    if (/税$/.test(before)) return false
+    return true
+  })
+  const pool = primary.length > 0 ? primary : matches
+  let best: number | undefined
+  for (const match of pool) {
+    const cents = yuanToCents(match[1] ?? '')
+    if (cents != null && (best == null || cents > best)) best = cents
+  }
+  return best
 }
 
 function hasProposed(

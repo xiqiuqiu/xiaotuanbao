@@ -1,5 +1,3 @@
-import { stripEnglishChainOfThought } from './visible-reasoning'
-
 export const PUBLIC_REPLY_FALLBACK = '已处理当前说明。'
 
 export type PublicStreamChannel = 'public' | 'reasoning'
@@ -17,11 +15,11 @@ export function stripThinkTags(text: string): string {
 
 /**
  * Final User-visible reply persisted as agent_message.
- * Prefer streamed text-delta; never keep 思考过程 that the stream already
- * classified, or `<think>` blocks from thinking-disabled content.
+ * Prefer streamed text-delta; never keep `<think>` blocks from thinking-disabled
+ * content. English chain-of-thought stripping stays on the reasoning channel.
  */
 function visiblePublicText(text: string): string {
-  return stripEnglishChainOfThought(stripThinkTags(text.replace(/\u0000/g, '')))
+  return stripThinkTags(text.replace(/\u0000/g, '')).trim()
 }
 
 export function selectPublicReply(input: {

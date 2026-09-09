@@ -38,6 +38,7 @@ import { DepartureSourceOrderReview } from '@/features/departure/components/Depa
 import { AgentConversationChat } from './AgentConversationChat'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
 import { DepartureResourceReviewPanel } from './DepartureResourceReviewPanel'
+import { confirmationForPackage } from './review-confirmation-for-package'
 import { ReviewMaterialConflicts, ReviewRevisionHistory } from './ReviewRevisionHistory'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { currentPageAttachmentFromLocation } from './page-locator-attachment'
@@ -75,10 +76,7 @@ function formalResourceSearch(
   confirmations: ReviewConfirmationView[],
 ) {
   if (selected.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
-    const objectId = confirmations
-      .flatMap((entry) => entry.items)
-      .find((item) => item.packageId === selected.id && item.status === 'succeeded')
-      ?.resultRef?.objectId
+    const objectId = confirmationForPackage(confirmations, selected.id)?.resultRef?.objectId
     return {
       tab: 'execution' as const,
       ...(typeof objectId === 'string' ? { highlightDepartureResourceId: objectId } : {}),

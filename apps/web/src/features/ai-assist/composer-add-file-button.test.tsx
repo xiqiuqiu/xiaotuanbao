@@ -19,3 +19,14 @@ it('stays disabled when CopilotKit has not bound onAddFile', () => {
   render(<ComposerAddFileButton />)
   expect(screen.getByRole('button', { name: '添加附件' })).toBeDisabled()
 })
+
+it('keeps opening the file picker when the slot also passes onClick', async () => {
+  const user = userEvent.setup()
+  const onAddFile = vi.fn()
+  const slotOnClick = vi.fn()
+  render(<ComposerAddFileButton onAddFile={onAddFile} onClick={slotOnClick} />)
+
+  await user.click(screen.getByRole('button', { name: '添加附件' }))
+  expect(onAddFile).toHaveBeenCalledTimes(1)
+  expect(slotOnClick).not.toHaveBeenCalled()
+})
