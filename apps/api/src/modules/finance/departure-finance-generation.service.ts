@@ -10,6 +10,7 @@ import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   isFinanceTouched,
   PaymentScheduleSourceType,
+  classifySourceOrderInitialReceivables,
   computeReceivableDueDate,
   shouldCancelSourceOrderScheduleOnConventionSync,
 } from '@xiaotuanbao/shared'
@@ -66,6 +67,15 @@ interface PayableSpec {
   counterpartyName?: string
 }
 
+export type ReceivableGenerationStrategy = 'ordinary' | 'initial_only'
+
+export type ReceivableGenerationResult = {
+  order: SourceOrderWithRelations
+  schedules: PaymentScheduleSummary[]
+  existingScheduleIds?: string[]
+  generation: 'created' | 'already_present' | 'not_needed'
+}
+
 /**
  * Finance-owned Generation + convention sync implementation (ADR-0004 step 2).
  * Public seam is DepartureFinanceFacade; this class is the deep implementation.
@@ -83,47 +93,89 @@ export class DepartureFinanceGenerationService {
     organizationId: string,
     sourceOrderId: string,
     assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
-  ): Promise<{ order: SourceOrderWithRelations; schedules: PaymentScheduleSummary[] }> {
+    options?: { client?: DbClient; strategy?: ReceivableGenerationStrategy },
+  ): Promise<ReceivableGenerationResult> {
+    if (options?.client) {
+      return this.generateReceivableSchedulesInTx(
+        options.client,
+        organizationId,
+        sourceOrderId,
+        assertAllowsNewObligation,
+        options.strategy ?? 'ordinary',
+      )
+    }
     return this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM source_orders
-          WHERE id = ${sourceOrderId}
-          FOR UPDATE
-        `
-
-        const lockedOrder = await loadSourceOrderOrThrow(tx, organizationId, sourceOrderId)
-        assertAllowsNewObligation(lockedOrder.departure, '提交应收')
-
-        const existingSchedules = await loadReceivableSchedules(
+      (tx) =>
+        this.generateReceivableSchedulesInTx(
           tx,
           organizationId,
           sourceOrderId,
-        )
-        const activeExisting = existingSchedules.filter((schedule) => schedule.cancelledAt == null)
-        const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
-        const expectedPaths = this.buildReceivablePaths(lockedOrder).filter(
-          (path) => path.amountCents > 0,
-        )
-        const activeByType = new Map(
-          activeExisting.map((schedule) => [schedule.sourceType, schedule]),
-        )
-        const missingPaths = expectedPaths.filter((path) => !activeByType.has(path.sourceType))
+          assertAllowsNewObligation,
+          options?.strategy ?? 'ordinary',
+        ),
+      { maxWait: 20_000, timeout: 20_000 },
+    )
+  }
 
-        if (activeExisting.length > 0 && missingPaths.length === 0) {
-          throw new ConflictException('当前客源单已提交应收，不能再次提交')
+  async previewInitialReceivables(
+    organizationId: string,
+    sourceOrderId: string,
+    client: DbClient = this.prisma,
+  ) {
+    const order = await loadSourceOrderOrThrow(client, organizationId, sourceOrderId)
+    const existingSchedules = await loadReceivableSchedules(client, organizationId, sourceOrderId)
+    const expectedPaths = this.buildReceivablePaths(order).filter((path) => path.amountCents > 0)
+    const classification = classifySourceOrderInitialReceivables({
+      expectedPaths,
+      existingSchedules,
+    })
+    return { order, existingSchedules, expectedPaths, classification }
+  }
+
+  private async generateReceivableSchedulesInTx(
+    tx: DbClient,
+    organizationId: string,
+    sourceOrderId: string,
+    assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
+    strategy: ReceivableGenerationStrategy,
+  ): Promise<ReceivableGenerationResult> {
+    await tx.$queryRaw`
+      SELECT id
+      FROM source_orders
+      WHERE id = ${sourceOrderId}
+      FOR UPDATE
+    `
+
+    const lockedOrder = await loadSourceOrderOrThrow(tx, organizationId, sourceOrderId)
+    assertAllowsNewObligation(lockedOrder.departure, '提交应收')
+
+    const existingSchedules = await loadReceivableSchedules(tx, organizationId, sourceOrderId)
+    const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
+    const expectedPaths = this.buildReceivablePaths(lockedOrder).filter((path) => path.amountCents > 0)
+
+    if (strategy === 'initial_only') {
+      const classification = classifySourceOrderInitialReceivables({
+        expectedPaths,
+        existingSchedules,
+      })
+      if (classification.status === 'no_positive_paths') {
+        return { order: lockedOrder, schedules: [], generation: 'not_needed' }
+      }
+      if (classification.status === 'complete_and_consistent') {
+        return {
+          order: lockedOrder,
+          schedules: [],
+          existingScheduleIds: classification.scheduleIds,
+          generation: 'already_present',
         }
-        if (activeExisting.length === 0 && existingSchedules.length > 0) {
-          throw new ConflictException('当前客源单已提交应收，不能再次提交')
-        }
-
-        const createdSchedules: PaymentScheduleSummary[] = []
-        const pathsToCreate =
-          activeExisting.length === 0 ? expectedPaths : missingPaths
-
-        for (const path of pathsToCreate) {
-          const created = await this.paymentScheduleService.create(
+      }
+      if (classification.status === 'anomaly') {
+        throw new ConflictException(classification.message)
+      }
+      const createdSchedules: PaymentScheduleSummary[] = []
+      for (const path of classification.paths) {
+        createdSchedules.push(
+          await this.paymentScheduleService.create(
             organizationId,
             PaymentScheduleDirection.receivable,
             {
@@ -138,14 +190,48 @@ export class DepartureFinanceGenerationService {
               sourceId: sourceOrderId,
             },
             tx,
-          )
-          createdSchedules.push(created)
-        }
+          ),
+        )
+      }
+      return { order: lockedOrder, schedules: createdSchedules, generation: 'created' }
+    }
 
-        return { order: lockedOrder, schedules: createdSchedules }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
-    )
+    const activeExisting = existingSchedules.filter((schedule) => schedule.cancelledAt == null)
+    const activeByType = new Map(activeExisting.map((schedule) => [schedule.sourceType, schedule]))
+    const missingPaths = expectedPaths.filter((path) => !activeByType.has(path.sourceType))
+
+    if (activeExisting.length > 0 && missingPaths.length === 0) {
+      throw new ConflictException('当前客源单已提交应收，不能再次提交')
+    }
+    if (activeExisting.length === 0 && existingSchedules.length > 0) {
+      throw new ConflictException('当前客源单已提交应收，不能再次提交')
+    }
+
+    const createdSchedules: PaymentScheduleSummary[] = []
+    const pathsToCreate = activeExisting.length === 0 ? expectedPaths : missingPaths
+
+    for (const path of pathsToCreate) {
+      createdSchedules.push(
+        await this.paymentScheduleService.create(
+          organizationId,
+          PaymentScheduleDirection.receivable,
+          {
+            departureId: lockedOrder.departureId,
+            title: path.title,
+            amountCents: path.amountCents,
+            dueDate,
+            counterpartyType: path.counterpartyType,
+            counterpartyId: path.counterpartyId,
+            counterpartyName: path.counterpartyName,
+            sourceType: path.sourceType,
+            sourceId: sourceOrderId,
+          },
+          tx,
+        ),
+      )
+    }
+
+    return { order: lockedOrder, schedules: createdSchedules, generation: 'created' }
   }
 
   /**

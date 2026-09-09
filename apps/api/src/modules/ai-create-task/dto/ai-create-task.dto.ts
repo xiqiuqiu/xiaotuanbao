@@ -325,3 +325,13 @@ export class AcceptReviewConfirmationDto {
   @Type(() => ReviewConfirmationItemDto)
   items!: ReviewConfirmationItemDto[]
 }
+
+export class PrepareSourceOrderReceivableReviewDto {
+  @IsString()
+  @IsNotEmpty()
+  sourceOrderId!: string
+
+  @IsString()
+  @IsNotEmpty()
+  conversationId!: string
+}

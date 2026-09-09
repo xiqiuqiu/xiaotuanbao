@@ -1200,6 +1200,11 @@ export interface AcceptReviewConfirmationDto {
   items: ReviewConfirmationItemInput[]
 }
 
+export interface PrepareSourceOrderReceivableReviewDto {
+  sourceOrderId: string
+  conversationId: string
+}
+
 export interface ReviewConfirmationItemResult {
   packageId: string
   itemIdentity?: string

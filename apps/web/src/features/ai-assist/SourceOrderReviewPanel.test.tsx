@@ -263,8 +263,41 @@ describe('SourceOrderReviewPanel', () => {
     )
 
     expect(screen.getByText('客源单已创建')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '暂不处理' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看客源单' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '继续提交应收' })).toBeInTheDocument()
+  })
+
+  it('keeps 继续提交应收 for finance without departure:write (ADR-0023)', () => {
+    render(
+      <ConfigProvider locale={zhCN}>
+        <SourceOrderReviewPanel
+          createdSourceOrderId="so-1"
+          readOnly
+          onContinueReceivables={vi.fn()}
+          onSkipReceivables={vi.fn()}
+          onViewSourceOrder={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: '继续提交应收' })).toBeEnabled()
+  })
+
+  it('hides the continue-receivable primary when the caller cannot prepare', () => {
+    render(
+      <ConfigProvider locale={zhCN}>
+        <SourceOrderReviewPanel
+          createdSourceOrderId="so-1"
+          canContinueReceivables={false}
+          onViewSourceOrder={vi.fn()}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.queryByRole('button', { name: '继续提交应收' })).not.toBeInTheDocument()
+    expect(screen.getByText('当前不能从这里准备应收')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看客源单' })).toBeInTheDocument()
   })
 })
 

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
+  AiReviewPackageView,
   DepartureCollaborationView,
   ReviewConfirmationView,
   ReviewRevisionView,
@@ -7,7 +8,7 @@ import type {
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { AcceptReviewConfirmationDto } from './dto/ai-create-task.dto'
+import { AcceptReviewConfirmationDto, PrepareSourceOrderReceivableReviewDto } from './dto/ai-create-task.dto'
 import { ReviewCollaborationService } from './review-collaboration.service'
 
 @Controller('agent')
@@ -17,7 +18,8 @@ export class AgentCollaborationController {
 
   @Post('review-decisions')
   @HttpCode(200)
-  @RequireMenu('departure:write')
+  // ADR-0023：财务持 /departure、无 departure:write，须能确认应收；客源创建仍由服务层要 departure:write。
+  @RequireMenu('/departure')
   acceptConfirmation(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Body() dto: AcceptReviewConfirmationDto,
@@ -25,6 +27,22 @@ export class AgentCollaborationController {
     return this.collaboration.acceptReviewConfirmation(
       request.user.organizationId,
       request.user.userId,
+      dto,
+    )
+  }
+
+  @Post('departures/:departureId/source-order-receivable-reviews')
+  @HttpCode(200)
+  @RequireMenu('/departure')
+  prepareSourceOrderReceivableReview(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('departureId') departureId: string,
+    @Body() dto: PrepareSourceOrderReceivableReviewDto,
+  ): Promise<AiReviewPackageView> {
+    return this.collaboration.prepareSourceOrderReceivableReview(
+      request.user.organizationId,
+      request.user.userId,
+      departureId,
       dto,
     )
   }

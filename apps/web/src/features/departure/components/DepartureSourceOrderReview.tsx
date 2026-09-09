@@ -11,6 +11,7 @@ import {
   listDepartureCollaboration,
   patchAiReviewPackage,
 } from '@/services/ai-create-task.service'
+import { prepareSourceOrderReceivableReview } from '@/services/agent-collaboration.service'
 import { awaitReviewConfirmationItem } from './await-review-confirmation-item'
 import { ApiError } from '@/lib/request/client'
 
@@ -19,11 +20,13 @@ export function DepartureSourceOrderReview({
   canEdit,
   packageId,
   onLeaveWorkspace,
+  onPreparedReceivableReview,
 }: {
   departureId: string
   canEdit: boolean
   packageId?: string
   onLeaveWorkspace?: () => void
+  onPreparedReceivableReview?: (packageId: string) => void
 }) {
   const { message } = App.useApp()
   const decisions = useRef<Record<string, string>>({})
@@ -97,6 +100,25 @@ export function DepartureSourceOrderReview({
     },
   })
 
+  const prepareReceivable = useMutation({
+    mutationFn: async (sourceOrderId: string) => {
+      if (!conversationId) throw new Error('会话不存在')
+      return prepareSourceOrderReceivableReview(departureId, {
+        sourceOrderId,
+        conversationId,
+      })
+    },
+    onSuccess: async (review) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['departure-collaboration', departureId, conversationId],
+      })
+      onPreparedReceivableReview?.(review.id)
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '准备应收审核失败')
+    },
+  })
+
   if (!pendingReview && !succeeded) {
     return null
   }
@@ -106,6 +128,13 @@ export function DepartureSourceOrderReview({
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <SourceOrderReviewPanel
           createdSourceOrderId={succeeded.resultRef.objectId}
+          canContinueReceivables={Boolean(conversationId)}
+          error={
+            prepareReceivable.error
+              ? (prepareReceivable.error.message ?? '准备应收审核失败')
+              : undefined
+          }
+          continuingReceivables={prepareReceivable.isPending}
           onViewSourceOrder={(sourceOrderId) => {
             onLeaveWorkspace?.()
             void navigate({
@@ -114,13 +143,11 @@ export function DepartureSourceOrderReview({
               search: { tab: 'sourceOrders', highlightSourceOrderId: sourceOrderId },
             })
           }}
+          onSkipReceivables={() => {
+            message.info('已暂不提交应收，可稍后从本结果继续。')
+          }}
           onContinueReceivables={(sourceOrderId) => {
-            onLeaveWorkspace?.()
-            void navigate({
-              to: '/departure/$departureId',
-              params: { departureId },
-              search: { tab: 'receivables', sourceId: sourceOrderId },
-            })
+            prepareReceivable.mutate(sourceOrderId)
           }}
         />
       </div>

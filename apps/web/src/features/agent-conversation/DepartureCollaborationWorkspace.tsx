@@ -18,6 +18,7 @@ import {
 } from 'antd'
 import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+  SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   resolveReviewField,
@@ -38,6 +39,7 @@ import { DepartureSourceOrderReview } from '@/features/departure/components/Depa
 import { AgentConversationChat } from './AgentConversationChat'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
 import { DepartureResourceReviewPanel } from './DepartureResourceReviewPanel'
+import { SourceOrderReceivableReviewPanel } from './SourceOrderReceivableReviewPanel'
 import { confirmationForPackage } from './review-confirmation-for-package'
 import { ReviewMaterialConflicts, ReviewRevisionHistory } from './ReviewRevisionHistory'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -71,6 +73,10 @@ function isResourceReviewSchema(payloadSchema: string) {
   )
 }
 
+function isReceivableReviewSchema(payloadSchema: string) {
+  return payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA
+}
+
 function formalResourceSearch(
   selected: AiReviewPackageView,
   confirmations: ReviewConfirmationView[],
@@ -96,7 +102,8 @@ function formalResourceSearch(
 }
 function itemTitle(pkg: AiReviewPackageView, ordinal: number) {
   const candidate = pkg.candidates.find(
-    (item) => item.fieldKey === 'title' || item.fieldKey === 'name',
+    (item) =>
+      item.fieldKey === 'title' || item.fieldKey === 'name' || item.fieldKey === 'displayName',
   )
   const value =
     candidate?.userCorrectedValue !== undefined
@@ -468,6 +475,11 @@ export function DepartureCollaborationWorkspace({
                       focused={expanded && pkg.id === selected?.id}
                       confirmations={collaboration.data?.confirmations ?? []}
                       onAsk={() => askAboutItem(pkg)}
+                      onPreparedReceivableReview={(id) => {
+                        setCategory('全部事项')
+                        setCompactPanel('事项与审核')
+                        select(id)
+                      }}
                     />
                   </div>
                 </div>
@@ -488,6 +500,7 @@ function WorkspaceReviewItem({
   focused,
   confirmations,
   onAsk,
+  onPreparedReceivableReview,
 }: {
   selected: AiReviewPackageView
   departureId: string
@@ -496,6 +509,7 @@ function WorkspaceReviewItem({
   focused: boolean
   confirmations: ReviewConfirmationView[]
   onAsk: () => void
+  onPreparedReceivableReview: (packageId: string) => void
 }) {
   const navigate = useNavigate()
   const failure = confirmations
@@ -528,7 +542,8 @@ function WorkspaceReviewItem({
       ) : null}
       <ReviewRevisionHistory pkg={selected} focused={focused} />
       <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
-      {!isResourceReviewSchema(selected.payloadSchema) ? (
+      {!isResourceReviewSchema(selected.payloadSchema) &&
+      !isReceivableReviewSchema(selected.payloadSchema) ? (
         <Collapse
           size="small"
           className={styles.evidence}
@@ -573,6 +588,16 @@ function WorkspaceReviewItem({
           onLeaveWorkspace={() =>
             useAgentConversationStore.getState().closeGlobalForBusinessNavigation()
           }
+          onPreparedReceivableReview={onPreparedReceivableReview}
+        />
+      ) : null}
+      {selected.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA && conversationId ? (
+        <SourceOrderReceivableReviewPanel
+          key={selected.id}
+          departureId={departureId}
+          conversationId={conversationId}
+          onlyPackageId={selected.id}
+          focusedReviewPackageId={focused ? selected.id : null}
         />
       ) : null}
       {selected.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA && conversationId ? (
@@ -593,7 +618,7 @@ function WorkspaceReviewItem({
           focusedReviewPackageId={focused ? selected.id : null}
         />
       ) : null}
-      {selected.status !== 'pending' ? (
+      {selected.status !== 'pending' && !isReceivableReviewSchema(selected.payloadSchema) ? (
         <section className={styles.snapshot} aria-label="审核时的确认内容">
           <Descriptions
             title="审核记录"

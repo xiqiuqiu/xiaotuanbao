@@ -38,6 +38,7 @@ import { VerificationService } from './verification.service'
   ],
   exports: [
     DepartureFinanceFacade,
+    DepartureFinanceGenerationService,
     PaymentScheduleService,
     VerificationService,
     TransactionService,

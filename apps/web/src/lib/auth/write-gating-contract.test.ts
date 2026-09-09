@@ -80,7 +80,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   retractQueuedAgentConversationBatch: { gating: 'public', endpointKey: null },
   retryFailedConversationBatch: { gating: 'public', endpointKey: null },
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  acceptReviewConfirmation: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  acceptReviewConfirmation: { gating: 'menuGated', endpointKey: '/departure' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   cancelAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
@@ -138,6 +138,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   generatePayablesForSegment: { gating: 'menuGated', endpointKey: '/departure' },
   generateReceivables: { gating: 'menuGated', endpointKey: '/departure' },
   generateReceivablesForDeparture: { gating: 'menuGated', endpointKey: '/departure' },
+  prepareSourceOrderReceivableReview: { gating: 'menuGated', endpointKey: '/departure' },
   settleByActualCollection: { gating: 'menuGated', endpointKey: '/departure' },
   // 员工管理挂 /system/users（能进入系统页 ⟺ 可调）。
   createEmployee: { gating: 'menuGated', endpointKey: '/system/users' },

@@ -40,6 +40,11 @@ vi.mock('./DepartureResourceReviewPanel', () => ({
     <div>发团级资源审核 {onlyPackageId}</div>
   ),
 }))
+vi.mock('./SourceOrderReceivableReviewPanel', () => ({
+  SourceOrderReceivableReviewPanel: ({ onlyPackageId }: { onlyPackageId: string }) => (
+    <div>应收审核 {onlyPackageId}</div>
+  ),
+}))
 vi.mock('./AgentConversationChat', () => ({
   AgentConversationChat: ({ onReviewRequested, reviewPackageId, onReviewMessageSent }: {
     onReviewRequested: (id: string) => void
@@ -73,6 +78,7 @@ const item = (id: string, payloadSchema: string, status = 'pending') => ({
 const source = 'source_order.create@v1'
 const resource = 'departure.segment_resource@v1'
 const departureResource = 'departure.departure_resource@v1'
+const receivable = 'source_order.receivable@v1'
 function view(expanded: boolean, onExpand = vi.fn()) {
   return (
     <DepartureCollaborationWorkspace
@@ -231,6 +237,25 @@ it('keeps source, segment, and departure resource reviews independent', async ()
   fireEvent.click(screen.getByRole('tab', { name: 'source-1 待审核' }))
   expect(screen.getByText('客源审核 source-1')).toBeVisible()
   expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
+})
+
+it('keeps source-order receivable reviews in the finance category', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      item('source-1', source, 'confirmed'),
+      {
+        ...item('recv-1', receivable),
+        candidates: [{ fieldKey: 'displayName', proposedValue: '华东旅行社客源', evidence: [] }],
+      },
+    ],
+    confirmations: [],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '财务' }))
+  expect(await screen.findByText('应收审核 recv-1')).toBeVisible()
+  expect(screen.getByRole('tab', { name: '华东旅行社客源 待审核' })).toBeInTheDocument()
+  expect(screen.queryByText('暂无财务事项')).not.toBeInTheDocument()
 })
 
 it('opens a confirmed departure resource from the execution tab highlight', async () => {
