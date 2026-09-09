@@ -35,6 +35,16 @@ describe('selectPublicReply', () => {
     ).toBe(PUBLIC_REPLY)
   })
 
+  it('does not persist an unclosed think block as the public reply', () => {
+    expect(
+      selectPublicReply({
+        streamedPublicText: `<think>${SOLILOQUY}`,
+        streamedReasoning: '',
+        fullOutputText: `<think>${SOLILOQUY}`,
+      }),
+    ).toBe('已处理当前说明。')
+  })
+
   it('falls back to the generic completion line when nothing public remains', () => {
     expect(
       selectPublicReply({
@@ -75,5 +85,40 @@ describe('createThinkTagSplitter', () => {
       { channel: 'reasoning', text: SOLILOQUY.slice(8) },
       { channel: 'public', text: PUBLIC_REPLY },
     ])
+  })
+
+  it('does not leak when the open tag itself is split across chunks', () => {
+    const splitter = createThinkTagSplitter()
+    expect(splitter.push('<thi')).toEqual([])
+    expect(splitter.push(`nk>${SOLILOQUY}</think>${PUBLIC_REPLY}`)).toEqual([
+      { channel: 'reasoning', text: SOLILOQUY },
+      { channel: 'public', text: PUBLIC_REPLY },
+    ])
+  })
+
+  it('does not leak when the close tag itself is split across chunks', () => {
+    const splitter = createThinkTagSplitter()
+    expect(splitter.push(`<think>${SOLILOQUY}</th`)).toEqual([
+      { channel: 'reasoning', text: SOLILOQUY },
+    ])
+    expect(splitter.push(`ink>${PUBLIC_REPLY}`)).toEqual([
+      { channel: 'public', text: PUBLIC_REPLY },
+    ])
+  })
+
+  it('keeps unclosed think after a complete open tag off the public channel', () => {
+    const splitter = createThinkTagSplitter()
+    expect(splitter.push(`<think>${SOLILOQUY}`)).toEqual([
+      { channel: 'reasoning', text: SOLILOQUY },
+    ])
+    expect(splitter.flush()).toEqual([])
+  })
+
+  it('flushes a leftover tag prefix as public when the run ends without completing it', () => {
+    const splitter = createThinkTagSplitter()
+    expect(splitter.push(`${PUBLIC_REPLY}<thi`)).toEqual([
+      { channel: 'public', text: PUBLIC_REPLY },
+    ])
+    expect(splitter.flush()).toEqual([{ channel: 'public', text: '<thi' }])
   })
 })

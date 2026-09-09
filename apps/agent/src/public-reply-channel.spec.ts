@@ -84,6 +84,263 @@ describe('public reply channel vs hidden reasoning', () => {
     expect(channels.persisted).toBe(`${SOLILOQUY}${PUBLIC_REPLY}`)
   })
 
+  it('keeps ordinary no-tool Chinese replies that use 先/再 wording', async () => {
+    const reply = '先确认出团日期，再核对接送地点。'
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: reply } }
+        })(),
+        getFullOutput: async () => ({ text: reply, toolCalls: [] }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const channels = publicChannels(frames, result)
+    expect(channels.livePublic).toBe(reply)
+    expect(channels.persisted).toBe(reply)
+  })
+
+  it('does not publish tool-step soliloquy; live and persisted public reply stay the final business text', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', result: { snapshot: {} } },
+          }
+          yield { type: 'step-finish' }
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: PUBLIC_REPLY } }
+          yield { type: 'step-finish' }
+        })(),
+        getFullOutput: async () => ({
+          text: `${SOLILOQUY}${PUBLIC_REPLY}`,
+          toolCalls: [{ toolName: 'getTaskContext', toolCallId: 'call-context' }],
+          toolResults: [
+            { toolName: 'getTaskContext', toolCallId: 'call-context', result: { snapshot: {} } },
+          ],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const channels = publicChannels(frames, result)
+
+    expect(channels.livePublic).toBe(PUBLIC_REPLY)
+    expect(channels.persisted).toBe(PUBLIC_REPLY)
+    expect(channels.livePublic).not.toContain(SOLILOQUY)
+    expect(channels.persisted).not.toContain(SOLILOQUY)
+    expect(JSON.stringify(frames.filter((frame) => frame.type === 'message.delta'))).not.toContain(SOLILOQUY)
+  })
+
+  it('does not publish tool-step soliloquy when Mastra streams tool-call-input-streaming-start', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call-input-streaming-start',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext' },
+          }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', result: { snapshot: {} } },
+          }
+          yield { type: 'step-finish' }
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: PUBLIC_REPLY } }
+          yield { type: 'step-finish' }
+        })(),
+        getFullOutput: async () => ({
+          text: `${SOLILOQUY}${PUBLIC_REPLY}`,
+          toolCalls: [{ toolName: 'getTaskContext', toolCallId: 'call-context' }],
+          toolResults: [
+            { toolName: 'getTaskContext', toolCallId: 'call-context', result: { snapshot: {} } },
+          ],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const channels = publicChannels(frames, result)
+    expect(channels.livePublic).toBe(PUBLIC_REPLY)
+    expect(channels.persisted).toBe(PUBLIC_REPLY)
+    expect(channels.livePublic).not.toContain(SOLILOQUY)
+  })
+
+  it('does not fall back to aggregated full output when the final public step is empty', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: { toolCallId: 'call-context', toolName: 'getTaskContext', result: { snapshot: {} } },
+          }
+        })(),
+        getFullOutput: async () => ({
+          text: SOLILOQUY,
+          toolCalls: [{ toolName: 'getTaskContext', toolCallId: 'call-context' }],
+          toolResults: [
+            { toolName: 'getTaskContext', toolCallId: 'call-context', result: { snapshot: {} } },
+          ],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const channels = publicChannels(frames, result)
+    expect(channels.livePublic).not.toContain(SOLILOQUY)
+    expect(channels.persisted).not.toContain(SOLILOQUY)
+    expect(result.kind).toBe('completed')
+    if (result.kind === 'completed') {
+      expect(result.message).toBe('已处理当前说明。')
+    }
+  })
+
+  it('does not leak buffered tool-step soliloquy when the run ends as awaiting_review', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-review', toolName: 'proposeReviewPackage', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: {
+              toolName: 'proposeReviewPackage',
+              toolCallId: 'call-review',
+              result: {
+                status: 'accepted',
+                objectVersion: 2,
+                confirmationUnit: 'basic_info_draft',
+                candidates: [
+                  {
+                    fieldKey: 'routeName',
+                    proposedValue: '喀纳斯3日线',
+                    clarity: 'clear',
+                    evidence: [{ kind: 'user_message', sequence: 1, excerpt: '帮我建一个喀纳斯3日团' }],
+                  },
+                ],
+              },
+            },
+          }
+        })(),
+        getFullOutput: async () => ({
+          text: SOLILOQUY,
+          toolCalls: [{ toolName: 'proposeReviewPackage', toolCallId: 'call-review' }],
+          toolResults: [],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.kind).toBe('awaiting_review')
+    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([])
+    expect(JSON.stringify(frames)).not.toContain(SOLILOQUY)
+  })
+
+  it('does not publish tool-step soliloquy when the run ends as awaiting_user_input', async () => {
+    const prompt = '请补充出团日期和人数。'
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-route', toolName: 'routeConversation', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: {
+              toolName: 'routeConversation',
+              toolCallId: 'call-route',
+              result: {
+                status: 'accepted',
+                decision: 'request_clarification',
+                interaction: { type: 'free_text', prompt },
+              },
+            },
+          }
+        })(),
+        getFullOutput: async () => ({
+          text: SOLILOQUY,
+          toolCalls: [{ toolName: 'routeConversation', toolCallId: 'call-route' }],
+          toolResults: [],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.kind).toBe('awaiting_user_input')
+    if (result.kind === 'awaiting_user_input') {
+      expect(result.interaction.prompt).toBe(prompt)
+    }
+    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([])
+    expect(JSON.stringify(frames)).not.toContain(SOLILOQUY)
+  })
+
+  it('does not publish tool-step soliloquy when a review package is rejected', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: SOLILOQUY } }
+          yield {
+            type: 'tool-call',
+            payload: { toolCallId: 'call-review', toolName: 'proposeReviewPackage', args: {} },
+          }
+          yield {
+            type: 'tool-result',
+            payload: {
+              toolName: 'proposeReviewPackage',
+              toolCallId: 'call-review',
+              result: {
+                status: 'rejected',
+                errors: [{ candidateIndex: 0, evidenceIndex: 0, code: 'EXCERPT_NOT_FOUND', message: '摘录对不上冻结消息' }],
+              },
+            },
+          }
+        })(),
+        getFullOutput: async () => ({
+          text: SOLILOQUY,
+          toolCalls: [{ toolName: 'proposeReviewPackage', toolCallId: 'call-review' }],
+          toolResults: [],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(result.kind).toBe('failed')
+    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([])
+    expect(JSON.stringify(frames)).not.toContain(SOLILOQUY)
+  })
+
+
   it('maps unwrapped AI SDK delta-field chunks onto reasoning vs public reply', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => IDENTITY.userText,
@@ -167,6 +424,29 @@ describe('public reply channel vs hidden reasoning', () => {
     const channels = publicChannels(frames, result)
 
     expect(channels.livePublic).not.toContain(SOLILOQUY)
+    expect(channels.persisted).toBe(PUBLIC_REPLY)
+  })
+
+  it('does not leak a think tag that is split across text-delta chunks', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: '<thi' } }
+          yield { type: 'text-delta', payload: { text: `nk>${SOLILOQUY}</think>${PUBLIC_REPLY}` } }
+        })(),
+        getFullOutput: async () => ({
+          text: `<think>${SOLILOQUY}</think>${PUBLIC_REPLY}`,
+          toolCalls: [],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const channels = publicChannels(frames, result)
+
+    expect(channels.livePublic).not.toContain(SOLILOQUY)
+    expect(channels.livePublic).not.toContain('<thi')
     expect(channels.persisted).toBe(PUBLIC_REPLY)
   })
 })

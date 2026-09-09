@@ -7,9 +7,12 @@ export type PublicStreamChannel = 'public' | 'reasoning'
 const THINK_OPEN = /<think>/i
 const THINK_CLOSE = /<\/think>/i
 const THINK_BLOCK = /<think>[\s\S]*?<\/think>/gi
+const THINK_UNCLOSED = /<think>[\s\S]*$/i
+const OPEN_TAG = '<think>'
+const CLOSE_TAG = '</think>'
 
 export function stripThinkTags(text: string): string {
-  return text.replace(THINK_BLOCK, '')
+  return text.replace(THINK_BLOCK, '').replace(THINK_UNCLOSED, '')
 }
 
 /**
@@ -44,38 +47,85 @@ export function selectPublicReply(input: {
   return next || PUBLIC_REPLY_FALLBACK
 }
 
+function suffixTagHoldback(text: string, tags: readonly string[]): number {
+  const lower = text.toLowerCase()
+  let hold = 0
+  for (const tag of tags) {
+    const max = Math.min(tag.length - 1, lower.length)
+    for (let n = max; n >= 1; n--) {
+      if (lower.endsWith(tag.slice(0, n))) {
+        hold = Math.max(hold, n)
+        break
+      }
+    }
+  }
+  return hold
+}
+
 export function createThinkTagSplitter() {
   let inThink = false
-  return {
-    push(delta: string): Array<{ channel: PublicStreamChannel; text: string }> {
-      const parts: Array<{ channel: PublicStreamChannel; text: string }> = []
-      let rest = delta
-      while (rest.length > 0) {
-        if (inThink) {
-          const closeMatch = rest.match(THINK_CLOSE)
-          if (!closeMatch || closeMatch.index == null) {
-            parts.push({ channel: 'reasoning', text: rest })
-            break
+  let holdback = ''
+
+  function consume(delta: string, ended: boolean): Array<{ channel: PublicStreamChannel; text: string }> {
+    const parts: Array<{ channel: PublicStreamChannel; text: string }> = []
+    let rest = holdback + delta
+    holdback = ''
+
+    const emit = (channel: PublicStreamChannel, text: string) => {
+      if (text.length > 0) {
+        parts.push({ channel, text })
+      }
+    }
+
+    while (rest.length > 0) {
+      if (inThink) {
+        const closeMatch = rest.match(THINK_CLOSE)
+        if (!closeMatch || closeMatch.index == null) {
+          if (!ended) {
+            const hold = suffixTagHoldback(rest, [CLOSE_TAG])
+            if (hold > 0) {
+              emit('reasoning', rest.slice(0, rest.length - hold))
+              holdback = rest.slice(rest.length - hold)
+              break
+            }
           }
-          if (closeMatch.index > 0) {
-            parts.push({ channel: 'reasoning', text: rest.slice(0, closeMatch.index) })
-          }
-          rest = rest.slice(closeMatch.index + closeMatch[0].length)
-          inThink = false
-          continue
-        }
-        const openMatch = rest.match(THINK_OPEN)
-        if (!openMatch || openMatch.index == null) {
-          parts.push({ channel: 'public', text: rest })
+          emit('reasoning', rest)
           break
         }
-        if (openMatch.index > 0) {
-          parts.push({ channel: 'public', text: rest.slice(0, openMatch.index) })
-        }
-        rest = rest.slice(openMatch.index + openMatch[0].length)
-        inThink = true
+        emit('reasoning', rest.slice(0, closeMatch.index))
+        rest = rest.slice(closeMatch.index + closeMatch[0].length)
+        inThink = false
+        continue
       }
-      return parts.filter((part) => part.text.length > 0)
+      const openMatch = rest.match(THINK_OPEN)
+      if (!openMatch || openMatch.index == null) {
+        if (!ended) {
+          const hold = suffixTagHoldback(rest, [OPEN_TAG, CLOSE_TAG])
+          if (hold > 0) {
+            emit('public', rest.slice(0, rest.length - hold))
+            holdback = rest.slice(rest.length - hold)
+            break
+          }
+        }
+        emit('public', rest)
+        break
+      }
+      emit('public', rest.slice(0, openMatch.index))
+      rest = rest.slice(openMatch.index + openMatch[0].length)
+      inThink = true
+    }
+    return parts
+  }
+
+  return {
+    push(delta: string): Array<{ channel: PublicStreamChannel; text: string }> {
+      return consume(delta, false)
+    },
+    flush(): Array<{ channel: PublicStreamChannel; text: string }> {
+      const parts = consume('', true)
+      inThink = false
+      holdback = ''
+      return parts
     },
   }
 }

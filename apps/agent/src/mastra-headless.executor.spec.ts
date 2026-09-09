@@ -290,12 +290,16 @@ describe('createMastraHeadlessExecutor', () => {
       stream: async () => ({
         fullStream: (async function* () {
           yield { type: 'reasoning-delta', payload: { text: '先核对出团日期' } }
-          yield { type: 'text-delta', payload: { text: '已' } }
+          yield { type: 'step-start' }
           yield {
             type: 'tool-call-delta',
             payload: { toolName: 'proposeReviewPackage', argsTextDelta: '{"secret":1}' },
           }
+          yield { type: 'step-finish' }
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: '已' } }
           yield { type: 'text-delta', payload: { text: '记下喀纳斯三日团。' } }
+          yield { type: 'step-finish' }
         })(),
         getFullOutput: async () => ({
           text: '已记下喀纳斯三日团。',
@@ -309,15 +313,13 @@ describe('createMastraHeadlessExecutor', () => {
       'run.started',
       'reasoning.delta',
       'message.delta',
-      'message.delta',
       'run.completed',
     ])
     expect(frames.filter((frame) => frame.type === 'reasoning.delta')).toEqual([
       { type: 'reasoning.delta', sequence: 1, text: '先核对出团日期' },
     ])
     expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([
-      { type: 'message.delta', sequence: 2, text: '已' },
-      { type: 'message.delta', sequence: 3, text: '记下喀纳斯三日团。' },
+      { type: 'message.delta', sequence: 2, text: '已记下喀纳斯三日团。' },
     ])
     expect(JSON.stringify(frames.filter((frame) => frame.type === 'message.delta'))).not.toContain(
       '先核对出团日期',
@@ -351,7 +353,7 @@ describe('createMastraHeadlessExecutor', () => {
     const reasoning = frames.filter((frame) => frame.type === 'reasoning.delta')
     const messages = frames.filter((frame) => frame.type === 'message.delta')
     expect(reasoning.map((frame) => frame.text)).toEqual(['第一段思考', '第二段思考'])
-    expect(messages.map((frame) => frame.text)).toEqual(['已记下路线。', '日期待核对。'])
+    expect(messages.map((frame) => frame.text)).toEqual(['已记下路线。日期待核对。'])
     expect(frames.some((frame) => frame.type === 'run.heartbeat')).toBe(false)
   })
 
