@@ -13,7 +13,6 @@ import {
   uniqueCapabilityDefinitions,
   createThinkTagSplitter,
   selectPublicReply,
-  stripEnglishChainOfThought,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -66,13 +65,41 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const streamed = deps.stream ? await deps.stream(userText, options?.signal) : null
       let sequence = 1
       let stepReasoning = ''
+      let stepPublicText = ''
+      let stepHasTools = false
       let streamedPublicText = ''
-      let visiblePublicText = ''
       const streamedReasoning: string[] = []
       const thinkTags = createThinkTagSplitter()
       const streamedToolResults: unknown[] = []
       const stepLatencies: number[] = []
       let stepStartedAt: number | undefined
+
+      const consumeThinkParts = function* (
+        parts: Array<{ channel: 'public' | 'reasoning'; text: string }>,
+      ): Generator<HeadlessRunFrame> {
+        for (const part of parts) {
+          if (part.channel === 'reasoning') {
+            stepReasoning += part.text
+            yield { type: 'reasoning.delta', sequence, text: stepReasoning }
+            sequence += 1
+            continue
+          }
+          stepPublicText += part.text
+        }
+      }
+
+      const commitModelStep = () => {
+        if (stepReasoning) {
+          streamedReasoning.push(stepReasoning)
+        }
+        if (!stepHasTools) {
+          streamedPublicText += stepPublicText
+        }
+        stepReasoning = ''
+        stepPublicText = ''
+        stepHasTools = false
+      }
+
       if (streamed?.fullStream) {
         for await (const chunk of iterateUnknownStream(streamed.fullStream)) {
           if (chunk && typeof chunk === 'object' && 'type' in chunk) {
@@ -89,15 +116,20 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
           if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-result') {
             streamedToolResults.push(chunk)
           }
+          if (isToolActivityChunk(chunk)) {
+            stepHasTools = true
+          }
           if (isStepBoundaryChunk(chunk)) {
-            if (stepReasoning) {
-              streamedReasoning.push(stepReasoning)
-            }
-            stepReasoning = ''
+            yield* consumeThinkParts(thinkTags.flush())
+            commitModelStep()
             continue
           }
           const reasoning = reasoningTextFromChunk(chunk)
           if (reasoning) {
+            if (stepHasTools) {
+              yield* consumeThinkParts(thinkTags.flush())
+              commitModelStep()
+            }
             stepReasoning += reasoning
             yield { type: 'reasoning.delta', sequence, text: stepReasoning }
             sequence += 1
@@ -107,37 +139,30 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
           if (!text) {
             continue
           }
-          for (const part of thinkTags.push(text)) {
-            if (part.channel === 'reasoning') {
-              stepReasoning += part.text
-              yield { type: 'reasoning.delta', sequence, text: stepReasoning }
-              sequence += 1
-              continue
-            }
-            streamedPublicText += part.text
-            const visible = stripEnglishChainOfThought(streamedPublicText.replace(/\u0000/g, ''))
-            const delta = visible.startsWith(visiblePublicText)
-              ? visible.slice(visiblePublicText.length)
-              : visible
-            visiblePublicText = visible
-            if (!delta) {
-              continue
-            }
-            yield { type: 'message.delta', sequence, text: delta }
-            sequence += 1
+          if (stepHasTools) {
+            yield* consumeThinkParts(thinkTags.flush())
+            commitModelStep()
           }
+          yield* consumeThinkParts(thinkTags.push(text))
         }
       }
-      if (stepReasoning) {
-        streamedReasoning.push(stepReasoning)
-      }
+      yield* consumeThinkParts(thinkTags.flush())
+      commitModelStep()
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
       const result = resultFromGenerate(
         { ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] },
-        { streamedPublicText, streamedReasoning },
+        {
+          streamedPublicText,
+          streamedReasoning,
+          allowFullOutputFallback: streamed?.fullStream == null,
+        },
       )
-      if (result.kind === 'completed' && sequence === 1) {
-        yield { type: 'message.delta', sequence: 1, text: result.message }
+      if (
+        (result.kind === 'completed' || result.kind === 'registered_intent') &&
+        result.message
+      ) {
+        yield { type: 'message.delta', sequence, text: result.message }
+        sequence += 1
       }
       if (result.diagnostic) {
         result.diagnostic.latencyMs = Date.now() - startedAt
@@ -173,7 +198,11 @@ function requireGenerate(deps: MastraHeadlessExecutorDeps): (userText: string) =
 
 function resultFromGenerate(
   output: MastraGenerateLike,
-  publicReply: { streamedPublicText: string; streamedReasoning: readonly string[] } = {
+  publicReply: {
+    streamedPublicText: string
+    streamedReasoning: readonly string[]
+    allowFullOutputFallback?: boolean
+  } = {
     streamedPublicText: '',
     streamedReasoning: [],
   },
@@ -202,7 +231,7 @@ function resultFromGenerate(
   const message = selectPublicReply({
     streamedPublicText: publicReply.streamedPublicText,
     streamedReasoning: publicReply.streamedReasoning,
-    fullOutputText: output.text ?? '',
+    fullOutputText: publicReply.allowFullOutputFallback === false ? '' : output.text ?? '',
   })
   const routing = acceptedConversationRoutingFromGenerate(output)
   if (
@@ -254,6 +283,24 @@ function publicTextFromChunk(chunk: unknown): string | null {
 
 function reasoningTextFromChunk(chunk: unknown): string | null {
   return deltaTextFromChunk(chunk, 'reasoning-delta')
+}
+
+function isToolActivityChunk(chunk: unknown): boolean {
+  if (!chunk || typeof chunk !== 'object') {
+    return false
+  }
+  const type = (chunk as { type?: unknown }).type
+  return (
+    type === 'tool-call' ||
+    type === 'tool-call-delta' ||
+    type === 'tool-result' ||
+    type === 'tool-error' ||
+    type === 'tool-input-start' ||
+    type === 'tool-input-delta' ||
+    type === 'tool-input-end' ||
+    type === 'tool-call-input-streaming-start' ||
+    type === 'tool-call-input-streaming-end'
+  )
 }
 
 function isStepBoundaryChunk(chunk: unknown): boolean {
