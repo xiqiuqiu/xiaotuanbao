@@ -28,6 +28,8 @@ const IMPERATIVE_AUTH_ALLOWLIST: Record<string, string> = {
     '会话发送/恢复等内部入口同时要求 departure:write 与用户级协助开关；controller 已挂 departure:write，service 内 assertAssistAccess 作内部调用与开关合流。',
   'modules/ai-create-task/agent-task.service.ts':
     '通用 Task 路由的权限 key 由 Task Descriptor Registry 按 task type 登记；不能用单一静态 @RequireMenu 表达。',
+  'modules/ai-create-task/review-collaboration.service.ts':
+    '审核确认所需 key 取决于 payload schema（客源创建 departure:write、初始应收 /departure）；controller 已挂粗粒度 /departure，service 内按事项 schema 再鉴权，worker 执行路径无 HTTP 装饰器。',
 }
 
 const SRC_ROOT = resolve(__dirname, '../..')
