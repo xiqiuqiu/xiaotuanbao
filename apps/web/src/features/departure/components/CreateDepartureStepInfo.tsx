@@ -39,7 +39,7 @@ import {
 } from '../utils/departure-wizard-form'
 import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
 import { PendingCandidateOverlay } from '@/features/ai-assist/PendingCandidateOverlay'
-import { findReviewCandidate } from '@/features/ai-assist/review-field-labels'
+import { effectiveReviewDate, findReviewCandidate } from '@/features/ai-assist/review-field-labels'
 import { CriticalQueryErrorAlert } from '@/lib/draft-lifecycle'
 import styles from './CreateDepartureStepInfo.module.css'
 
@@ -388,12 +388,19 @@ function DepartureInfoForm({
                 { required: true, message: '请选择结束日期' },
                 ({ getFieldValue }) => ({
                   validator(_rule, value: string | undefined) {
-                    const startDate = getFieldValue('startDate') as string | undefined
-                    if (!startDate || !value) return Promise.resolve()
-                    if (isEndDateBeforeStartDate(startDate, value)) {
+                    const startDate = effectiveReviewDate(
+                      findReviewCandidate(pendingReview, 'startDate'),
+                      getFieldValue('startDate') as string | undefined,
+                    )
+                    const endDate = effectiveReviewDate(
+                      findReviewCandidate(pendingReview, 'endDate'),
+                      value,
+                    )
+                    if (!startDate || !endDate) return Promise.resolve()
+                    if (isEndDateBeforeStartDate(startDate, endDate)) {
                       return Promise.reject(new Error('结束日期不能早于出团日期'))
                     }
-                    const mismatch = routeTemplateTourPeriodError(route, startDate, value)
+                    const mismatch = routeTemplateTourPeriodError(route, startDate, endDate)
                     if (mismatch) {
                       return Promise.reject(new Error(mismatch))
                     }
@@ -524,6 +531,7 @@ interface DepartureSummaryProps {
   guideSupplierLoading: boolean
   driverSupplierError: boolean
   guideSupplierError: boolean
+  pendingReview?: AiReviewPackageView | null
 }
 
 function DepartureSummary({
@@ -538,10 +546,17 @@ function DepartureSummary({
   guideSupplierLoading,
   driverSupplierError,
   guideSupplierError,
+  pendingReview,
 }: DepartureSummaryProps) {
   const values = Form.useWatch([], form) as Partial<InfoFormValues> | undefined
-  const startDate = values?.startDate
-  const endDate = values?.endDate
+  const startDate = effectiveReviewDate(
+    findReviewCandidate(pendingReview, 'startDate'),
+    values?.startDate,
+  )
+  const endDate = effectiveReviewDate(
+    findReviewCandidate(pendingReview, 'endDate'),
+    values?.endDate,
+  )
   const dayCount = startDate && endDate ? computeDayCount(startDate, endDate) : null
   const ownerName =
     employeeOptions.find((option) => option.value === values?.ownerUserId)?.label ?? '-'
@@ -647,8 +662,17 @@ export function CreateDepartureStepInfo({
   const helperTextStyle = { color: token.colorTextSecondary }
   const committedStartDateRef = useRef<string | undefined>(undefined)
   const watchedStartDate = Form.useWatch('startDate', form)
+  const watchedEndDate = Form.useWatch('endDate', form)
   const selectedDriverSupplierId = Form.useWatch('driverSupplierId', form)
   const selectedGuideSupplierId = Form.useWatch('guideSupplierId', form)
+  const pendingStartDate = effectiveReviewDate(
+    findReviewCandidate(pendingReview, 'startDate'),
+    undefined,
+  )
+  const pendingEndDate = effectiveReviewDate(
+    findReviewCandidate(pendingReview, 'endDate'),
+    undefined,
+  )
   useEffect(() => {
     if (typeof watchedStartDate === 'string' && watchedStartDate) {
       committedStartDateRef.current = watchedStartDate
@@ -656,7 +680,47 @@ export function CreateDepartureStepInfo({
   }, [watchedStartDate])
   useEffect(() => {
     void form.validateFields(['endDate']).catch(() => undefined)
-  }, [form, route.defaultDayCount, route.mode])
+  }, [form, pendingStartDate, pendingEndDate, route.defaultDayCount, route.mode])
+  useEffect(() => {
+    const formStart = typeof watchedStartDate === 'string' ? watchedStartDate : undefined
+    const formEnd = typeof watchedEndDate === 'string' ? watchedEndDate : undefined
+    const startDate = pendingStartDate ?? formStart
+    if (!startDate) return
+
+    const updates: Partial<InfoFormValues> = {}
+    let endDate = pendingEndDate ?? formEnd
+    if (pendingStartDate && !pendingEndDate) {
+      const nextEndDate = resolveEndDateAfterStartChange(
+        formStart,
+        pendingStartDate,
+        formEnd,
+        defaultDayCount,
+      )
+      if (nextEndDate && nextEndDate !== formEnd) {
+        updates.endDate = nextEndDate
+        endDate = nextEndDate
+      }
+    }
+
+    if (startDate && endDate && !isEndDateBeforeStartDate(startDate, endDate)) {
+      const dayCount = computeDayCount(startDate, endDate)
+      if (form.getFieldValue('dayCount') !== dayCount) {
+        updates.dayCount = dayCount
+      }
+    }
+
+    if (Object.keys(updates).length === 0) return
+    form.setFieldsValue(updates)
+    if (updates.endDate) onValuesChange?.()
+  }, [
+    defaultDayCount,
+    form,
+    onValuesChange,
+    pendingEndDate,
+    pendingStartDate,
+    watchedEndDate,
+    watchedStartDate,
+  ])
 
   const {
     data: employeeOptionsResult,
@@ -756,7 +820,10 @@ export function CreateDepartureStepInfo({
     const endDate = value?.format('YYYY-MM-DD')
     if (!endDate) return
 
-    const startDate = form.getFieldValue('startDate') as string | undefined
+    const startDate = effectiveReviewDate(
+      findReviewCandidate(pendingReview, 'startDate'),
+      form.getFieldValue('startDate') as string | undefined,
+    )
     form.setFieldsValue({
       endDate,
       dayCount: startDate ? computeDayCount(startDate, endDate) : undefined,
@@ -839,6 +906,7 @@ export function CreateDepartureStepInfo({
             guideSupplierLoading={selectedGuideSupplierQuery.isFetching}
             driverSupplierError={selectedDriverSupplierQuery.isError}
             guideSupplierError={selectedGuideSupplierQuery.isError}
+            pendingReview={pendingReview}
           />
         </Col>
       </Row>

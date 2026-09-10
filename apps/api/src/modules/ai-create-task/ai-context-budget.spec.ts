@@ -29,6 +29,7 @@ describe('buildBudgetedContext', () => {
 
     expect(result.userText.match(/本轮唯一指令/g)).toHaveLength(1)
     expect(result.userText).toContain('"objectVersion":3')
+    expect(result.userText).toContain('川西环线')
     expect(result.userText).toContain('此前讨论采用三日行程')
     expect(result.budget.estimatorVersion).toBe('utf8-bytes-ceil-div3/v1')
     expect(result.budget.tokenLimiterProcessorVersion).toBe('mastra-token-limiter-contiguous/v1')
@@ -57,6 +58,39 @@ describe('buildBudgetedContext', () => {
       sha256: digestExcerpt(result.userText),
     })
     expect(result.inputHash).toHaveLength(64)
+  })
+
+  it('把确认后的 fieldCoverage 写进当前业务事实，避免只靠对话记忆判断缺项', () => {
+    const result = buildBudgetedContext({
+      modelId: 'deterministic',
+      toolNames: ['getTaskContext'],
+      currentUserText: 'User 已在中间表单确认上一轮审核建议。',
+      businessFacts: {
+        taskId: 'task-1',
+        objectVersion: 4,
+        snapshot: { startDate: '2026-09-20', endDate: '2026-09-29' },
+        fieldCoverage: {
+          filled: ['startDate', 'endDate'],
+          missing: ['name', 'routeName'],
+          optionalPresent: [],
+        },
+      },
+      unresolvedState: { hasPendingReview: false },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    })
+
+    const factsBlock = result.userText.slice(
+      result.userText.indexOf('【当前业务事实】'),
+      result.userText.indexOf('【未决交互】'),
+    )
+    expect(factsBlock).toContain('"endDate":"2026-09-29"')
+    expect(factsBlock).toContain('"filled":["startDate","endDate"]')
+    expect(factsBlock).not.toContain('"missing":["endDate"]')
   })
 
   it('超出软预算时按来源、摘要、近期尾部顺序裁剪，保留当前命令与业务事实', () => {

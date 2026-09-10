@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AiReviewCandidateView } from '@xiaotuanbao/shared'
-import { findReviewCandidate } from './review-field-labels'
+import { effectiveReviewDate, findReviewCandidate } from './review-field-labels'
 
 const nameCandidate: AiReviewCandidateView = {
   fieldKey: 'name',
@@ -33,5 +33,36 @@ describe('findReviewCandidate #440', () => {
         'name',
       ),
     ).toBe(nameCandidate)
+  })
+})
+
+describe('effectiveReviewDate', () => {
+  it('prefers a corrected or proposed date over the saved draft', () => {
+    expect(effectiveReviewDate(undefined, '2026-09-10')).toBe('2026-09-10')
+    expect(
+      effectiveReviewDate(
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-20',
+          clarity: 'needs_confirmation',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月20号' }],
+        },
+        '2026-09-10',
+      ),
+    ).toBe('2026-09-20')
+    expect(
+      effectiveReviewDate(
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-20',
+          userCorrectedValue: '2026-09-22',
+          clarity: 'needs_confirmation',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月20号' }],
+        },
+        '2026-09-10',
+      ),
+    ).toBe('2026-09-22')
   })
 })

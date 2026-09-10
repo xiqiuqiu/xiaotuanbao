@@ -1,6 +1,7 @@
 /**
- * Protocol check: DeepSeek Chat Completions body must carry thinking.type=disabled
- * on the first request and the tool-loop continuation.
+ * Protocol check: DeepSeek Chat Completions body must carry thinking.type=enabled
+ * (Hermes wire) on the first request and the tool-loop continuation, plus
+ * reasoning_effort when thinking is on. Explicit disabled omits effort.
  *
  * Jest cannot load real Mastra (ESM p-map). This file is run by `tsx --test`.
  * It does not inspect Agent providerOptions objects, credentials, or Authorization.
@@ -92,16 +93,20 @@ function chatChunk(delta: Record<string, unknown>, finishReason: string | null =
     id: 'chatcmpl-test',
     object: 'chat.completion.chunk',
     created: 1_704_000_000,
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     choices: [{ index: 0, delta, finish_reason: finishReason }],
   }
 }
 
-function toolCallSse(args: string, content = SOLILOQUY): string {
+function toolCallSse(
+  args: string,
+  extras: { content?: string; reasoning?: string } = {},
+): string {
   return sse([
     chatChunk({
       role: 'assistant',
-      content,
+      content: extras.content ?? '',
+      reasoning_content: extras.reasoning ?? SOLILOQUY,
       tool_calls: [
         {
           index: 0,
@@ -181,7 +186,24 @@ function livePublicText(frames: Awaited<ReturnType<typeof collectHeadlessRun>>['
     .join('')
 }
 
-async function runAgainstMock(script: { firstRound: string; laterRound: string }) {
+function thinkingFromBody(body: CapturedChatBody) {
+  return body.thinking
+}
+
+function reasoningEffortFromBody(body: CapturedChatBody) {
+  if (typeof body.reasoning_effort === 'string') {
+    return body.reasoning_effort
+  }
+  if (typeof body.reasoningEffort === 'string') {
+    return body.reasoningEffort
+  }
+  return undefined
+}
+
+async function runAgainstMock(
+  script: { firstRound: string; laterRound: string },
+  options?: { modelThinking?: 'enabled' | 'disabled' },
+) {
   const mock = await listenMockDeepSeek(script)
   try {
     const mastra = createAiCreateMastraFromDefinition(
@@ -189,9 +211,9 @@ async function runAgainstMock(script: { firstRound: string; laterRound: string }
         apiBaseUrl: 'http://api.local',
         serviceSecret: 'test-only',
         modelApiKey: 'test-only-not-a-secret',
-        model: 'deepseek/deepseek-chat',
+        model: 'deepseek/deepseek-v4-flash',
         modelBaseUrl: mock.baseUrl,
-        modelThinking: 'disabled',
+        modelThinking: options?.modelThinking ?? 'enabled',
       },
       routingContext,
     )
@@ -211,7 +233,7 @@ async function runAgainstMock(script: { firstRound: string; laterRound: string }
   }
 }
 
-test('sends thinking.type=disabled and keeps tool-step soliloquy off the public reply', async () => {
+test('sends thinking.type=enabled with medium effort and keeps tool-step reasoning off the public reply', async () => {
   const { mock, frames, result } = await runAgainstMock({
     firstRound: toolCallSse(TOOL_ARGS),
     laterRound: textReplySse(FINAL_REPLY),
@@ -222,9 +244,14 @@ test('sends thinking.type=disabled and keeps tool-step soliloquy off the public 
     assert.equal(hasToolResult(mock.bodies[1]?.messages), true)
     for (const [index, body] of mock.bodies.entries()) {
       assert.deepEqual(
-        body.thinking,
-        { type: 'disabled' },
-        `round ${index + 1} request body must include thinking.type=disabled`,
+        thinkingFromBody(body),
+        { type: 'enabled' },
+        `round ${index + 1} request body must include thinking.type=enabled`,
+      )
+      assert.equal(
+        reasoningEffortFromBody(body),
+        'medium',
+        `round ${index + 1} request body must include reasoning_effort=medium`,
       )
     }
 
@@ -241,6 +268,35 @@ test('sends thinking.type=disabled and keeps tool-step soliloquy off the public 
   }
 })
 
+test('omits reasoning_effort when thinking is explicitly disabled', async () => {
+  const { mock, frames, result } = await runAgainstMock(
+    {
+      firstRound: toolCallSse(TOOL_ARGS, { content: SOLILOQUY, reasoning: '' }),
+      laterRound: textReplySse(FINAL_REPLY),
+    },
+    { modelThinking: 'disabled' },
+  )
+  try {
+    assert.equal(mock.bodies.length, 2)
+    for (const [index, body] of mock.bodies.entries()) {
+      assert.deepEqual(
+        thinkingFromBody(body),
+        { type: 'disabled' },
+        `round ${index + 1} request body must include thinking.type=disabled`,
+      )
+      assert.equal(
+        reasoningEffortFromBody(body),
+        undefined,
+        `round ${index + 1} must not send reasoning_effort when thinking is off`,
+      )
+    }
+    assert.equal(livePublicText(frames), FINAL_REPLY)
+    assert.equal(result.kind, 'registered_intent')
+  } finally {
+    await mock.close()
+  }
+})
+
 test('does not publish tool-step soliloquy when routing asks a clarification', async () => {
   const { mock, frames, result } = await runAgainstMock({
     firstRound: toolCallSse(CLARIFY_ARGS),
@@ -250,9 +306,9 @@ test('does not publish tool-step soliloquy when routing asks a clarification', a
     assert.ok(mock.bodies.length >= 1)
     for (const [index, body] of mock.bodies.entries()) {
       assert.deepEqual(
-        body.thinking,
-        { type: 'disabled' },
-        `round ${index + 1} request body must include thinking.type=disabled`,
+        thinkingFromBody(body),
+        { type: 'enabled' },
+        `round ${index + 1} request body must include thinking.type=enabled`,
       )
     }
     assert.equal(result.kind, 'awaiting_user_input')
@@ -260,7 +316,7 @@ test('does not publish tool-step soliloquy when routing asks a clarification', a
       assert.equal(result.interaction.prompt, CLARIFY_PROMPT)
     }
     assert.equal(livePublicText(frames), '')
-    assert.equal(JSON.stringify(frames).includes(SOLILOQUY), false)
+    assert.equal(livePublicText(frames).includes(SOLILOQUY), false)
   } finally {
     await mock.close()
   }
@@ -279,7 +335,7 @@ test('uses the generic completion line when the final no-tool step is empty', as
       assert.equal(result.message.includes(SOLILOQUY), false)
     }
     assert.equal(livePublicText(frames), PUBLIC_REPLY_FALLBACK)
-    assert.equal(JSON.stringify(frames).includes(SOLILOQUY), false)
+    assert.equal(livePublicText(frames).includes(SOLILOQUY), false)
   } finally {
     await mock.close()
   }

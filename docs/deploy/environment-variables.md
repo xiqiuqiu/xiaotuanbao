@@ -86,8 +86,10 @@ cp .env.example .env
 | `AGENT_INTERNAL_URL` | 否 | `http://127.0.0.1:4111` | Worker 调用无头 Agent 的内部地址（`/v1/headless-runs`） |
 | `AGENT_HEADLESS_ADAPTER` | 否 | 空 | 设为 `deterministic` 时 Agent 不调模型，按 `AGENT_HEADLESS_OUTCOME` 返回固定结果；本地 Playwright 冒烟用 |
 | `AGENT_HEADLESS_OUTCOME` | 否 | 空 | 确定性无头 JSON。空且 adapter=deterministic 时返回失败。真实 OCR/模型冒烟不进默认 CI |
-| `AI_MODEL` | 否 | `deepseek/deepseek-chat` | 预览环境单一模型，Mastra Model Router id |
+| `AI_MODEL` | 否 | `deepseek/deepseek-v4-flash` | 预览环境单一模型，Mastra Model Router id。退役别名 `deepseek-chat` / `deepseek-reasoner` 会改写成 v4-flash |
 | `AI_MODEL_BASE_URL` | 否 | `https://api.deepseek.com` | OpenAI 兼容网关根地址 |
+| `AI_MODEL_THINKING` | 否 | `enabled` | DeepSeek 思考开关。`disabled` 时不发 `reasoning_effort`。默认开思考，过程稿走 `reasoning_content` |
+| `AI_MODEL_THINKING_EFFORT` | 否 | `medium` | 思考开着时的 effort：`low` / `medium` / `high` / `max`。关思考时忽略 |
 | `DEEPSEEK_API_KEY` | 开辅助对话时必填 | — | DeepSeek 密钥，只放 `.env`，不要提交 |
 | `COPILOTKIT_TELEMETRY_DISABLED` | 否 | `true` | 关闭 CopilotKit Runtime 遥测 |
 

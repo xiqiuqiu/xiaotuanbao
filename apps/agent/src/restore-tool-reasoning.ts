@@ -49,12 +49,15 @@ function restoreAssistantReasoning(message: unknown): unknown {
   const toolCallIds = candidate.content
     .map(readToolCallId)
     .filter((id): id is string => typeof id === 'string' && id.length > 0)
-  const reasoning = toolCallIds
-    .map((id) => reasoningByToolCallId.get(id))
-    .find((text): text is string => typeof text === 'string' && text.length > 0)
-  if (!reasoning) {
+  if (toolCallIds.length === 0) {
     return message
   }
+  const stored = toolCallIds
+    .map((id) => reasoningByToolCallId.get(id))
+    .find((text): text is string => typeof text === 'string' && text.length > 0)
+  // DeepSeek V4 thinking rejects empty-string reasoning_content on replay.
+  // A single space satisfies the non-empty check without fabricating CoT.
+  const reasoning = stored ?? ' '
 
   return {
     ...candidate,

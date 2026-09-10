@@ -2,7 +2,7 @@ import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { AddressInfo } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fetchTaskContext } from './get-task-context.client'
-import { createAgentServer, listAgentTools } from './server'
+import { createAgentServer, listAgentTools, loadAgentConfigFromEnv } from './server'
 
 jest.mock('@copilotkit/runtime/v2', () => ({
   CopilotRuntime: class CopilotRuntime {
@@ -60,6 +60,45 @@ describe('agent server', () => {
     mockCreateCopilotNodeHandler.mockReset()
     mockCreateCopilotNodeHandler.mockImplementation(() => async () => {})
     mockFetchTaskContext.mockReset()
+  })
+
+  it('defaults DeepSeek V4 Flash with thinking enabled at medium effort', () => {
+    const previous = {
+      AI_MODEL: process.env.AI_MODEL,
+      AI_MODEL_THINKING: process.env.AI_MODEL_THINKING,
+      AI_MODEL_THINKING_EFFORT: process.env.AI_MODEL_THINKING_EFFORT,
+    }
+    delete process.env.AI_MODEL
+    delete process.env.AI_MODEL_THINKING
+    delete process.env.AI_MODEL_THINKING_EFFORT
+    try {
+      expect(loadAgentConfigFromEnv()).toMatchObject({
+        model: 'deepseek/deepseek-v4-flash',
+        modelThinking: 'enabled',
+        modelThinkingEffort: 'medium',
+      })
+    } finally {
+      process.env.AI_MODEL = previous.AI_MODEL
+      process.env.AI_MODEL_THINKING = previous.AI_MODEL_THINKING
+      process.env.AI_MODEL_THINKING_EFFORT = previous.AI_MODEL_THINKING_EFFORT
+    }
+  })
+
+  it('turns thinking off without an effort when AI_MODEL_THINKING=disabled', () => {
+    const previous = {
+      AI_MODEL_THINKING: process.env.AI_MODEL_THINKING,
+      AI_MODEL_THINKING_EFFORT: process.env.AI_MODEL_THINKING_EFFORT,
+    }
+    process.env.AI_MODEL_THINKING = 'disabled'
+    process.env.AI_MODEL_THINKING_EFFORT = 'high'
+    try {
+      const config = loadAgentConfigFromEnv()
+      expect(config.modelThinking).toBe('disabled')
+      expect(config.modelThinkingEffort).toBeUndefined()
+    } finally {
+      process.env.AI_MODEL_THINKING = previous.AI_MODEL_THINKING
+      process.env.AI_MODEL_THINKING_EFFORT = previous.AI_MODEL_THINKING_EFFORT
+    }
   })
 
   it('exposes getTaskContext, searchRouteTemplates, submitReviewPackage and getMaterialParseResult', () => {

@@ -18,9 +18,11 @@ import {
   AiCollaborationError,
   capabilityGrantResolver,
   capabilitiesForPendingReview,
+  classifyDraftFields,
   requestContextSchema,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
+  type AiCreateDraftSnapshot,
   type HeadlessRegisteredIntentResult,
   type RequestContext,
   type VersionedDefinitionRef,
@@ -1035,6 +1037,11 @@ export class AiWorkflowProcessor {
         ? toFormalDepartureSnapshot(task.departure, expectedGuestCountHint)
         : draft.snapshot
       const businessObjectVersion = draft.version
+      const fieldCoverage = classifyDraftFields(
+        businessSnapshot && typeof businessSnapshot === 'object' && !Array.isArray(businessSnapshot)
+          ? (businessSnapshot as AiCreateDraftSnapshot)
+          : { mode: 'manual', routeName: '' },
+      )
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,
@@ -1064,6 +1071,7 @@ export class AiWorkflowProcessor {
           currentPhase: task.currentPhase,
           objectVersion: businessObjectVersion,
           snapshot: businessSnapshot,
+          fieldCoverage,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,
@@ -1090,6 +1098,7 @@ export class AiWorkflowProcessor {
           currentPhase: task.currentPhase,
           objectVersion: businessObjectVersion,
           snapshot: businessSnapshot,
+          fieldCoverage,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,

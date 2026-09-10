@@ -2,6 +2,7 @@ import { createProposeSourceOrderReviewTool } from './propose-source-order-revie
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 import {
+  canonicalModelId,
   requestContextSchema,
   tokenLimiterLimitForModel,
   type AgentDefinition,
@@ -37,6 +38,7 @@ export interface AiCreateAgentFactoryConfig extends GetTaskContextToolConfig {
   model?: string
   modelBaseUrl?: string
   modelThinking?: 'enabled' | 'disabled'
+  modelThinkingEffort?: 'low' | 'medium' | 'high' | 'max'
 }
 
 export function createAiCreateMastraFromDefinition(
@@ -77,19 +79,20 @@ function createMastra(
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),
   ) as Partial<typeof registeredTools>
-  const limiterLimit = tokenLimiterLimitForModel(config.model ?? 'deepseek/deepseek-chat')
+  const modelId = toModelId(config.model ?? 'deepseek/deepseek-v4-flash')
+  const limiterLimit = tokenLimiterLimitForModel(modelId)
   const agent = new Agent({
     id: AI_CREATE_AGENT_ID,
     name: definition.name,
     instructions: definition.instructions,
     model: {
-      id: toModelId(config.model ?? 'deepseek/deepseek-chat'),
+      id: modelId,
       url: config.modelBaseUrl ?? 'https://api.deepseek.com',
       apiKey: config.modelApiKey || 'missing',
     },
     tools,
-    defaultOptions: (config.model ?? 'deepseek/deepseek-chat').startsWith('deepseek')
-      ? { providerOptions: { deepseek: { thinking: { type: config.modelThinking ?? 'disabled' } } } }
+    defaultOptions: modelId.startsWith('deepseek')
+      ? { providerOptions: { deepseek: deepseekThinkingOptions(config) } }
       : {},
     inputProcessors: [
       createTokenLimiterSafetyNet({
@@ -137,6 +140,17 @@ function refId(ref: { key: string; version: number }): string {
   return `${ref.key}@${ref.version}`
 }
 
+function deepseekThinkingOptions(config: AiCreateAgentFactoryConfig) {
+  const type = config.modelThinking ?? 'enabled'
+  if (type === 'disabled') {
+    return { thinking: { type } }
+  }
+  return {
+    thinking: { type },
+    reasoningEffort: config.modelThinkingEffort ?? 'medium',
+  }
+}
+
 function toModelId(model: string): `${string}/${string}` {
-  return (model.includes('/') ? model : `deepseek/${model}`) as `${string}/${string}`
+  return canonicalModelId(model.includes('/') ? model : `deepseek/${model}`) as `${string}/${string}`
 }

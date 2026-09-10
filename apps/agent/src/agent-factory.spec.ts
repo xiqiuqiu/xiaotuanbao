@@ -62,7 +62,48 @@ const context = requestContextSchema.parse({
 describe('Agent Factory', () => {
   it.each(['enabled', 'disabled'] as const)('passes explicit DeepSeek thinking=%s to model execution', (modelThinking) => {
     createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-v4-flash', modelThinking }, context)
-    expect(agentConfigs.at(-1)).toMatchObject({ defaultOptions: { providerOptions: { deepseek: { thinking: { type: modelThinking } } } } })
+    expect(agentConfigs.at(-1)).toMatchObject({
+      defaultOptions: {
+        providerOptions: {
+          deepseek: {
+            thinking: { type: modelThinking },
+            ...(modelThinking === 'enabled' ? { reasoningEffort: 'medium' } : {}),
+          },
+        },
+      },
+    })
+    const deepseek = (
+      agentConfigs.at(-1) as {
+        defaultOptions?: { providerOptions?: { deepseek?: Record<string, unknown> } }
+      }
+    )?.defaultOptions?.providerOptions?.deepseek
+    if (modelThinking === 'disabled') {
+      expect(deepseek).not.toHaveProperty('reasoningEffort')
+    }
+  })
+
+  it('rewrites retired DeepSeek chat/reasoner aliases onto deepseek-v4-flash', () => {
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-chat' },
+      context,
+    )
+    expect(agentConfigs.at(-1)).toMatchObject({
+      model: { id: 'deepseek/deepseek-v4-flash' },
+    })
+  })
+
+  it('defaults DeepSeek thinking to enabled with medium effort when unset', () => {
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-v4-flash' },
+      context,
+    )
+    expect(agentConfigs.at(-1)).toMatchObject({
+      defaultOptions: {
+        providerOptions: {
+          deepseek: { thinking: { type: 'enabled' }, reasoningEffort: 'medium' },
+        },
+      },
+    })
   })
 
   it('只把当前 RequestContext 已授权 Capability 对应工具暴露给模型', () => {

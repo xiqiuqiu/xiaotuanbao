@@ -52,8 +52,30 @@ describe('restoreReasoningParts', () => {
     ])
   })
 
-  it('leaves messages unchanged when no stored reasoning matches', () => {
-    expect(restoreReasoningParts([toolCallMessage])).toEqual([toolCallMessage])
+  it('pads a single space onto tool-call turns when no stored reasoning matches', () => {
+    expect(restoreReasoningParts([toolCallMessage])).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: ' ' },
+          { type: 'text', text: '' },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-get-context',
+            toolName: 'getTaskContext',
+            args: {},
+          },
+        ],
+      },
+    ])
+  })
+
+  it('does not pad a space onto assistant turns that have no tool calls', () => {
+    const textOnly = {
+      role: 'assistant',
+      content: [{ type: 'text', text: '已记下喀纳斯三日团。' }],
+    }
+    expect(restoreReasoningParts([textOnly])).toEqual([textOnly])
   })
 })
 

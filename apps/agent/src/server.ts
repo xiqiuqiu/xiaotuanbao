@@ -35,6 +35,7 @@ export interface AgentServerConfig {
   modelApiKey?: string
   modelBaseUrl?: string
   modelThinking?: 'enabled' | 'disabled'
+  modelThinkingEffort?: 'low' | 'medium' | 'high' | 'max'
   headlessExecutor?: HeadlessExecutor
 }
 
@@ -163,9 +164,23 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),
-    model: process.env.AI_MODEL ?? 'deepseek/deepseek-chat',
-    modelThinking: process.env.AI_MODEL_THINKING === 'enabled' ? 'enabled' : 'disabled',
+    model: process.env.AI_MODEL ?? 'deepseek/deepseek-v4-flash',
+    ...deepseekThinkingFromEnv(),
     modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
     modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
+  }
+}
+
+function deepseekThinkingFromEnv(): Pick<AgentServerConfig, 'modelThinking' | 'modelThinkingEffort'> {
+  if (process.env.AI_MODEL_THINKING === 'disabled') {
+    return { modelThinking: 'disabled' }
+  }
+  const effort = process.env.AI_MODEL_THINKING_EFFORT
+  return {
+    modelThinking: 'enabled',
+    modelThinkingEffort:
+      effort === 'low' || effort === 'medium' || effort === 'high' || effort === 'max'
+        ? effort
+        : 'medium',
   }
 }
