@@ -2314,6 +2314,32 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('does not POST /draft when an existing task has no pending review and routeName is still empty', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: { mode: 'manual', routeName: '', notes: null, ownerUserId: 'user-1' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    renderWizard()
+    await screen.findByLabelText('路线名称')
+    await user.type(screen.getByLabelText('备注'), '集合时间提前')
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
+  })
+
   it('flushes a user-edited endDate before confirm even when pending review restored an empty routeName', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }

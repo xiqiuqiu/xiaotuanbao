@@ -191,13 +191,7 @@ function thinkingFromBody(body: CapturedChatBody) {
 }
 
 function reasoningEffortFromBody(body: CapturedChatBody) {
-  if (typeof body.reasoning_effort === 'string') {
-    return body.reasoning_effort
-  }
-  if (typeof body.reasoningEffort === 'string') {
-    return body.reasoningEffort
-  }
-  return undefined
+  return typeof body.reasoning_effort === 'string' ? body.reasoning_effort : undefined
 }
 
 async function runAgainstMock(
@@ -243,6 +237,11 @@ test('sends thinking.type=enabled with medium effort and keeps tool-step reasoni
     assert.equal(hasToolResult(mock.bodies[0]?.messages), false)
     assert.equal(hasToolResult(mock.bodies[1]?.messages), true)
     for (const [index, body] of mock.bodies.entries()) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(body, 'reasoningEffort'),
+        false,
+        `round ${index + 1} must not send camelCase reasoningEffort on the DeepSeek wire`,
+      )
       assert.deepEqual(
         thinkingFromBody(body),
         { type: 'enabled' },

@@ -358,6 +358,30 @@ describe('departure-wizard-form', () => {
     )
     expect(canPersistDepartureCreationDraft(emptyManual)).toBe(false)
     expect(shouldPersistDepartureCreationDraft(emptyManual, { hasExistingTask: false })).toBe(false)
-    expect(shouldPersistDepartureCreationDraft(emptyManual, { hasExistingTask: true })).toBe(true)
+    expect(
+      shouldPersistDepartureCreationDraft(emptyManual, {
+        hasExistingTask: true,
+        hasPendingReview: false,
+      }),
+    ).toBe(false)
+    expect(
+      shouldPersistDepartureCreationDraft(emptyManual, {
+        hasExistingTask: true,
+        hasPendingReview: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('does not persist an empty manual route on an existing task when there is no pending review', () => {
+    const emptyManual = buildDepartureCreationDraftSnapshot(
+      { mode: 'manual', routeName: '' },
+      { notes: '集合时间提前' },
+    )
+    const clientWouldSend = shouldPersistDepartureCreationDraft(emptyManual, {
+      hasExistingTask: true,
+      hasPendingReview: false,
+    })
+    const serverWouldAllowIncomplete = false
+    expect(clientWouldSend && !serverWouldAllowIncomplete).toBe(false)
   })
 })

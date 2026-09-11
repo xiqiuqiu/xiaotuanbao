@@ -292,12 +292,16 @@ export function canPersistDepartureCreationDraft(
   return Boolean(draft.routeName.trim())
 }
 
-/** Agent 建团任务常以空路线名起步；已有 task 时仍要能把非候选字段（如结束日）刷进草稿。 */
+/**
+ * Agent 建团任务常以空路线名起步。仅当已有 task 且仍有待审包时，
+ * 才允许把非候选字段（如结束日）刷进不完整草稿；无待审包时与服务端
+ * `assertValidDraft` 对齐，空手动路线名不发起保存。
+ */
 export function shouldPersistDepartureCreationDraft(
   draft: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
-  options: { hasExistingTask: boolean },
+  options: { hasExistingTask: boolean; hasPendingReview?: boolean },
 ): boolean {
-  if (options.hasExistingTask) return true
+  if (options.hasExistingTask && options.hasPendingReview) return true
   return canPersistDepartureCreationDraft(draft)
 }
 

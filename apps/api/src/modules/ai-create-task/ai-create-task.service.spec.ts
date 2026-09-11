@@ -998,6 +998,40 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
     expect(result.pendingReview).toMatchObject({ id: packageId })
   })
 
+  it('rejects an empty manual routeName when the existing task has no pending review', async () => {
+    const emptySnapshot = {
+      mode: DepartureCreationDraftMode.MANUAL,
+      routeName: '',
+      name: null,
+      startDate: null,
+      endDate: null,
+      ownerUserId: userId,
+      departureType: DepartureType.COMBINED,
+      notes: '集合时间提前',
+    }
+    const { service, tx } = createService()
+    tx.aiCreateTask.findFirst.mockImplementation((args: { include?: { draft?: boolean } }) =>
+      Promise.resolve({
+        ...task,
+        agentTask: { ...task.agentTask, reviewPackages: [] },
+        draft: args.include?.draft
+          ? { ...draft, snapshot: emptySnapshot }
+          : undefined,
+      }),
+    )
+
+    await expect(
+      service.saveDraft(organizationId, userId, {
+        taskId,
+        expectedVersion: 1,
+        draft: emptySnapshot,
+      }),
+    ).rejects.toMatchObject({
+      message: '手动路线须填写路线名称',
+    })
+    expect(tx.departureCreationDraft.updateMany).not.toHaveBeenCalled()
+  })
+
   it('keeps pendingReview on a version-conflict response', async () => {
     const { service } = createService({ draftVersion: 2 })
 

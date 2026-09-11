@@ -222,6 +222,7 @@ function useCreateDepartureWizardController() {
     if (
       !shouldPersistDepartureCreationDraft(draft, {
         hasExistingTask: Boolean(taskIdRef.current),
+        hasPendingReview: Boolean(pending),
       })
     ) {
       return
