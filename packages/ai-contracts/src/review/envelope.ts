@@ -8,6 +8,8 @@ export const SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA = 'source_order.create@v1' as co
 export const SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT = 'source_order_create' as const
 export const SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA = 'source_order.receivable@v1' as const
 export const SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT = 'source_order_receivable' as const
+export const RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA = 'resource.payable@v1' as const
+export const RESOURCE_PAYABLE_CONFIRMATION_UNIT = 'resource_payable' as const
 export const DEFAULT_REVIEW_ITEM_IDENTITY = 'item:0' as const
 
 export const REVIEW_PROPOSAL_IDENTITY_FIELDS = [

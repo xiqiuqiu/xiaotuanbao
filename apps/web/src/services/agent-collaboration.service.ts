@@ -4,6 +4,7 @@ import type {
   AiReviewPackageView,
   DepartureCollaborationView,
   PrepareSourceOrderReceivableReviewDto,
+  PrepareResourcePayableReviewDto,
   ReviewConfirmationView,
   ReviewRevisionView,
 } from '@/types/api'
@@ -39,6 +40,16 @@ export async function prepareSourceOrderReceivableReview(
 ): Promise<AiReviewPackageView> {
   return request.post<AiReviewPackageView>(
     `/agent/departures/${departureId}/source-order-receivable-reviews`,
+    payload,
+  )
+}
+
+export async function prepareResourcePayableReviews(
+  departureId: string,
+  payload: PrepareResourcePayableReviewDto,
+): Promise<AiReviewPackageView[]> {
+  return request.post<AiReviewPackageView[]>(
+    `/agent/departures/${departureId}/resource-payable-reviews`,
     payload,
   )
 }

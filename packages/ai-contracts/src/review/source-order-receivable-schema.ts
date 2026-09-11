@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { AI_CANDIDATE_CLARITY, aiCandidateEvidenceSchema } from '../tools/review-package'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
+  RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
 } from './envelope'
@@ -291,7 +292,10 @@ export function sourceOrderReceivableReviewCandidates(input: {
 export function requiredPermissionKeyForReviewPayloadSchema(
   payloadSchema: string | null | undefined,
 ): string {
-  if (payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
+  if (
+    payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA ||
+    payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA
+  ) {
     return '/departure'
   }
   return 'departure:write'

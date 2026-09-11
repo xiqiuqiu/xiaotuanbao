@@ -8,7 +8,11 @@ import type {
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { AcceptReviewConfirmationDto, PrepareSourceOrderReceivableReviewDto } from './dto/ai-create-task.dto'
+import {
+  AcceptReviewConfirmationDto,
+  PrepareResourcePayableReviewDto,
+  PrepareSourceOrderReceivableReviewDto,
+} from './dto/ai-create-task.dto'
 import { ReviewCollaborationService } from './review-collaboration.service'
 
 @Controller('agent')
@@ -40,6 +44,22 @@ export class AgentCollaborationController {
     @Body() dto: PrepareSourceOrderReceivableReviewDto,
   ): Promise<AiReviewPackageView> {
     return this.collaboration.prepareSourceOrderReceivableReview(
+      request.user.organizationId,
+      request.user.userId,
+      departureId,
+      dto,
+    )
+  }
+
+  @Post('departures/:departureId/resource-payable-reviews')
+  @HttpCode(200)
+  @RequireMenu('/departure')
+  prepareResourcePayableReviews(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('departureId') departureId: string,
+    @Body() dto: PrepareResourcePayableReviewDto,
+  ): Promise<AiReviewPackageView[]> {
+    return this.collaboration.prepareResourcePayableReviews(
       request.user.organizationId,
       request.user.userId,
       departureId,

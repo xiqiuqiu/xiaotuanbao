@@ -16,6 +16,8 @@ import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
+  RESOURCE_PAYABLE_CONFIRMATION_UNIT,
+  RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
   canonicalizeReviewValue,
 } from '@xiaotuanbao/ai-contracts'
 import { toStoredCandidates, type ReviewPackageProposal } from './review-package.mapper'
@@ -92,6 +94,9 @@ function capabilityRefForReviewPackage(confirmationUnit: string) {
   if (confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT) {
     return { key: 'departure.source-order-receivable.prepare', version: 1 }
   }
+  if (confirmationUnit === RESOURCE_PAYABLE_CONFIRMATION_UNIT) {
+    return { key: 'departure.resource-payable.prepare', version: 1 }
+  }
   if (confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT) {
     return DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF
   }
@@ -113,6 +118,9 @@ function payloadSchemaForConfirmationUnit(confirmationUnit: string) {
   }
   if (confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT) {
     return SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA
+  }
+  if (confirmationUnit === RESOURCE_PAYABLE_CONFIRMATION_UNIT) {
+    return RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA
   }
   return DEPARTURE_REVIEW_PAYLOAD_SCHEMA
 }

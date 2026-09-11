@@ -1205,13 +1205,28 @@ export interface PrepareSourceOrderReceivableReviewDto {
   conversationId: string
 }
 
+export interface PrepareResourcePayableReviewItemDto {
+  sourceType: 'segment_resource' | 'departure_resource'
+  sourceId: string
+}
+
+export interface PrepareResourcePayableReviewDto {
+  conversationId: string
+  items: PrepareResourcePayableReviewItemDto[]
+}
+
 export interface ReviewConfirmationItemResult {
   packageId: string
   itemIdentity?: string
   status: ReviewConfirmationItemStatus
   retryable?: boolean
   reason?: string
-  resultRef?: { objectKind: string; objectId: string }
+  resultRef?: {
+    objectKind: string
+    objectId: string
+    scheduleIds?: string[]
+    generation?: string
+  }
 }
 
 export interface ReviewConfirmationView {

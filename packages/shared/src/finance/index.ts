@@ -31,6 +31,13 @@ export {
   type SourceOrderInitialReceivableAnomalyCode,
   type SourceOrderInitialReceivableClassification,
 } from './classify-source-order-initial-receivables'
+export {
+  classifyResourceInitialPayable,
+  type ResourceExistingPayableSchedule,
+  type ResourceInitialPayableAnomalyCode,
+  type ResourceInitialPayableClassification,
+  type ResourceInitialPayableResource,
+} from './classify-resource-initial-payables'
 export { formatDepartureNo } from './format-departure-no'
 export { formatScheduleNo } from './format-schedule-no'
 export { formatTransactionNo } from './format-transaction-no'

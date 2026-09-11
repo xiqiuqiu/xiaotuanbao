@@ -64,6 +64,7 @@ describe('collaboration package routing', () => {
   it.each([
     ['source_order_create', 'source_order.create@v1'],
     ['source_order_receivable', 'source_order.receivable@v1'],
+    ['resource_payable', 'resource.payable@v1'],
     ['segment_resource', 'departure.segment_resource@v1'],
   ])('preserves the schema for %s after combining business flows', (confirmationUnit, payloadSchema) => {
     const data = reviewPackageCreateData({

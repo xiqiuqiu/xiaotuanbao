@@ -348,16 +348,7 @@ function DepartureResourceReviewItem({
   const amountCents = fieldValue('amountCents')
 
   if (!pending && confirmation?.status === 'succeeded' && confirmation.resultRef) {
-    return (
-      <article ref={rootRef} className={styles.item} data-review-package-id={pkg.id}>
-        <Alert
-          type="success"
-          showIcon
-          title="资源已写入"
-          description={`${String(fieldValue('title') ?? '资源')}。写入时未自动提交应付，可从业务页面核对后继续处理。`}
-        />
-      </article>
-    )
+    return null
   }
 
   return (

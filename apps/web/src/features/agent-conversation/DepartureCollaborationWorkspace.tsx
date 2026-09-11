@@ -19,6 +19,7 @@ import {
 import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
+  RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
   resolveReviewField,
@@ -40,6 +41,8 @@ import { AgentConversationChat } from './AgentConversationChat'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
 import { DepartureResourceReviewPanel } from './DepartureResourceReviewPanel'
 import { SourceOrderReceivableReviewPanel } from './SourceOrderReceivableReviewPanel'
+import { ResourcePayableReviewPanel } from './ResourcePayableReviewPanel'
+import { ResourcePayableContinue, succeededResourceItems } from './ResourcePayableContinue'
 import { confirmationForPackage } from './review-confirmation-for-package'
 import { ReviewMaterialConflicts, ReviewRevisionHistory } from './ReviewRevisionHistory'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -63,6 +66,9 @@ function categoryOf(pkg: AiReviewPackageView) {
   ) {
     return '执行安排'
   }
+  if (isPayableReviewSchema(pkg.payloadSchema) || isReceivableReviewSchema(pkg.payloadSchema)) {
+    return '财务'
+  }
   return /receivable|payable|finance/.test(pkg.payloadSchema) ? '财务' : '发团信息'
 }
 
@@ -75,6 +81,10 @@ function isResourceReviewSchema(payloadSchema: string) {
 
 function isReceivableReviewSchema(payloadSchema: string) {
   return payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA
+}
+
+function isPayableReviewSchema(payloadSchema: string) {
+  return payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA
 }
 
 function formalResourceSearch(
@@ -480,6 +490,15 @@ export function DepartureCollaborationWorkspace({
                         setCompactPanel('事项与审核')
                         select(id)
                       }}
+                      onPreparedPayableReviews={(ids) => {
+                        setCategory('全部事项')
+                        setCompactPanel('事项与审核')
+                        if (ids[0]) select(ids[0])
+                      }}
+                      successfulResourceItems={succeededResourceItems(
+                        collaboration.data?.confirmations ?? [],
+                        items,
+                      )}
                     />
                   </div>
                 </div>
@@ -501,6 +520,8 @@ function WorkspaceReviewItem({
   confirmations,
   onAsk,
   onPreparedReceivableReview,
+  onPreparedPayableReviews,
+  successfulResourceItems,
 }: {
   selected: AiReviewPackageView
   departureId: string
@@ -510,6 +531,8 @@ function WorkspaceReviewItem({
   confirmations: ReviewConfirmationView[]
   onAsk: () => void
   onPreparedReceivableReview: (packageId: string) => void
+  onPreparedPayableReviews: (packageIds: string[]) => void
+  successfulResourceItems: ReturnType<typeof succeededResourceItems>
 }) {
   const navigate = useNavigate()
   const failure = confirmations
@@ -600,6 +623,15 @@ function WorkspaceReviewItem({
           focusedReviewPackageId={focused ? selected.id : null}
         />
       ) : null}
+      {selected.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA && conversationId ? (
+        <ResourcePayableReviewPanel
+          key={selected.id}
+          departureId={departureId}
+          conversationId={conversationId}
+          onlyPackageId={selected.id}
+          focusedReviewPackageId={focused ? selected.id : null}
+        />
+      ) : null}
       {selected.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA && conversationId ? (
         <SegmentResourceReviewPanel
           key={selected.id}
@@ -618,7 +650,19 @@ function WorkspaceReviewItem({
           focusedReviewPackageId={focused ? selected.id : null}
         />
       ) : null}
-      {selected.status !== 'pending' && !isReceivableReviewSchema(selected.payloadSchema) ? (
+      {isResourceReviewSchema(selected.payloadSchema) &&
+      selected.status === 'confirmed' &&
+      conversationId ? (
+        <ResourcePayableContinue
+          departureId={departureId}
+          conversationId={conversationId}
+          items={successfulResourceItems}
+          onPrepared={onPreparedPayableReviews}
+        />
+      ) : null}
+      {selected.status !== 'pending' &&
+      !isReceivableReviewSchema(selected.payloadSchema) &&
+      !isPayableReviewSchema(selected.payloadSchema) ? (
         <section className={styles.snapshot} aria-label="审核时的确认内容">
           <Descriptions
             title="审核记录"

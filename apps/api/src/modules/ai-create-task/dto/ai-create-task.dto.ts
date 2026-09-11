@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -334,4 +335,26 @@ export class PrepareSourceOrderReceivableReviewDto {
   @IsString()
   @IsNotEmpty()
   conversationId!: string
+}
+
+export class PrepareResourcePayableReviewItemDto {
+  @IsIn(['segment_resource', 'departure_resource'])
+  sourceType!: 'segment_resource' | 'departure_resource'
+
+  @IsString()
+  @IsNotEmpty()
+  sourceId!: string
+}
+
+export class PrepareResourcePayableReviewDto {
+  @IsString()
+  @IsNotEmpty()
+  conversationId!: string
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique((item: PrepareResourcePayableReviewItemDto) => `${item.sourceType}:${item.sourceId}`)
+  @ValidateNested({ each: true })
+  @Type(() => PrepareResourcePayableReviewItemDto)
+  items!: PrepareResourcePayableReviewItemDto[]
 }

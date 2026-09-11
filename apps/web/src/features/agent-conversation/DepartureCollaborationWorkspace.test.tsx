@@ -45,6 +45,21 @@ vi.mock('./SourceOrderReceivableReviewPanel', () => ({
     <div>应收审核 {onlyPackageId}</div>
   ),
 }))
+vi.mock('./ResourcePayableReviewPanel', () => ({
+  ResourcePayableReviewPanel: ({ onlyPackageId }: { onlyPackageId: string }) => (
+    <div>应付审核 {onlyPackageId}</div>
+  ),
+}))
+vi.mock('./ResourcePayableContinue', async () => {
+  const actual = await vi.importActual<typeof import('./ResourcePayableContinue')>(
+    './ResourcePayableContinue',
+  )
+  return {
+    ...actual,
+    ResourcePayableContinue: ({ items }: { items: Array<{ title: string }> }) =>
+      items.length ? <div>继续提交应付候选 {items.map((item) => item.title).join('、')}</div> : null,
+  }
+})
 vi.mock('./AgentConversationChat', () => ({
   AgentConversationChat: ({ onReviewRequested, reviewPackageId, onReviewMessageSent }: {
     onReviewRequested: (id: string) => void
@@ -79,6 +94,7 @@ const source = 'source_order.create@v1'
 const resource = 'departure.segment_resource@v1'
 const departureResource = 'departure.departure_resource@v1'
 const receivable = 'source_order.receivable@v1'
+const payable = 'resource.payable@v1'
 function view(expanded: boolean, onExpand = vi.fn()) {
   return (
     <DepartureCollaborationWorkspace
@@ -239,7 +255,7 @@ it('keeps source, segment, and departure resource reviews independent', async ()
   expect(screen.getByText('发团级资源审核 departure-resource-1')).not.toBeVisible()
 })
 
-it('keeps source-order receivable reviews in the finance category', async () => {
+it('keeps source-order receivable and resource payable reviews in the finance category', async () => {
   getCollaboration.mockImplementation(async () => ({
     conversations: [{ id: 'conv-1', title: '协作一' }],
     items: [
@@ -248,6 +264,10 @@ it('keeps source-order receivable reviews in the finance category', async () => 
         ...item('recv-1', receivable),
         candidates: [{ fieldKey: 'displayName', proposedValue: '华东旅行社客源', evidence: [] }],
       },
+      {
+        ...item('pay-1', payable),
+        candidates: [{ fieldKey: 'title', proposedValue: '4月2日住宿', evidence: [] }],
+      },
     ],
     confirmations: [],
   }))
@@ -255,7 +275,56 @@ it('keeps source-order receivable reviews in the finance category', async () => 
   fireEvent.click(await screen.findByRole('button', { name: '财务' }))
   expect(await screen.findByText('应收审核 recv-1')).toBeVisible()
   expect(screen.getByRole('tab', { name: '华东旅行社客源 待审核' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('tab', { name: '4月2日住宿 待审核' }))
+  expect(screen.getByText('应付审核 pay-1')).toBeVisible()
   expect(screen.queryByText('暂无财务事项')).not.toBeInTheDocument()
+})
+
+it('offers payable follow-up only for successful resources without a payable review', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      {
+        ...item('resource-1', resource, 'confirmed'),
+        candidates: [{ fieldKey: 'title', proposedValue: '4月2日住宿', evidence: [] }],
+      },
+      {
+        ...item('resource-2', resource, 'confirmed'),
+        candidates: [{ fieldKey: 'title', proposedValue: '关西交通', evidence: [] }],
+      },
+      {
+        ...item('pay-1', payable),
+        candidates: [
+          { fieldKey: 'title', proposedValue: '4月2日住宿', evidence: [] },
+          { fieldKey: 'sourceType', proposedValue: 'segment_resource', evidence: [] },
+          { fieldKey: 'sourceId', proposedValue: 'res-hotel', evidence: [] },
+        ],
+      },
+    ],
+    confirmations: [
+      {
+        decisionCommandId: 'decision-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'resource-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'res-hotel' },
+          },
+          {
+            packageId: 'resource-2',
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'res-transport' },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('tab', { name: '关西交通 已确认' }))
+  const panel = screen.getByRole('tabpanel')
+  expect(within(panel).getByText('继续提交应付候选 关西交通')).toBeVisible()
+  expect(within(panel).queryByText(/4月2日住宿/)).not.toBeInTheDocument()
 })
 
 it('opens a confirmed departure resource from the execution tab highlight', async () => {

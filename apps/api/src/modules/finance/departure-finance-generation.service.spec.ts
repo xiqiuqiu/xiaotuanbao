@@ -65,45 +65,6 @@ describe('DepartureFinanceGenerationService', () => {
     ).rejects.toBeInstanceOf(BadRequestException)
   })
 
-  it('dispatches segment_resource to generatePayable', async () => {
-    const generatePayable = jest.spyOn(service, 'generatePayable').mockResolvedValue({
-      schedule: { id: 'sch-1' } as never,
-      resource: { id: 'seg-res-1' } as never,
-    })
-
-    const result = await service.generateResourcePayable(
-      'org-1',
-      {
-        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-        sourceId: 'seg-res-1',
-      },
-      () => undefined,
-    )
-
-    expect(generatePayable).toHaveBeenCalledWith('org-1', 'seg-res-1', expect.any(Function))
-    expect(result.resourceKind).toBe('segment')
-  })
-
-  it('dispatches departure_resource to generateDepartureResourcePayable', async () => {
-    const generateDeparture = jest
-      .spyOn(service, 'generateDepartureResourcePayable')
-      .mockResolvedValue({
-        schedule: { id: 'sch-2' } as never,
-        resource: { id: 'dep-res-1' } as never,
-      })
-
-    const result = await service.generateResourcePayable(
-      'org-1',
-      {
-        sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-        sourceId: 'dep-res-1',
-      },
-      () => undefined,
-    )
-
-    expect(generateDeparture).toHaveBeenCalledWith('org-1', 'dep-res-1', expect.any(Function))
-    expect(result.resourceKind).toBe('departure')
-  })
 })
 
 describe('DepartureFinanceGenerationService initial_only / preview', () => {
@@ -263,6 +224,120 @@ describe('DepartureFinanceGenerationService initial_only / preview', () => {
         client: tx as never,
       }),
     ).rejects.toThrow('当前客源单已提交应收，不能再次提交')
+    expect(create).not.toHaveBeenCalled()
+  })
+})
+
+describe('DepartureFinanceGenerationService payable initial_only / preview', () => {
+  const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    paymentSchedule: { findMany: jest.fn() },
+  }
+  const create = jest.fn()
+  const assertAllowsNewObligation = jest.fn()
+  let service: DepartureFinanceGenerationService
+  const resource = {
+    id: 'res-1',
+    title: '4月2日住宿',
+    amountCents: 880_000,
+    resourceKind: 'hotel',
+    counterpartyType: 'supplier',
+    partnerId: null,
+    supplierId: 'sup-1',
+    partner: null,
+    supplier: { name: '关西酒店' },
+    segment: {
+      id: 'seg-1',
+      endDate: new Date('2026-04-02T00:00:00.000Z'),
+      departure: {
+        id: 'dep-1',
+        organizationId: 'org-1',
+        status: 'pending_settlement',
+        endDate: new Date('2026-04-08T00:00:00.000Z'),
+      },
+    },
+  }
+
+  beforeEach(() => {
+    create.mockReset()
+    create.mockResolvedValue({ id: 'sch-hotel' })
+    assertAllowsNewObligation.mockReset()
+    tx.$queryRaw.mockClear()
+    tx.paymentSchedule.findMany.mockReset()
+    tx.paymentSchedule.findMany.mockResolvedValue([])
+    service = Object.create(
+      DepartureFinanceGenerationService.prototype,
+    ) as DepartureFinanceGenerationService
+    Object.assign(service, {
+      prisma: {},
+      paymentScheduleService: { create },
+      loadSegmentResourceOrThrow: jest.fn().mockResolvedValue(resource),
+      loadDepartureResourceOrThrow: jest.fn(),
+    })
+  })
+
+  it('previews a selected resource without creating a payable', async () => {
+    const preview = await service.previewInitialPayable(
+      'org-1',
+      { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+      tx as never,
+    )
+    expect(preview.classification).toEqual({ status: 'ready', amountCents: 880_000 })
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('creates the selected resource payable with initial_only', async () => {
+    const result = await service.generateResourcePayable(
+      'org-1',
+      { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+      assertAllowsNewObligation,
+      { client: tx as never, strategy: 'initial_only' },
+    )
+    expect(assertAllowsNewObligation).toHaveBeenCalledWith(
+      resource.segment.departure,
+      '提交应付',
+    )
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(result.generation).toBe('created')
+    expect(result.schedule).toEqual({ id: 'sch-hotel' })
+  })
+
+  it('returns already_present without creating when the payable matches', async () => {
+    tx.paymentSchedule.findMany.mockResolvedValue([
+      { id: 'sch-existing', amountCents: 880_000, cancelledAt: null, voidedAt: null },
+    ])
+    const result = await service.generateResourcePayable(
+      'org-1',
+      { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+      assertAllowsNewObligation,
+      { client: tx as never, strategy: 'initial_only' },
+    )
+    expect(create).not.toHaveBeenCalled()
+    expect(result).toEqual(
+      expect.objectContaining({
+        generation: 'already_present',
+        existingScheduleIds: ['sch-existing'],
+      }),
+    )
+  })
+
+  it('refuses cancelled history under initial_only without recreating', async () => {
+    tx.paymentSchedule.findMany.mockResolvedValue([
+      {
+        id: 'sch-cancelled',
+        amountCents: 880_000,
+        cancelledAt: new Date('2026-09-01'),
+        voidedAt: null,
+      },
+    ])
+    await expect(
+      service.generateResourcePayable(
+        'org-1',
+        { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+        assertAllowsNewObligation,
+        { client: tx as never, strategy: 'initial_only' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException)
     expect(create).not.toHaveBeenCalled()
   })
 })
