@@ -1,8 +1,5 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
-import {
-  registeredTaskDescriptors,
-  sanitizeVisibleReasoning,
-} from '@xiaotuanbao/ai-contracts'
+import { registeredTaskDescriptors } from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
   AiInputBatchStatus,
@@ -768,6 +765,7 @@ export function toCopilotChatMessages(
 
 function currentInFlightAttempt(events: AiConversationEventView[]): {
   attemptId?: string
+  batchId?: string
   generation?: number
 } | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
@@ -785,6 +783,7 @@ function currentInFlightAttempt(events: AiConversationEventView[]): {
       return {
         attemptId:
           typeof event.payload.attemptId === 'string' ? event.payload.attemptId : undefined,
+        batchId: typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined,
         generation:
           typeof event.payload.generation === 'number' ? event.payload.generation : undefined,
       }
@@ -886,53 +885,45 @@ export function pruneSessionReasoning(
   return next
 }
 
-function reasoningMessage(attemptId: string, content: string): ChatMessage | null {
-  const sanitized = sanitizeVisibleReasoning(content)
-  if (!sanitized) {
-    return null
-  }
+function workingIndicatorMessage(attemptId: string): ChatMessage {
   return {
     id: `live-reasoning-${attemptId}`,
     role: 'reasoning',
-    content: sanitized,
+    content: '',
   }
 }
 
-function injectSessionReasoning(
-  messages: ChatMessage[],
+function hasDurableAssistantForAttempt(
   events: AiConversationEventView[],
-  sessionReasoning: Record<string, string>,
-): ChatMessage[] {
-  const result = [...messages]
-  for (const event of events) {
-    if (event.kind !== 'agent_message') {
-      continue
-    }
-    const attemptId =
-      typeof event.payload.attemptId === 'string' ? event.payload.attemptId : undefined
-    if (!attemptId) {
-      continue
-    }
-    const text = sessionReasoning[attemptId]
-    if (!text || isFailedOrCancelledAttempt(events, attemptId)) {
-      continue
-    }
-    const assistantId = `event-${event.sequence}`
-    const index = result.findIndex((message) => message.id === assistantId)
-    if (index < 0) {
-      continue
-    }
-    const already = result[index - 1]?.id === `live-reasoning-${attemptId}`
-    if (already) {
-      continue
-    }
-    const inserted = reasoningMessage(attemptId, text)
-    if (!inserted) {
-      continue
-    }
-    result.splice(index, 0, inserted)
+  attemptId: string | undefined,
+): boolean {
+  if (!attemptId) {
+    return false
   }
-  return result
+  return events.some(
+    (event) => event.kind === 'agent_message' && event.payload.attemptId === attemptId,
+  )
+}
+
+function workingIndicatorAttemptId(
+  events: AiConversationEventView[],
+  live: LiveAssistantSnapshot | null | undefined,
+): string | null {
+  if (live && shouldProjectLiveAssistant(events, live)) {
+    return live.attemptId
+  }
+  const inFlight = currentInFlightAttempt(events)
+  const attemptId = inFlight?.attemptId ?? (inFlight?.batchId ? `batch-${inFlight.batchId}` : null)
+  if (!attemptId) {
+    return null
+  }
+  if (inFlight?.attemptId && hasDurableAssistantForAttempt(events, inFlight.attemptId)) {
+    return null
+  }
+  if (inFlight?.attemptId && isFailedOrCancelledAttempt(events, inFlight.attemptId)) {
+    return null
+  }
+  return attemptId
 }
 
 /** 统一会话壳最高可见投影：持久事件 + 当前 Attempt 即时输出。 */
@@ -943,25 +934,18 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
     input.activeBatch ?? null,
     input.pendingUploadCount ?? 0,
   )
-  const sessionReasoning = pruneSessionReasoning(input.events, input.sessionReasoning ?? {})
-  const withHistory = injectSessionReasoning(messages, input.events, sessionReasoning)
   const live = input.liveAssistant
-  if (!live || !shouldProjectLiveAssistant(input.events, live)) {
-    return withHistory
-  }
   const liveParts: ChatMessage[] = []
-  if (live.reasoningText) {
-    const liveReasoning = reasoningMessage(live.attemptId, live.reasoningText)
-    if (liveReasoning) {
-      liveParts.push(liveReasoning)
-    }
-  }
-  if (live.text) {
+  if (live && shouldProjectLiveAssistant(input.events, live) && live.text) {
     liveParts.push({
       id: `live-assistant-${live.attemptId}`,
       role: 'assistant',
       content: live.text,
     })
   }
-  return [...withHistory, ...liveParts]
+  const indicatorAttemptId = workingIndicatorAttemptId(input.events, live)
+  if (indicatorAttemptId) {
+    liveParts.unshift(workingIndicatorMessage(indicatorAttemptId))
+  }
+  return [...messages, ...liveParts]
 }

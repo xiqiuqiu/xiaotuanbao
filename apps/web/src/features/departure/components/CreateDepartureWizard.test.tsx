@@ -2314,6 +2314,103 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('flushes a user-edited endDate before confirm even when pending review restored an empty routeName', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const baseline = {
+      mode: 'manual' as const,
+      routeName: '',
+      ownerUserId: 'user-1',
+      departureType: 'combined' as const,
+    }
+    const pending = mockPendingReview({
+      baseObjectVersion: 1,
+      baselineSnapshot: baseline,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '南疆十日回归',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫南疆十日回归' }],
+        },
+        {
+          fieldKey: 'routeName',
+          proposedValue: '乌鲁木齐、吐鲁番、库车、库尔勒、哈密',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '路线乌鲁木齐、吐鲁番、库车' }],
+        },
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-22',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '2026年9月22日出团' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 1,
+        snapshot: baseline,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(saveDepartureCreationDraft).mockImplementation(async (payload) => ({
+      ...restored,
+      draft: {
+        version: (payload.expectedVersion ?? 0) + 1,
+        snapshot: payload.draft,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }))
+    vi.mocked(confirmAiReviewPackage).mockResolvedValue({
+      ...restored,
+      draft: {
+        version: 3,
+        snapshot: {
+          ...baseline,
+          name: '南疆十日回归',
+          routeName: '乌鲁木齐、吐鲁番、库车、库尔勒、哈密',
+          startDate: '2026-09-22',
+          endDate: '2026-10-01',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    renderWizard()
+    await screen.findByRole('button', { name: '确认写入草稿' })
+    await user.click(screen.getByLabelText('结束日期'))
+    await user.click(await screen.findByTitle('2026-10-01'))
+    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
+
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+    const flushed = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
+    expect(flushed?.endDate).toBe('2026-10-01')
+    expect(flushed?.startDate ?? null).toBeNull()
+    await waitFor(() => {
+      expect(confirmAiReviewPackage).toHaveBeenCalled()
+    })
+  })
+
   it('does not persist auto-derived 团名 when filling 路线名称 over a pending name candidate', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }

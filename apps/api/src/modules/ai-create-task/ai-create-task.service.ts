@@ -2031,7 +2031,9 @@ export class AiCreateTaskService {
         currentSnapshot.ownerUserId ?? userId,
         currentSnapshot.departureType ?? DepartureType.COMBINED,
       )
-      this.assertValidDraft(snapshot)
+      this.assertValidDraft(snapshot, {
+        allowIncompleteManualRoute: (task.agentTask.reviewPackages?.length ?? 0) > 0,
+      })
 
       const updated = await tx.departureCreationDraft.updateMany({
         where: { id: task.draft.id, version: expectedVersion },

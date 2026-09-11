@@ -956,6 +956,48 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
     })
   })
 
+  it('accepts an existing Agent draft update that still has an empty routeName', async () => {
+    const emptySnapshot = {
+      mode: DepartureCreationDraftMode.MANUAL,
+      routeName: '',
+      name: null,
+      startDate: null,
+      endDate: null,
+      ownerUserId: userId,
+      departureType: DepartureType.COMBINED,
+    }
+    const { service, tx } = createService()
+    tx.aiCreateTask.findFirst.mockImplementation((args: { include?: { draft?: boolean } }) =>
+      Promise.resolve({
+        ...task,
+        draft: args.include?.draft
+          ? { ...draft, snapshot: emptySnapshot }
+          : undefined,
+      }),
+    )
+
+    const result = await service.saveDraft(organizationId, userId, {
+      taskId,
+      expectedVersion: 1,
+      draft: {
+        ...emptySnapshot,
+        endDate: '2026-10-01',
+      },
+    })
+
+    expect(tx.departureCreationDraft.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshot: expect.objectContaining({
+            routeName: '',
+            endDate: '2026-10-01',
+          }),
+        }),
+      }),
+    )
+    expect(result.pendingReview).toMatchObject({ id: packageId })
+  })
+
   it('keeps pendingReview on a version-conflict response', async () => {
     const { service } = createService({ draftVersion: 2 })
 

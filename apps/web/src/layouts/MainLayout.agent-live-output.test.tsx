@@ -231,7 +231,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
     cleanup()
   })
 
-  it('keeps 思考过程 and streaming reply after expanding, and continues snapshots in global mode', async () => {
+  it('keeps working indicator and streaming reply after expanding, and continues snapshots in global mode', async () => {
     const user = userEvent.setup()
     renderLayout()
 
@@ -248,7 +248,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
       })
     })
 
-    expect(within(pane).getByText('先核对出团日期')).toBeInTheDocument()
+    expect(within(pane).queryByText('先核对出团日期')).not.toBeInTheDocument()
     expect(within(pane).getByText('已记下路线。')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '思考过程' })).toHaveLength(1)
 
@@ -256,7 +256,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
 
     const overlay = screen.getByRole('dialog', { name: '小团宝 Agent' })
     expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
-    expect(within(overlay).getByText('先核对出团日期')).toBeInTheDocument()
+    expect(within(overlay).queryByText('先核对出团日期')).not.toBeInTheDocument()
     expect(within(overlay).getByText('已记下路线。')).toBeInTheDocument()
     expect(within(overlay).getByRole('button', { name: '思考过程' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '思考过程' })).toHaveLength(1)
@@ -273,7 +273,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
       })
     })
 
-    expect(within(overlay).getByText('再核人数')).toBeInTheDocument()
+    expect(within(overlay).queryByText('再核人数')).not.toBeInTheDocument()
     expect(within(overlay).getByText('已记下路线。人数待核。')).toBeInTheDocument()
     expect(within(overlay).queryByText('先核对出团日期')).not.toBeInTheDocument()
 
@@ -281,7 +281,7 @@ describe('MainLayout side vs global live Agent projection #415 #370', () => {
 
     const restoredPane = screen.getByRole('complementary', { name: '电子化助理' })
     expect(screen.queryByRole('dialog', { name: '小团宝 Agent' })).not.toBeInTheDocument()
-    expect(within(restoredPane).getByText('再核人数')).toBeInTheDocument()
+    expect(within(restoredPane).queryByText('再核人数')).not.toBeInTheDocument()
     expect(within(restoredPane).getByText('已记下路线。人数待核。')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: '思考过程' })).toHaveLength(1)
   })

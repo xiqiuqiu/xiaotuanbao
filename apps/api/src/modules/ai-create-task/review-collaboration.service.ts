@@ -74,6 +74,23 @@ const REVISING_BATCH_STATUSES: AiInputBatchStatus[] = [
   AiInputBatchStatus.awaiting_user_input,
 ]
 
+function reviewPackageTargetsDeparture(
+  pkg: { targetKind: string; targetId: string },
+  departureId: string,
+): boolean {
+  return pkg.targetKind === 'departure' && pkg.targetId === departureId
+}
+
+function conversationRelatedToDeparture(
+  conversationId: string,
+  departureId: string,
+  packages: Array<{ conversationId: string | null; targetKind: string; targetId: string }>,
+): boolean {
+  const mine = packages.filter((pkg) => pkg.conversationId === conversationId)
+  if (mine.some((pkg) => reviewPackageTargetsDeparture(pkg, departureId))) return true
+  return mine.length === 0
+}
+
 @Injectable()
 export class ReviewCollaborationService {
   constructor(
@@ -544,9 +561,23 @@ export class ReviewCollaborationService {
           orderBy: { createdAt: 'asc' },
         })
       : []
-    const pendingRevisions = conversationIds.length
+    const relatedLinks = links.filter((link) =>
+      conversationRelatedToDeparture(link.conversationId, departureId, packages),
+    )
+    const relatedConversationIds = relatedLinks.map((link) => link.conversationId)
+    const relatedPackages = packages.filter(
+      (pkg) =>
+        pkg.conversationId != null &&
+        relatedConversationIds.includes(pkg.conversationId) &&
+        reviewPackageTargetsDeparture(pkg, departureId),
+    )
+    const pendingRevisions = relatedConversationIds.length
       ? await this.prisma.aiInputBatch.findMany({
-          where: { organizationId, conversationId: { in: conversationIds }, status: { in: REVISING_BATCH_STATUSES } },
+          where: {
+            organizationId,
+            conversationId: { in: relatedConversationIds },
+            status: { in: REVISING_BATCH_STATUSES },
+          },
           select: { userMessageEvent: { select: { payload: true } } },
         })
       : []
@@ -555,7 +586,7 @@ export class ReviewCollaborationService {
       return payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.reviewPackageId === 'string'
         ? [payload.reviewPackageId] : []
     }))
-    const packageIds = packages.map((pkg) => pkg.id)
+    const packageIds = relatedPackages.map((pkg) => pkg.id)
     const jobs = packageIds.length
       ? await this.prisma.aiWorkflowJob.findMany({
           where: {
@@ -590,12 +621,12 @@ export class ReviewCollaborationService {
     }
     return {
       departureId,
-      conversations: links.map((link) => ({
+      conversations: relatedLinks.map((link) => ({
         id: link.conversation.id,
         title: link.conversation.title,
         lastActivityAt: link.conversation.lastActivityAt.toISOString(),
       })),
-      items: packages.map((pkg) => ({
+      items: relatedPackages.map((pkg) => ({
         ...toReviewPackageView(pkg),
         ...(pkg.status === AiReviewPackageStatus.pending && revisingIds.has(pkg.id)
           ? { confirmationBlockedReason: REVISION_PENDING_REASON } : {}),

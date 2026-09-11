@@ -405,6 +405,53 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
+  it('stops an NDJSON stream after runTimeoutMs even when reasoning frames keep arriving', async () => {
+    const reasoningText: string[] = []
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      let sequence = 1
+      const timer = setInterval(() => {
+        response.write(
+          `${JSON.stringify({
+            type: 'reasoning.delta',
+            sequence,
+            text: `先核对${'日期'.repeat(sequence)}`,
+          })}\n`,
+        )
+        sequence += 1
+      }, 20)
+      response.on('close', () => {
+        clearInterval(timer)
+      })
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 80,
+    })
+
+    const started = Date.now()
+    await expect(
+      client.run(request, 'delegation-token', {
+        onReasoningText: (text) => {
+          reasoningText.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'MODEL_TIMEOUT',
+        message: '模型响应超时，已保存的发团创建草稿未改动',
+        retryable: true,
+      },
+    })
+    expect(Date.now() - started).toBeLessThan(1_500)
+    const seen = reasoningText.length
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(reasoningText).toHaveLength(seen)
+  }, 3_000)
+
   it('treats an Agent disconnect after live deltas as retryable AGENT_UNAVAILABLE', async () => {
     const publicText: string[] = []
     server = createServer((_incoming, response) => {

@@ -879,11 +879,31 @@ describe('projectConversationFrame live reasoning #416', () => {
         content: soliloquy,
       },
     ])
-    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([])
+    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '',
+      },
+    ])
   })
 
-  it('shows collapsible 思考过程 after the first reasoning token before any public reply', () => {
-    const messages = projectConversationFrame({
+  it('shows a working indicator while agent_running even without 思考过程正文', () => {
+    const fromEvents = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: null,
+    })
+    expect(fromEvents.filter((message) => message.role === 'assistant')).toEqual([])
+    expect(fromEvents.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '',
+      },
+    ])
+
+    const fromLive = projectConversationFrame({
       events: runningEvents,
       pendingText: null,
       liveAssistant: {
@@ -895,17 +915,18 @@ describe('projectConversationFrame live reasoning #416', () => {
         text: '',
       },
     })
-    expect(messages.filter((message) => message.role === 'assistant')).toEqual([])
-    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
+    expect(fromLive.filter((message) => message.role === 'assistant')).toEqual([])
+    expect(fromLive.filter((message) => message.role === 'reasoning')).toEqual([
       {
         id: 'live-reasoning-attempt-9',
         role: 'reasoning',
-        content: '先核对出团日期',
+        content: '',
       },
     ])
+    expect(JSON.stringify(fromLive)).not.toContain('先核对出团日期')
   })
 
-  it('keeps 思考过程 beside the growing reply and overwrites the previous step', () => {
+  it('keeps the working indicator beside the growing reply without projecting 思考过程正文', () => {
     const firstStep = projectConversationFrame({
       events: runningEvents,
       pendingText: null,
@@ -929,7 +950,7 @@ describe('projectConversationFrame live reasoning #416', () => {
       {
         id: 'live-reasoning-attempt-9',
         role: 'reasoning',
-        content: '先核对出团日期',
+        content: '',
       },
     ])
 
@@ -949,9 +970,10 @@ describe('projectConversationFrame live reasoning #416', () => {
       {
         id: 'live-reasoning-attempt-9',
         role: 'reasoning',
-        content: '再核人数',
+        content: '',
       },
     ])
+    expect(JSON.stringify(nextStep)).not.toContain('再核人数')
     expect(nextStep.filter((message) => message.role === 'assistant')).toEqual([
       {
         id: 'live-assistant-attempt-9',
@@ -961,7 +983,7 @@ describe('projectConversationFrame live reasoning #416', () => {
     ])
   })
 
-  it('keeps 思考过程 as CopilotKit reasoning after agent_message when the session still has it', () => {
+  it('does not keep 思考过程 after agent_message even if the session still has it', () => {
     const completed = [
       ...runningEvents,
       {
@@ -1002,22 +1024,17 @@ describe('projectConversationFrame live reasoning #416', () => {
       liveAssistant: null,
       sessionReasoning: { 'attempt-9': '再核人数' },
     })
-    const assistantIndex = inSession.findIndex((message) => message.id === 'event-3')
-    expect(inSession[assistantIndex - 1]).toEqual({
-      id: 'live-reasoning-attempt-9',
-      role: 'reasoning',
-      content: '再核人数',
-    })
-    expect(inSession[assistantIndex]).toEqual(
+    expect(inSession.some((message) => message.role === 'reasoning')).toBe(false)
+    expect(inSession.filter((message) => message.role === 'assistant')).toEqual([
       expect.objectContaining({
         id: 'event-3',
         role: 'assistant',
         content: '已记下路线。日期待核对。',
       }),
-    )
+    ])
   })
 
-  it('still shows 思考过程 on the next turn after the previous batch completed', () => {
+  it('shows only the current-turn working indicator after the previous batch completed', () => {
     const messages = projectConversationFrame({
       events: [
         ...runningEvents,
@@ -1061,16 +1078,13 @@ describe('projectConversationFrame live reasoning #416', () => {
     })
     expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
       {
-        id: 'live-reasoning-attempt-9',
-        role: 'reasoning',
-        content: '先核对出团日期',
-      },
-      {
         id: 'live-reasoning-attempt-10',
         role: 'reasoning',
-        content: '再核第二轮人数',
+        content: '',
       },
     ])
+    expect(JSON.stringify(messages)).not.toContain('先核对出团日期')
+    expect(JSON.stringify(messages)).not.toContain('再核第二轮人数')
   })
 
   it('does not promote tool names mentioned in 思考过程 into a structured tool frame', () => {
@@ -1094,12 +1108,12 @@ describe('projectConversationFrame live reasoning #416', () => {
       {
         id: 'live-reasoning-attempt-9',
         role: 'reasoning',
-        content: '可以再核对审核包',
+        content: '',
       },
     ])
   })
 
-  it('hides leaked system prompt fragments and English chain-of-thought from 思考过程', () => {
+  it('does not project 思考过程正文 even when live output still carries leaked fragments', () => {
     const messages = projectConversationFrame({
       events: runningEvents,
       pendingText: null,
