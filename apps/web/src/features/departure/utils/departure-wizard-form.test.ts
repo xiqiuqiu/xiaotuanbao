@@ -9,6 +9,7 @@ import {
   buildDepartureCreationDraftSnapshot,
   buildRouteSummary,
   canPersistDepartureCreationDraft,
+  shouldPersistDepartureCreationDraft,
   buildInitialInfoValues,
   createInitialRouteStepValues,
   hasUsableRouteSource,
@@ -348,5 +349,15 @@ describe('departure-wizard-form', () => {
         buildDepartureCreationDraftSnapshot({ mode: 'manual', routeName: '喀纳斯线' }, {}),
       ),
     ).toBe(true)
+  })
+
+  it('already-claimed Agent tasks persist even when pending review restores an empty routeName', () => {
+    const emptyManual = buildDepartureCreationDraftSnapshot(
+      { mode: 'manual', routeName: '' },
+      { startDate: '2026-09-10', endDate: '2026-10-01' },
+    )
+    expect(canPersistDepartureCreationDraft(emptyManual)).toBe(false)
+    expect(shouldPersistDepartureCreationDraft(emptyManual, { hasExistingTask: false })).toBe(false)
+    expect(shouldPersistDepartureCreationDraft(emptyManual, { hasExistingTask: true })).toBe(true)
   })
 })

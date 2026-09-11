@@ -59,7 +59,10 @@ export class AiHeadlessClient {
       const contentType = response.headers.get('content-type') ?? ''
       if (contentType.includes('ndjson')) {
         try {
-          const result = await readNdjsonResult(response, options, signal.aborted)
+          const result = await readNdjsonResult(response, options, signal)
+          if (result.kind !== 'failed') {
+            return result
+          }
           return timeout.signal.aborted ? timedOut() : result
         } catch {
           return {
@@ -150,10 +153,10 @@ async function readJsonResult(response: Response, aborted: boolean): Promise<Hea
 async function readNdjsonResult(
   response: Response,
   options: HeadlessRunOptions,
-  aborted: boolean,
+  signal: AbortSignal,
 ): Promise<HeadlessExecutionResult> {
   if (!response.body) {
-    return aborted ? unavailable() : invalidFormat()
+    return signal.aborted ? unavailable() : invalidFormat()
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -163,11 +166,19 @@ async function readNdjsonResult(
   let completed: HeadlessExecutionResult | undefined
   try {
     for (;;) {
+      if (signal.aborted) {
+        await reader.cancel().catch(() => undefined)
+        break
+      }
       const { done, value } = await reader.read()
       buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
       const lines = buffer.split('\n')
       buffer = done ? '' : (lines.pop() ?? '')
       for (const line of lines) {
+        if (signal.aborted) {
+          await reader.cancel().catch(() => undefined)
+          break
+        }
         const trimmed = line.trim()
         if (!trimmed) {
           continue
@@ -194,7 +205,7 @@ async function readNdjsonResult(
           completed = parsed.data.result
         }
       }
-      if (done) {
+      if (done || signal.aborted) {
         break
       }
     }
@@ -204,7 +215,10 @@ async function readNdjsonResult(
   if (completed) {
     return completed
   }
-  if (aborted || sawValidFrame) {
+  if (signal.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError')
+  }
+  if (sawValidFrame) {
     return unavailable()
   }
   return invalidFormat()

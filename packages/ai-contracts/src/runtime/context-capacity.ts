@@ -24,14 +24,6 @@ const CONTEXT_CAPACITY_PROFILES: Readonly<Record<string, ContextCapacityProfile>
     providerFramingTokens: 1_024,
     safetyMarginTokens: 2_048,
   },
-  'deepseek/deepseek-chat': {
-    profileVersion: 'ai-create-deepseek-chat-32k/v1',
-    contextWindowTokens: 32_768,
-    softInputLimitTokens: 24_576,
-    outputReserveTokens: 4_096,
-    providerFramingTokens: 1_024,
-    safetyMarginTokens: 2_048,
-  },
   'deepseek/deepseek-v4-flash': {
     profileVersion: 'ai-create-deepseek-v4-flash-32k/v1',
     contextWindowTokens: 32_768,
@@ -43,7 +35,10 @@ const CONTEXT_CAPACITY_PROFILES: Readonly<Record<string, ContextCapacityProfile>
 }
 
 const MODEL_ID_ALIASES: Readonly<Record<string, string>> = {
-  'deepseek-chat': 'deepseek/deepseek-chat',
+  'deepseek-chat': 'deepseek/deepseek-v4-flash',
+  'deepseek/deepseek-chat': 'deepseek/deepseek-v4-flash',
+  'deepseek-reasoner': 'deepseek/deepseek-v4-flash',
+  'deepseek/deepseek-reasoner': 'deepseek/deepseek-v4-flash',
   'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
 }
 

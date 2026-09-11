@@ -207,7 +207,7 @@ Cherry 调用 `extractReasoningMiddleware` 时**没有**开 `startWithReasoning`
 
 ## 四、小团宝现状（对照用，非实现计划）
 
-请求侧：DeepSeek 模型把 `thinking.type` 设为 `enabled` / `disabled`，默认 `disabled`，由 `AI_MODEL_THINKING` 控制。[`agent-factory.ts`](../../apps/agent/src/agent-factory.ts) [`server.ts`](../../apps/agent/src/server.ts)
+请求侧：DeepSeek 模型把 `thinking.type` 设为 `enabled` / `disabled`，默认 `enabled`（effort `medium`），由 `AI_MODEL_THINKING` 控制。[`agent-factory.ts`](../../apps/agent/src/agent-factory.ts) [`server.ts`](../../apps/agent/src/server.ts)
 
 响应侧：
 

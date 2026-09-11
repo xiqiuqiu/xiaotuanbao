@@ -43,3 +43,20 @@ export function findReviewCandidate(
   )) return undefined
   return pending.candidates.find((candidate) => candidate.fieldKey === fieldKey)
 }
+
+export function reviewCandidateValue(
+  candidate: AiReviewCandidateView | undefined,
+): unknown {
+  if (!candidate) return undefined
+  return candidate.userCorrectedValue !== undefined
+    ? candidate.userCorrectedValue
+    : candidate.proposedValue
+}
+
+export function effectiveReviewDate(
+  candidate: AiReviewCandidateView | undefined,
+  fallback: string | undefined,
+): string | undefined {
+  const value = reviewCandidateValue(candidate)
+  return typeof value === 'string' && value ? value : fallback
+}

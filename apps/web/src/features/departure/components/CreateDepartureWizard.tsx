@@ -53,7 +53,7 @@ import {
   applySelectedRouteTemplate,
   buildDefaultDepartureName,
   buildDepartureCreationDraftSnapshot,
-  canPersistDepartureCreationDraft,
+  shouldPersistDepartureCreationDraft,
   computeDayCount,
   createInfoFormValues,
   type InfoFormValues,
@@ -219,7 +219,11 @@ function useCreateDepartureWizardController() {
           candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
         })
       : buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
-    if (!canPersistDepartureCreationDraft(draft)) {
+    if (
+      !shouldPersistDepartureCreationDraft(draft, {
+        hasExistingTask: Boolean(taskIdRef.current),
+      })
+    ) {
       return
     }
 

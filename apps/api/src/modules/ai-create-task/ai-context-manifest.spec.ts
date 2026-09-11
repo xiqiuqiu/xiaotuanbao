@@ -132,6 +132,8 @@ describe('resolveAttemptUserText', () => {
         payload: { status: 'completed', disposition: 'confirmed' },
       }),
     ).toBe(REVIEW_CONFIRM_CONTINUATION_TEXT)
+    expect(REVIEW_CONFIRM_CONTINUATION_TEXT).not.toContain('出团日期')
+    expect(REVIEW_CONFIRM_CONTINUATION_TEXT).not.toContain('结束日期')
   })
 
   it('keeps the original request for a normal user turn', () => {

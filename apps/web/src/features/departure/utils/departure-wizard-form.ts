@@ -292,6 +292,15 @@ export function canPersistDepartureCreationDraft(
   return Boolean(draft.routeName.trim())
 }
 
+/** Agent 建团任务常以空路线名起步；已有 task 时仍要能把非候选字段（如结束日）刷进草稿。 */
+export function shouldPersistDepartureCreationDraft(
+  draft: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
+  options: { hasExistingTask: boolean },
+): boolean {
+  if (options.hasExistingTask) return true
+  return canPersistDepartureCreationDraft(draft)
+}
+
 export function applyDraftSnapshotToRoute(
   snapshot: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
 ): RouteStepValues {

@@ -836,6 +836,107 @@ describe('ReviewCollaborationService #447', () => {
     ])
   })
 
+  it('omits a creation conversation that only inherited this departure page locator', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([
+      {
+        conversationId: 'conv-collab',
+        conversation: {
+          id: 'conv-collab',
+          title: '从这个截图中取一下客源信息',
+          lastActivityAt: new Date('2026-09-09T14:16:49.000Z'),
+        },
+      },
+      {
+        conversationId: 'conv-create',
+        conversation: {
+          id: 'conv-create',
+          title: '张姐给推了一个团，9月20号出发',
+          lastActivityAt: new Date('2026-09-10T01:04:29.000Z'),
+        },
+      },
+    ])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-create-draft',
+        conversationId: 'conv-create',
+        payloadSchema: 'departure.basic_info_draft@v1',
+        confirmationUnit: 'basic_info_draft',
+        targetKind: 'departure_creation_draft',
+        targetId: 'draft-1',
+        status: AiReviewPackageStatus.confirmed,
+        candidates: [],
+        baselineSnapshot: {},
+      },
+    ])
+    prisma.aiWorkflowJob.findMany.mockResolvedValue([])
+
+    const view = await service.listDepartureCollaboration(
+      organizationId,
+      userId,
+      'departure-1',
+    )
+
+    expect(view.conversations).toEqual([
+      {
+        id: 'conv-collab',
+        title: '从这个截图中取一下客源信息',
+        lastActivityAt: '2026-09-09T14:16:49.000Z',
+      },
+    ])
+    expect(view.items).toEqual([])
+  })
+
+  it('keeps a conversation that also produced review items for this departure', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([
+      {
+        conversationId: 'conv-mixed',
+        conversation: {
+          id: 'conv-mixed',
+          title: '本团客源和另开新团',
+          lastActivityAt: new Date('2026-09-10T02:00:00.000Z'),
+        },
+      },
+    ])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-here',
+        conversationId: 'conv-mixed',
+        targetKind: 'departure',
+        targetId: 'departure-1',
+        payloadSchema: 'source_order.create@v1',
+        confirmationUnit: 'source_order',
+        candidates: [],
+        baselineSnapshot: {},
+      },
+      {
+        ...pendingPackage,
+        id: 'pkg-create-draft',
+        conversationId: 'conv-mixed',
+        payloadSchema: 'departure.basic_info_draft@v1',
+        confirmationUnit: 'basic_info_draft',
+        targetKind: 'departure_creation_draft',
+        targetId: 'draft-1',
+        status: AiReviewPackageStatus.confirmed,
+        candidates: [],
+        baselineSnapshot: {},
+      },
+    ])
+    prisma.aiWorkflowJob.findMany.mockResolvedValue([])
+
+    const view = await service.listDepartureCollaboration(
+      organizationId,
+      userId,
+      'departure-1',
+    )
+
+    expect(view.conversations.map((entry: { id: string }) => entry.id)).toEqual(['conv-mixed'])
+    expect(view.items.map((item: { id: string }) => item.id)).toEqual(['pkg-here'])
+  })
+
   it('writes a confirmed segment resource without generating payable', async () => {
     const pkg = {
       ...pendingPackage,

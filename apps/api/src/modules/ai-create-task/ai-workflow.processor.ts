@@ -18,9 +18,11 @@ import {
   AiCollaborationError,
   capabilityGrantResolver,
   capabilitiesForPendingReview,
+  classifyDraftFields,
   requestContextSchema,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
+  type AiCreateDraftSnapshot,
   type HeadlessRegisteredIntentResult,
   type RequestContext,
   type VersionedDefinitionRef,
@@ -541,6 +543,7 @@ export class AiWorkflowProcessor {
       return
     }
 
+    let attemptId: string | undefined
     try {
       const routing = await this.resolveExecutionRoute(job)
       if (routing.route.kind !== 'execution_definition') {
@@ -569,6 +572,7 @@ export class AiWorkflowProcessor {
         executionRoute,
         routing.pageAttachment,
       )
+      attemptId = prepared.attemptId
       await this.liveOutput.supersede(job.conversationId, prepared.attemptId)
       this.workflowLog('agent_started', {
         job: job.id,
@@ -599,9 +603,6 @@ export class AiWorkflowProcessor {
               signal: abort.signal,
               onPublicText: (text) => {
                 flusher.push({ text })
-              },
-              onReasoningText: (reasoningText) => {
-                flusher.push({ reasoningText })
               },
             },
           )
@@ -638,7 +639,7 @@ export class AiWorkflowProcessor {
       const errorCode = workflowErrorCode(error)
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)
       if (isImmediateWorkflowFailure(errorCode) || !isTransientWorkflowError(error)) {
-        await this.persistFailure(job, errorCode)
+        await this.persistFailure(job, errorCode, undefined, attemptId)
         this.workflowLog('failed', {
           job: job.id,
           type: job.type,
@@ -647,7 +648,7 @@ export class AiWorkflowProcessor {
         })
         return
       }
-      await this.scheduleRetry(job, errorCode)
+      await this.scheduleRetry(job, errorCode, attemptId)
     }
   }
 
@@ -1035,6 +1036,11 @@ export class AiWorkflowProcessor {
         ? toFormalDepartureSnapshot(task.departure, expectedGuestCountHint)
         : draft.snapshot
       const businessObjectVersion = draft.version
+      const fieldCoverage = classifyDraftFields(
+        businessSnapshot && typeof businessSnapshot === 'object' && !Array.isArray(businessSnapshot)
+          ? (businessSnapshot as AiCreateDraftSnapshot)
+          : { mode: 'manual', routeName: '' },
+      )
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,
@@ -1064,6 +1070,7 @@ export class AiWorkflowProcessor {
           currentPhase: task.currentPhase,
           objectVersion: businessObjectVersion,
           snapshot: businessSnapshot,
+          fieldCoverage,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,
@@ -1090,6 +1097,7 @@ export class AiWorkflowProcessor {
           currentPhase: task.currentPhase,
           objectVersion: businessObjectVersion,
           snapshot: businessSnapshot,
+          fieldCoverage,
         },
         unresolvedState: {
           hasPendingReview: pendingReview != null,
@@ -2466,6 +2474,15 @@ export class AiWorkflowProcessor {
           },
         })
         await this.writeManifestUsage(tx, attemptId, result)
+      } else {
+        await tx.aiAgentAttempt.updateMany({
+          where: { jobId: job.id, status: AiAgentAttemptStatus.running },
+          data: {
+            status: AiAgentAttemptStatus.failed,
+            errorCode,
+            endedAt: new Date(),
+          },
+        })
       }
       await tx.aiWorkflowJob.update({
         where: { id: job.id },
@@ -2578,7 +2595,7 @@ export class AiWorkflowProcessor {
         })
         return
       }
-      await this.persistFailure(job, errorCode)
+      await this.persistFailure(job, errorCode, result, attemptId)
       this.workflowLog('failed', {
         job: job.id,
         type: job.type,

@@ -1182,6 +1182,15 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     cleanup()
   })
 
+  it('shows working mascot from agent_running without live 思考过程', async () => {
+    renderChat()
+    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('agent-working-indicator')).getByRole('status'),
+    ).toHaveTextContent('正在处理你的请求')
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+  })
+
   it('projects growing assistant text from SSE snapshots and replaces it with agent_message', async () => {
     renderChat()
     expect(lastEventSource).not.toBeNull()
@@ -1228,9 +1237,9 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
   })
 
-  it('shows a transient working mascot from the first reasoning token and hides it after durable agent_message', async () => {
+  it('shows a transient working mascot while agent_running and hides it after durable agent_message', async () => {
     renderChat()
-    expect(screen.queryByTestId('agent-working-indicator')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
 
     await act(async () => {
       lastEventSource?.onmessage?.(
@@ -1247,7 +1256,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
         }),
       )
     })
-    expect(await screen.findByTestId('agent-working-indicator')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-working-indicator')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Agent 正在工作' })).toHaveAttribute(
       'data-mascot-preset',
       'working',

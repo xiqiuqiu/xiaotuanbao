@@ -5,6 +5,7 @@ import {
   type AiReviewableBasicInfoField,
 } from '../tools/review-package'
 
+/** 出团日与结束日成对；确认时对齐区间，不再把未提交的结束日锁回 baseline。 */
 export const DATE_CONSISTENCY_GROUP: readonly AiReviewableBasicInfoField[] = [
   'startDate',
   'endDate',
@@ -49,17 +50,28 @@ function fieldsToGuard(
   submittedFields: AiReviewableBasicInfoField[],
 ): Set<AiReviewableBasicInfoField> {
   const guarded = new Set(submittedFields)
-  if (DATE_CONSISTENCY_GROUP.some((field) => guarded.has(field))) {
-    for (const field of DATE_CONSISTENCY_GROUP) {
-      guarded.add(field)
-    }
-  }
   if (ROUTE_CONSISTENCY_GROUP.some((field) => guarded.has(field))) {
     for (const field of ROUTE_CONSISTENCY_GROUP) {
       guarded.add(field)
     }
   }
   return guarded
+}
+
+function addIsoDateDays(dateStr: string, days: number): string {
+  const date = new Date(`${dateStr}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function alignEndDateToStart(snapshot: AiCreateDraftSnapshot): void {
+  const startDate = snapshot.startDate?.trim() || null
+  const endDate = snapshot.endDate?.trim() || null
+  if (!startDate) return
+  if (endDate && endDate >= startDate) return
+  const days = snapshot.defaultDayCount
+  snapshot.endDate =
+    typeof days === 'number' && days > 0 ? addIsoDateDays(startDate, days - 1) : startDate
 }
 
 function adoptingTemplateId(submissions: ReviewConfirmSubmission): string | null {
@@ -205,5 +217,6 @@ export function evaluateReviewConfirmMerge(args: {
     }
   }
 
+  alignEndDateToStart(nextSnapshot)
   return { status: 'ok', nextSnapshot }
 }

@@ -39,7 +39,7 @@ describe('evaluateReviewConfirmMerge', () => {
     })
   })
 
-  it('rejects when a candidate field or its date consistency group changed', () => {
+  it('rejects when a submitted candidate field changed in the draft', () => {
     const nameConflict = evaluateReviewConfirmMerge({
       baselineSnapshot: baseline,
       currentSnapshot: { ...baseline, name: '表单已改团名' },
@@ -49,15 +49,45 @@ describe('evaluateReviewConfirmMerge', () => {
       status: 'conflict',
       conflictFields: ['name'],
     })
+  })
 
-    const dateGroupConflict = evaluateReviewConfirmMerge({
+  it('keeps a user-edited endDate when only startDate is submitted', () => {
+    const result = evaluateReviewConfirmMerge({
       baselineSnapshot: baseline,
       currentSnapshot: { ...baseline, endDate: '2026-09-08' },
       submissions: { startDate: '2026-09-02' },
     })
-    expect(dateGroupConflict).toEqual({
-      status: 'conflict',
-      conflictFields: ['endDate'],
+    expect(result).toEqual({
+      status: 'ok',
+      nextSnapshot: {
+        ...baseline,
+        startDate: '2026-09-02',
+        endDate: '2026-09-08',
+      },
+    })
+  })
+
+  it('derives endDate when submitted startDate would invert the saved range', () => {
+    const result = evaluateReviewConfirmMerge({
+      baselineSnapshot: {
+        ...baseline,
+        startDate: '2026-09-10',
+        endDate: '2026-09-10',
+      },
+      currentSnapshot: {
+        ...baseline,
+        startDate: '2026-09-10',
+        endDate: '2026-09-10',
+      },
+      submissions: { startDate: '2026-09-20' },
+    })
+    expect(result).toEqual({
+      status: 'ok',
+      nextSnapshot: {
+        ...baseline,
+        startDate: '2026-09-20',
+        endDate: '2026-09-20',
+      },
     })
   })
 
@@ -250,6 +280,27 @@ describe('evaluateReviewConfirmMerge', () => {
         expectedGuestCountHint: 12,
       },
     })
+  })
+
+  it('does not restore an unsubmitted endDate back to the review baseline', () => {
+    const draft = {
+      ...baseline,
+      endDate: '2026-09-29',
+    }
+    expect(
+      preservePendingCandidateBaseline({
+        draft,
+        baselineSnapshot: baseline,
+        candidateFields: ['startDate'],
+      }),
+    ).toEqual(draft)
+    expect(
+      pendingCandidateSnapshotDrift({
+        draft,
+        baselineSnapshot: baseline,
+        candidateFields: ['startDate'],
+      }),
+    ).toBe(false)
   })
 
   it('writes explicit null submissions for dates and expectedGuestCountHint', () => {

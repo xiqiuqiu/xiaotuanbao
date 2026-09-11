@@ -13,9 +13,9 @@ export const REVIEW_ALREADY_HANDLED_MESSAGE = '审核包已处理'
 export const CONVERSATION_TITLE_MAX_CHARS = 40
 export const CONVERSATION_TEXT_MAX_CHARS = 100_000
 
-/** 确认后续跑喂给模型的本轮原文；不写入 User 消息气泡。 */
+/** 确认后续跑喂给模型的本轮原文；不写入 User 消息气泡。覆盖率未知时的兜底。 */
 export const REVIEW_CONFIRM_CONTINUATION_TEXT =
-  'User 已在中间表单确认上一轮审核建议。请调用 getTaskContext 读取最新草稿，简短说明已写入字段，只问一个当前阶段仍缺少的问题。不要再次提交已经写入草稿的字段。'
+  'User 已在中间表单确认上一轮审核建议。请调用 getTaskContext 读取最新草稿和 fieldCoverage，只根据 fieldCoverage 说明已写入与仍缺少的字段。不要把 fieldCoverage.filled 中的字段说成未填，也不要再次提交这些字段。fieldCoverage.missing 为空时不要编造缺口。'
 
 /** 冲突后由 User 显式触发的重新生成原文；不写入 User 消息气泡。 */
 export const REVIEW_REGENERATE_TEXT =
@@ -28,7 +28,7 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v4'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v10'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v11'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v10'
 /** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
 export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v7'

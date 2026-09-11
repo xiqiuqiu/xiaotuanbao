@@ -392,6 +392,43 @@ describe('CreateDepartureStepInfo', () => {
     ).toBeInTheDocument()
   })
 
+  it('待确认出团日后改结束日，天数按屏幕上的出团日重算而不是已保存草稿', async () => {
+    const user = userEvent.setup()
+    const savedToday = {
+      ...initialValues,
+      startDate: '2026-09-10',
+      endDate: '2026-09-10',
+      dayCount: 1,
+    }
+    const pendingReview = reviewWithCandidates(
+      [
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-20',
+          clarity: 'needs_confirmation',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '发团日期是9月20号' }],
+        },
+      ],
+      savedToday,
+    )
+
+    renderStep(savedToday, { mode: 'manual', routeName: '' }, { pendingReview, onCorrectCandidate: vi.fn() })
+
+    expect(await screen.findByLabelText('出团日期候选')).toHaveValue('2026-09-20')
+    await waitFor(() => {
+      expect(screen.getByText(/已保存：/)).toBeInTheDocument()
+      expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-20')
+      expect(screen.getByLabelText('天数')).toHaveValue('1')
+    })
+
+    await user.click(screen.getByLabelText('结束日期'))
+    await user.click(await screen.findByTitle('2026-09-29'))
+
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-29')
+    expect(screen.getByLabelText('天数')).toHaveValue('10')
+  })
+
   it('结束日期早于出团日期时给出字段级错误', async () => {
     const form = renderStep({
       ...initialValues,
