@@ -359,6 +359,24 @@ describe('DepartureFinanceGenerationService payable initial_only / preview', () 
     expect(create).not.toHaveBeenCalled()
   })
 
+  it('ordinary generate prefers closed gate over already-submitted when archived', async () => {
+    tx.paymentSchedule.findMany.mockResolvedValue([
+      { id: 'sch-existing', amountCents: 880_000, cancelledAt: null, voidedAt: null },
+    ])
+    assertAllowsNewObligation.mockImplementation(() => {
+      throw new ConflictException('发团已关闭，不可提交应付')
+    })
+    await expect(
+      service.generateResourcePayable(
+        'org-1',
+        { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+        assertAllowsNewObligation,
+        { client: tx as never },
+      ),
+    ).rejects.toThrow('发团已关闭，不可提交应付')
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('refuses cancelled history under initial_only without recreating', async () => {
     tx.paymentSchedule.findMany.mockResolvedValue([
       {

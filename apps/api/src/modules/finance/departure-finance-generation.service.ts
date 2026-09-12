@@ -532,7 +532,12 @@ export class DepartureFinanceGenerationService {
       if (classification.status === 'anomaly') {
         throw new ConflictException(classification.message)
       }
+      // Ready path: gate closed/settled only when minting a new obligation.
+      assertAllowsNewObligation(departure, '提交应付')
     } else {
+      // Ordinary HTTP generate: same ordering as receivables — closed gate before
+      // "already submitted", so archived write matrix surfaces 发团已关闭.
+      assertAllowsNewObligation(departure, '提交应付')
       if (spec.amountCents <= 0) {
         throw new BadRequestException('资源金额须大于 0 才能提交应付')
       }
@@ -540,10 +545,6 @@ export class DepartureFinanceGenerationService {
         throw new ConflictException('当前资源已提交应付，不能再次提交')
       }
     }
-
-    // Only gate closed/settled when minting a new obligation; not_needed /
-    // already_present must still confirm after departure close/settle.
-    assertAllowsNewObligation(departure, '提交应付')
 
     const createdSchedule = await this.paymentScheduleService.create(
       organizationId,
