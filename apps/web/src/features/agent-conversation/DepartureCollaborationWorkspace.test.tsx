@@ -200,7 +200,7 @@ it('keeps the object rail stable after a package is confirmed', async () => {
   )
   expect(screen.getByRole('complementary', { name: '业务对象' })).toBe(rail)
   expect(
-    await within(screen.getByRole('region', { name: '事项与审核' })).findByText('审核记录'),
+    await within(screen.getByRole('region', { name: '事项与审核' })).findByText('审核时确认'),
   ).toBeInTheDocument()
 })
 
@@ -326,6 +326,49 @@ it('offers payable follow-up only for successful resources without a payable rev
   const panel = screen.getByRole('tabpanel')
   expect(within(panel).getByText('继续提交应付候选 关西交通')).toBeVisible()
   expect(within(panel).queryByText(/4月2日住宿/)).not.toBeInTheDocument()
+})
+
+it('distinguishes confirmed receipt values from later formal edits and opens the record', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      {
+        ...item('source-1', source, 'confirmed'),
+        confirmationUnit: 'source_order_create',
+        candidates: [
+          { fieldKey: 'displayName', proposedValue: '华东旅行社', evidence: [] },
+          { fieldKey: 'adultGuestCount', proposedValue: 10, evidence: [] },
+        ],
+      },
+    ],
+    confirmations: [
+      {
+        decisionCommandId: 'receipt:source-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'source-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'source_order', objectId: 'so-9' },
+            submittedValues: { displayName: '华东旅行社', adultGuestCount: 10 },
+            currentFormalValues: { displayName: '华东旅行社（已改名）', adultGuestCount: 12 },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  expect(await screen.findByRole('region', { name: '审核时的确认内容' })).toBeVisible()
+  expect(screen.getByText('审核时确认')).toBeVisible()
+  expect(screen.getAllByText('当前正式记录').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('华东旅行社').length).toBeGreaterThan(0)
+  expect(screen.getByText('华东旅行社（已改名）')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: '查看客源单' }))
+  expect(navigate).toHaveBeenCalledWith({
+    to: '/departure/$departureId',
+    params: { departureId: 'dep-1' },
+    search: { tab: 'sourceOrders', highlightSourceOrderId: 'so-9' },
+  })
 })
 
 it('opens a confirmed departure resource from the execution tab highlight', async () => {

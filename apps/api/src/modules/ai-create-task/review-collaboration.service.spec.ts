@@ -231,6 +231,9 @@ describe('ReviewCollaborationService #447', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      sourceOrder: { findMany: jest.fn().mockResolvedValue([]) },
+      segmentResource: { findMany: jest.fn().mockResolvedValue([]) },
+      departureResource: { findMany: jest.fn().mockResolvedValue([]) },
     }
     const tasks = {
       confirmDepartureReviewPackage: jest.fn(),
@@ -846,6 +849,179 @@ describe('ReviewCollaborationService #447', () => {
       { id: 'pkg-1', status: 'pending' },
       { id: 'pkg-done', status: 'confirmed' },
     ])
+  })
+
+  it('restores confirmed receipts from persisted records, not pending packages', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([
+      {
+        conversationId: 'conv-1',
+        conversation: {
+          id: 'conv-1',
+          title: '发团协作',
+          lastActivityAt: new Date('2026-09-07T00:00:00.000Z'),
+        },
+      },
+    ])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-done',
+        status: AiReviewPackageStatus.confirmed,
+        payloadSchema: 'source_order.create@v1',
+        confirmationUnit: 'source_order_create',
+        itemIdentity: 'item:1',
+        candidates: [
+          { fieldKey: 'displayName', proposedValue: '华东旅行社', clarity: 'clear', status: 'confirmed', evidence: [] },
+          { fieldKey: 'adultGuestCount', proposedValue: 10, clarity: 'clear', status: 'confirmed', evidence: [] },
+        ],
+      },
+    ])
+    prisma.aiWorkflowJob.findMany.mockResolvedValue([])
+    prisma.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        packageId: 'pkg-done',
+        action: 'confirm',
+        writeResult: 'success',
+        submittedValues: { displayName: '华东旅行社', adultGuestCount: 10 },
+        afterSnapshot: { objectKind: 'source_order', objectId: 'so-1' },
+        createdAt: new Date('2026-09-07T01:00:00.000Z'),
+      },
+    ])
+    prisma.sourceOrder.findMany.mockResolvedValue([
+      { id: 'so-1', displayName: '华东旅行社（已改名）', adultGuestCount: 12 },
+    ])
+
+    const view = await service.listDepartureCollaboration(
+      organizationId,
+      userId,
+      'departure-1',
+    )
+
+    expect(view.confirmations).toEqual([
+      expect.objectContaining({
+        decisionCommandId: 'receipt:pkg-done',
+        accepted: true,
+        items: [
+          expect.objectContaining({
+            packageId: 'pkg-done',
+            status: 'succeeded',
+            resultRef: { objectKind: 'source_order', objectId: 'so-1' },
+            submittedValues: { displayName: '华东旅行社', adultGuestCount: 10 },
+            currentFormalValues: { displayName: '华东旅行社（已改名）', adultGuestCount: 12 },
+          }),
+        ],
+      }),
+    ])
+  })
+
+  it('keeps archived conversation results and hides another user private history', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockImplementation(
+      ({
+        where,
+      }: {
+        where: { conversation?: { creatorUserId?: string } }
+      }) => {
+        expect(where.conversation?.creatorUserId).toBe(userId)
+        return Promise.resolve([
+          {
+            conversationId: 'conv-archived',
+            conversation: {
+              id: 'conv-archived',
+              title: '已归档协作',
+              status: 'archived',
+              lastActivityAt: new Date('2026-09-07T00:00:00.000Z'),
+            },
+          },
+        ])
+      },
+    )
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-archived',
+        conversationId: 'conv-archived',
+        status: AiReviewPackageStatus.confirmed,
+        payloadSchema: 'departure.segment_resource@v1',
+        confirmationUnit: 'segment_resource',
+        itemIdentity: 'item:9',
+        candidates: [
+          { fieldKey: 'title', proposedValue: '希尔顿', clarity: 'clear', status: 'confirmed', evidence: [] },
+          { fieldKey: 'amountCents', proposedValue: 128000, clarity: 'clear', status: 'confirmed', evidence: [] },
+        ],
+      },
+    ])
+    prisma.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        packageId: 'pkg-archived',
+        action: 'confirm',
+        writeResult: 'success',
+        submittedValues: { title: '希尔顿', amountCents: 128000 },
+        afterSnapshot: { objectKind: 'segment_resource', objectId: 'res-1' },
+        createdAt: new Date('2026-09-07T02:00:00.000Z'),
+      },
+    ])
+    prisma.segmentResource.findMany.mockResolvedValue([
+      { id: 'res-1', title: '希尔顿（加早）', amountCents: 138000 },
+    ])
+
+    const view = await service.listDepartureCollaboration(organizationId, userId, 'departure-1')
+
+    expect(view.conversations.map((entry: { id: string }) => entry.id)).toEqual(['conv-archived'])
+    expect(view.items.map((item: { id: string }) => item.id)).toEqual(['pkg-archived'])
+    expect(view.confirmations[0]?.items[0]).toEqual(
+      expect.objectContaining({
+        packageId: 'pkg-archived',
+        submittedValues: { title: '希尔顿', amountCents: 128000 },
+        currentFormalValues: { title: '希尔顿（加早）', amountCents: 138000 },
+      }),
+    )
+  })
+
+  it('restores a failed disposition from persisted records without inventing submitted values', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([
+      {
+        conversationId: 'conv-1',
+        conversation: {
+          id: 'conv-1',
+          title: '发团协作',
+          lastActivityAt: new Date('2026-09-07T00:00:00.000Z'),
+        },
+      },
+    ])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-failed',
+        status: AiReviewPackageStatus.rejected,
+        payloadSchema: 'departure.segment_resource@v1',
+        confirmationUnit: 'segment_resource',
+        itemIdentity: 'item:3',
+        candidates: [
+          { fieldKey: 'title', proposedValue: '希尔顿', clarity: 'clear', status: 'rejected', evidence: [] },
+        ],
+      },
+    ])
+    prisma.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        packageId: 'pkg-failed',
+        action: 'reject',
+        writeResult: 'rejected',
+        submittedValues: {},
+        afterSnapshot: null,
+        createdAt: new Date('2026-09-07T03:00:00.000Z'),
+      },
+    ])
+
+    const view = await service.listDepartureCollaboration(organizationId, userId, 'departure-1')
+
+    expect(view.confirmations[0]?.items[0]).toMatchObject({
+      packageId: 'pkg-failed',
+      status: 'failed',
+    })
+    expect(view.confirmations[0]?.items[0]?.submittedValues).toBeUndefined()
   })
 
   it('omits a creation conversation that only inherited this departure page locator', async () => {
