@@ -43,6 +43,22 @@ describe('Finance journeys (cross-module e2e)', () => {
   let supplierId: string
   const testPrefix = `e2e-fin-jny-${Date.now()}`
 
+  /** Calendar date offset from today (UTC), avoids fixtures aging into OVERDUE. */
+  function daysFromNow(n: number): string {
+    const d = new Date()
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+
+  // 10-day trip / 5-day segment mirrors the former Aug 1–10 / Aug 1–5 fixtures.
+  const tripStart = daysFromNow(30)
+  const tripEnd = daysFromNow(39)
+  const segmentEnd = daysFromNow(34)
+  const futureDueDate = daysFromNow(45)
+  const pastDueDate = daysFromNow(-90)
+  const copyTripStart = daysFromNow(60)
+  const copyTripEnd = daysFromNow(69)
+
   beforeAll(async () => {
     app = await createTestApp()
     prisma = new PrismaClient()
@@ -184,8 +200,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({
         name: `${testPrefix}-${suffix}`,
         routeName: '跨模块路线',
-        startDate: '2026-08-01',
-        endDate: '2026-08-10',
+        startDate: tripStart,
+        endDate: tripEnd,
         ownerUserId,
       })
       .expect(201)
@@ -212,8 +228,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departureId}/segments`)
       .send({
         name: '喀纳斯段',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
+        startDate: tripStart,
+        endDate: segmentEnd,
         destination: '喀纳斯',
       })
       .expect(201)
@@ -482,8 +498,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departure.id}/segments`)
       .send({
         name: '撤销履历段',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
+        startDate: tripStart,
+        endDate: segmentEnd,
         destination: '喀纳斯',
       })
       .expect(201)
@@ -672,7 +688,7 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const blockedPayableDueDate = await authRequest(app, financeToken)
       .patch(`/api/finance/payables/${payableScheduleId}`)
-      .send({ dueDate: '2026-09-01' })
+      .send({ dueDate: futureDueDate })
       .expect(400)
     expect(blockedPayableDueDate.body.message).toBe('财务已介入的节点不可修改到期日')
 
@@ -911,8 +927,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({
         name: `${testPrefix}-模板团`,
         routeName: `${testPrefix}-模板线`,
-        startDate: '2026-08-01',
-        endDate: '2026-08-10',
+        startDate: tripStart,
+        endDate: tripEnd,
         ownerUserId,
         templateId: template.body.data.id,
       })
@@ -1349,8 +1365,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departure.id}/segments`)
       .send({
         name: '结构化关闭段',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
+        startDate: tripStart,
+        endDate: segmentEnd,
         destination: '喀纳斯',
       })
       .expect(201)
@@ -1502,7 +1518,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         departureId: departure.id,
         title: '已结清不可关闭',
         amountCents: 100_000,
-        dueDate: '2026-08-20',
+        dueDate: futureDueDate,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.body.data.displayName,
       })
@@ -1661,8 +1677,8 @@ describe('Finance journeys (cross-module e2e)', () => {
         .post(`/api/departures/${departure.id}/segments`)
         .send({
           name: '不应新增段',
-          startDate: '2026-08-01',
-          endDate: '2026-08-02',
+          startDate: tripStart,
+          endDate: tripStart,
           destination: '测试',
         }),
       '编辑',
@@ -1687,7 +1703,7 @@ describe('Finance journeys (cross-module e2e)', () => {
           departureId: departure.id,
           title: '归档期不应创建',
           amountCents: 1000,
-          dueDate: '2026-08-20',
+          dueDate: futureDueDate,
           counterpartyType: CounterpartyType.guest,
           counterpartyName: ops.displayName,
         }),
@@ -1849,7 +1865,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         departureId: departure.id,
         title: '解档后可创建节点',
         amountCents: 1000,
-        dueDate: '2026-08-20',
+        dueDate: futureDueDate,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: ops.displayName,
       })
@@ -1907,8 +1923,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${source.id}/copy`)
       .send({
         name: `${testPrefix}-copy-dst`,
-        startDate: '2026-09-01',
-        endDate: '2026-09-10',
+        startDate: copyTripStart,
+        endDate: copyTripEnd,
         ownerUserId,
       })
       .expect(201)
@@ -1920,7 +1936,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(copiedDetail.body.data).toMatchObject({
       sourceOrderCount: 0,
-      // Copied 5-day segment + fill_missing for Sep 6–10.
+      // Copied 5-day segment + fill_missing for the remaining copy-trip days.
       segmentCount: 6,
       resourceCount: 1,
       verifiedReceivableCents: 0,
@@ -2130,7 +2146,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         departureId: departure.id,
         title: '未关闭不可重新打开',
         amountCents: 50_000,
-        dueDate: '2026-08-20',
+        dueDate: futureDueDate,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.body.data.displayName,
       })
@@ -2257,7 +2273,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         departureId: departure.id,
         title: '逾期恢复探针',
         amountCents: 120_000,
-        dueDate: '2026-06-01',
+        dueDate: pastDueDate,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.body.data.displayName,
       })
@@ -2627,8 +2643,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departure.id}/segments`)
       .send({
         name: '显式调整段',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
+        startDate: tripStart,
+        endDate: segmentEnd,
         destination: '喀纳斯',
       })
       .expect(201)
@@ -2840,8 +2856,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${archiveDeparture.id}/segments`)
       .send({
         name: '归档调整段',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
+        startDate: tripStart,
+        endDate: segmentEnd,
         destination: '喀纳斯',
       })
       .expect(201)
