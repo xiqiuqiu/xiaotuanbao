@@ -1953,8 +1953,16 @@ describe('ReviewCollaborationService #447', () => {
           resourceKind: 'hotel',
           supplierId: 'sup-1',
           partnerId: null,
-          segment: { departure: { id: 'departure-1' } },
-          departure: { id: 'departure-1' },
+          segment: {
+            departure: {
+              id: 'departure-1',
+              endDate: new Date('2026-04-08T00:00:00.000Z'),
+            },
+          },
+          departure: {
+            id: 'departure-1',
+            endDate: new Date('2026-04-08T00:00:00.000Z'),
+          },
         },
         spec: {
           title: params.sourceId === 'res-1' ? '4月2日住宿' : '全程包车',
@@ -2008,6 +2016,7 @@ describe('ReviewCollaborationService #447', () => {
         partnerId: null,
         resourceKind: 'hotel',
         title: '4月2日住宿',
+        endDate: '2026-04-08',
       },
     }
     const { service, prisma, tx, segmentResources, generation } = createService({
@@ -2019,7 +2028,12 @@ describe('ReviewCollaborationService #447', () => {
         resourceKind: 'hotel',
         supplierId: 'sup-1',
         partnerId: null,
-        segment: { departure: { id: 'departure-1' } },
+        segment: {
+          departure: {
+            id: 'departure-1',
+            endDate: new Date('2026-04-08T00:00:00.000Z'),
+          },
+        },
       },
       spec: { title: '4月2日住宿', amountCents: 880_000, counterpartyName: '关西酒店' },
       classification: { status: 'ready', amountCents: 880_000 },
@@ -2097,5 +2111,400 @@ describe('ReviewCollaborationService #447', () => {
         items: [{ packageId: 'pkg-1', expectedPackageVersion: 1 }],
       }),
     ).rejects.toThrow('无权确认该事项')
+  })
+
+  it('locks the resource before payable preview on confirm', async () => {
+    const payablePackage = {
+      ...pendingPackage,
+      id: 'pkg-payable',
+      payloadSchema: 'resource.payable@v1',
+      confirmationUnit: 'resource_payable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式资源当前约定应付' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceType: 'segment_resource',
+        sourceId: 'res-1',
+        amountCents: 880_000,
+        supplierId: 'sup-1',
+        partnerId: null,
+        resourceKind: 'hotel',
+        title: '4月2日住宿',
+        endDate: '2026-04-08',
+      },
+    }
+    const { service, prisma, tx, generation } = createService({ packages: [payablePackage] })
+    generation.previewInitialPayable.mockResolvedValue({
+      resourceKind: 'segment',
+      resource: {
+        resourceKind: 'hotel',
+        supplierId: 'sup-1',
+        partnerId: null,
+        segment: {
+          departure: { id: 'departure-1', endDate: new Date('2026-04-08T00:00:00.000Z') },
+        },
+      },
+      spec: { title: '4月2日住宿', amountCents: 880_000, counterpartyName: '关西酒店' },
+      classification: { status: 'ready', amountCents: 880_000 },
+    })
+    generation.generateResourcePayable.mockResolvedValue({
+      schedule: { id: 'sch-1' },
+      generation: 'created',
+      resourceKind: 'segment',
+      resource: { id: 'res-1' },
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: payablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-payable',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(payablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    const lockCallOrder = tx.$queryRaw.mock.invocationCallOrder.find(
+      (_order: number, index: number) => {
+        const sql = sqlTextFromQueryRaw(tx.$queryRaw.mock.calls[index]?.[0])
+        return /segment_resources/i.test(sql) && /FOR UPDATE/i.test(sql)
+      },
+    )
+    expect(lockCallOrder).toBeDefined()
+    expect(lockCallOrder).toBeLessThan(
+      generation.previewInitialPayable.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('refuses payable confirm when live amount diverges from the review baseline', async () => {
+    const payablePackage = {
+      ...pendingPackage,
+      id: 'pkg-payable',
+      payloadSchema: 'resource.payable@v1',
+      confirmationUnit: 'resource_payable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式资源当前约定应付' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceType: 'segment_resource',
+        sourceId: 'res-1',
+        amountCents: 880_000,
+        supplierId: 'sup-1',
+        partnerId: null,
+        resourceKind: 'hotel',
+        title: '4月2日住宿',
+        endDate: '2026-04-08',
+      },
+    }
+    const { service, prisma, tx, generation } = createService({ packages: [payablePackage] })
+    generation.previewInitialPayable.mockResolvedValue({
+      resourceKind: 'segment',
+      resource: {
+        resourceKind: 'hotel',
+        supplierId: 'sup-1',
+        partnerId: null,
+        segment: {
+          departure: { id: 'departure-1', endDate: new Date('2026-04-08T00:00:00.000Z') },
+        },
+      },
+      spec: { title: '4月2日住宿', amountCents: 990_000, counterpartyName: '关西酒店' },
+      classification: { status: 'ready', amountCents: 990_000 },
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: payablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(payablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateResourcePayable).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '正式来源或已有账款已变化，请刷新后重试',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('refuses payable confirm when departure endDate diverges from the review baseline', async () => {
+    const payablePackage = {
+      ...pendingPackage,
+      id: 'pkg-payable',
+      payloadSchema: 'resource.payable@v1',
+      confirmationUnit: 'resource_payable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式资源当前约定应付' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceType: 'segment_resource',
+        sourceId: 'res-1',
+        amountCents: 880_000,
+        supplierId: 'sup-1',
+        partnerId: null,
+        resourceKind: 'hotel',
+        title: '4月2日住宿',
+        endDate: '2026-04-08',
+      },
+    }
+    const { service, prisma, tx, generation } = createService({ packages: [payablePackage] })
+    generation.previewInitialPayable.mockResolvedValue({
+      resourceKind: 'segment',
+      resource: {
+        resourceKind: 'hotel',
+        supplierId: 'sup-1',
+        partnerId: null,
+        segment: {
+          departure: { id: 'departure-1', endDate: new Date('2026-04-10T00:00:00.000Z') },
+        },
+      },
+      spec: { title: '4月2日住宿', amountCents: 880_000, counterpartyName: '关西酒店' },
+      classification: { status: 'ready', amountCents: 880_000 },
+    })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: payablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(payablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(generation.generateResourcePayable).not.toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '正式来源或已有账款已变化，请刷新后重试',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it.each([
+    ['no_positive_amount', 'not_needed'],
+    ['complete_and_consistent', 'already_present'],
+  ] as const)(
+    'allows payable confirm of %s on a closed departure without minting',
+    async (historyStatus, generationResult) => {
+      const payablePackage = {
+        ...pendingPackage,
+        id: 'pkg-payable',
+        payloadSchema: 'resource.payable@v1',
+        confirmationUnit: 'resource_payable',
+        candidates: [
+          {
+            fieldKey: 'historyStatus',
+            proposedValue: historyStatus,
+            clarity: 'clear',
+            status: 'pending',
+            evidence: [{ kind: 'system_derivation', rule: '正式资源当前约定应付' }],
+          },
+        ],
+        baselineSnapshot: {
+          sourceType: 'segment_resource',
+          sourceId: 'res-1',
+          amountCents: historyStatus === 'no_positive_amount' ? 0 : 880_000,
+          supplierId: 'sup-1',
+          partnerId: null,
+          resourceKind: 'hotel',
+          title: '4月2日住宿',
+          endDate: '2026-04-08',
+        },
+      }
+      const { service, prisma, tx, generation, finance } = createService({
+        packages: [payablePackage],
+      })
+      tx.departure.findFirst.mockResolvedValue({
+        id: 'departure-1',
+        updatedAt: new Date(pendingPackage.baseObjectVersion),
+        status: 'closed',
+      })
+      finance.assertAllowsNewObligation.mockImplementation(() => {
+        throw new ConflictException('发团已关闭，不可提交应付')
+      })
+      generation.previewInitialPayable.mockResolvedValue({
+        resourceKind: 'segment',
+        resource: {
+          resourceKind: 'hotel',
+          supplierId: 'sup-1',
+          partnerId: null,
+          segment: {
+            departure: { id: 'departure-1', endDate: new Date('2026-04-08T00:00:00.000Z') },
+          },
+        },
+        spec: {
+          title: '4月2日住宿',
+          amountCents: historyStatus === 'no_positive_amount' ? 0 : 880_000,
+          counterpartyName: '关西酒店',
+        },
+        classification:
+          historyStatus === 'no_positive_amount'
+            ? { status: 'no_positive_amount', message: '金额须大于 0' }
+            : { status: 'complete_and_consistent', scheduleIds: ['sch-existing'] },
+      })
+      generation.generateResourcePayable.mockResolvedValue({
+        generation: generationResult,
+        existingScheduleIds:
+          generationResult === 'already_present' ? ['sch-existing'] : undefined,
+        resourceKind: 'segment',
+        resource: { id: 'res-1' },
+      })
+      prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+        id: 'job-1',
+        type: AiWorkflowJobType.review_confirm,
+        organizationId,
+        reviewPackage: payablePackage,
+        idempotencyRecord: {
+          operatorUserId: userId,
+          requestSnapshot: { expectedPackageVersion: 1 },
+        },
+        idempotencyRecordId: 'idem-item-1',
+      })
+      tx.aiReviewPackage.findFirst.mockResolvedValue(payablePackage)
+
+      await service.executeConfirmedItem('job-1')
+
+      expect(generation.generateResourcePayable).toHaveBeenCalled()
+      expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            resultJson: expect.objectContaining({
+              status: 'succeeded',
+              resultRef: expect.objectContaining({ generation: generationResult }),
+            }),
+          }),
+        }),
+      )
+    },
+  )
+
+  it('refuses ready payable confirm when the departure is closed', async () => {
+    const payablePackage = {
+      ...pendingPackage,
+      id: 'pkg-payable',
+      payloadSchema: 'resource.payable@v1',
+      confirmationUnit: 'resource_payable',
+      candidates: [
+        {
+          fieldKey: 'historyStatus',
+          proposedValue: 'ready',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: '正式资源当前约定应付' }],
+        },
+      ],
+      baselineSnapshot: {
+        sourceType: 'segment_resource',
+        sourceId: 'res-1',
+        amountCents: 880_000,
+        supplierId: 'sup-1',
+        partnerId: null,
+        resourceKind: 'hotel',
+        title: '4月2日住宿',
+        endDate: '2026-04-08',
+      },
+    }
+    const { service, prisma, tx, generation, finance } = createService({
+      packages: [payablePackage],
+    })
+    tx.departure.findFirst.mockResolvedValue({
+      id: 'departure-1',
+      updatedAt: new Date(pendingPackage.baseObjectVersion),
+      status: 'closed',
+    })
+    finance.assertAllowsNewObligation.mockImplementation(() => {
+      throw new ConflictException('发团已关闭，不可提交应付')
+    })
+    generation.previewInitialPayable.mockResolvedValue({
+      resourceKind: 'segment',
+      resource: {
+        resourceKind: 'hotel',
+        supplierId: 'sup-1',
+        partnerId: null,
+        segment: {
+          departure: { id: 'departure-1', endDate: new Date('2026-04-08T00:00:00.000Z') },
+        },
+      },
+      spec: { title: '4月2日住宿', amountCents: 880_000, counterpartyName: '关西酒店' },
+      classification: { status: 'ready', amountCents: 880_000 },
+    })
+    generation.generateResourcePayable.mockImplementation(
+      async (
+        _org: string,
+        _params: unknown,
+        assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
+      ) => {
+        assertAllowsNewObligation({ status: 'closed' }, '提交应付')
+        return { schedule: { id: 'sch-1' }, generation: 'created' }
+      },
+    )
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: payablePackage,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+    tx.aiReviewPackage.findFirst.mockResolvedValue(payablePackage)
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'conflict',
+            reason: '发团已关闭，不可提交应付',
+          }),
+        }),
+      }),
+    )
   })
 })

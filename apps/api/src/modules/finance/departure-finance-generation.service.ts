@@ -500,7 +500,6 @@ export class DepartureFinanceGenerationService {
       loaded.resourceKind === 'segment'
         ? loaded.resource.segment.departure
         : loaded.resource.departure
-    assertAllowsNewObligation(departure, '提交应付')
 
     const existingSchedules = await this.findPayableSchedules(
       organizationId,
@@ -541,6 +540,10 @@ export class DepartureFinanceGenerationService {
         throw new ConflictException('当前资源已提交应付，不能再次提交')
       }
     }
+
+    // Only gate closed/settled when minting a new obligation; not_needed /
+    // already_present must still confirm after departure close/settle.
+    assertAllowsNewObligation(departure, '提交应付')
 
     const createdSchedule = await this.paymentScheduleService.create(
       organizationId,

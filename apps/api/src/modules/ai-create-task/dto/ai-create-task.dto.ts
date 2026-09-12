@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
@@ -353,6 +354,7 @@ export class PrepareResourcePayableReviewDto {
 
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(50)
   @ArrayUnique((item: PrepareResourcePayableReviewItemDto) => `${item.sourceType}:${item.sourceId}`)
   @ValidateNested({ each: true })
   @Type(() => PrepareResourcePayableReviewItemDto)

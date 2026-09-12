@@ -312,6 +312,7 @@ describe('DepartureFinanceGenerationService payable initial_only / preview', () 
       assertAllowsNewObligation,
       { client: tx as never, strategy: 'initial_only' },
     )
+    expect(assertAllowsNewObligation).not.toHaveBeenCalled()
     expect(create).not.toHaveBeenCalled()
     expect(result).toEqual(
       expect.objectContaining({
@@ -319,6 +320,43 @@ describe('DepartureFinanceGenerationService payable initial_only / preview', () 
         existingScheduleIds: ['sch-existing'],
       }),
     )
+  })
+
+  it('returns not_needed without asserting closed/settled when amount is non-positive', async () => {
+    Object.assign(service, {
+      loadSegmentResourceOrThrow: jest.fn().mockResolvedValue({
+        ...resource,
+        amountCents: 0,
+        segment: {
+          ...resource.segment,
+          departure: { ...resource.segment.departure, status: 'closed' },
+        },
+      }),
+    })
+    const result = await service.generateResourcePayable(
+      'org-1',
+      { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+      assertAllowsNewObligation,
+      { client: tx as never, strategy: 'initial_only' },
+    )
+    expect(assertAllowsNewObligation).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(result.generation).toBe('not_needed')
+  })
+
+  it('refuses creating a ready payable when the departure forbids new obligations', async () => {
+    assertAllowsNewObligation.mockImplementation(() => {
+      throw new ConflictException('发团已关闭，不可提交应付')
+    })
+    await expect(
+      service.generateResourcePayable(
+        'org-1',
+        { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: 'res-1' },
+        assertAllowsNewObligation,
+        { client: tx as never, strategy: 'initial_only' },
+      ),
+    ).rejects.toThrow('发团已关闭，不可提交应付')
+    expect(create).not.toHaveBeenCalled()
   })
 
   it('refuses cancelled history under initial_only without recreating', async () => {

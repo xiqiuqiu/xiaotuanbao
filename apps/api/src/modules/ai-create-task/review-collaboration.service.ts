@@ -38,6 +38,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { DepartureResourceService } from '../departure/departure-resource.service'
+import { formatDateOnly } from '../departure/departure-date.utils'
 import { SegmentResourceService } from '../departure/segment-resource.service'
 import { SourceOrderService } from '../departure/source-order.service'
 import { AuthService } from '../auth/auth.service'
@@ -427,6 +428,10 @@ export class ReviewCollaborationService {
       classification: preview.classification,
     })
     const stored = toStoredCandidates(candidates)
+    const endDate =
+      preview.resourceKind === 'segment'
+        ? formatDateOnly(preview.resource.segment.departure.endDate)
+        : formatDateOnly(preview.resource.departure.endDate)
     const baselineSnapshot = {
       sourceType: params.sourceType,
       sourceId: params.sourceId,
@@ -435,6 +440,8 @@ export class ReviewCollaborationService {
       partnerId: preview.resource.partnerId,
       resourceKind: preview.resource.resourceKind,
       title: preview.spec.title,
+      // Payable dueDate is derived from departure.endDate at generation time.
+      endDate,
     }
     const departure = await tx.departure.findFirstOrThrow({
       where: { id: params.departureId, organizationId: params.organizationId },
@@ -1014,7 +1021,8 @@ export class ReviewCollaborationService {
         // 应收确认有意不卡发团 updatedAt：无关字段变更应放行。关闭/结清仍须当场拒绝。
         this.finance.assertAllowsNewObligation(departure, '提交应收')
       } else if (current.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) {
-        this.finance.assertAllowsNewObligation(departure, '提交应付')
+        // 应付：关闭/结清门禁推迟到真正新建义务时（generateResourcePayable）。
+        // no_positive_amount / already_present 在已关闭发团上仍应可确认。
       } else if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
         throw new ConflictException('发团已变化，请刷新后重试')
       }
@@ -1534,6 +1542,7 @@ function payableConventionFromBaseline(raw: unknown): {
   partnerId: string | null
   resourceKind: string
   title: string
+  endDate: string
 } | null {
   const source = payableSourceFromBaseline(raw)
   if (!source || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -1543,7 +1552,8 @@ function payableConventionFromBaseline(raw: unknown): {
   if (
     typeof snapshot.amountCents !== 'number' ||
     typeof snapshot.resourceKind !== 'string' ||
-    typeof snapshot.title !== 'string'
+    typeof snapshot.title !== 'string' ||
+    typeof snapshot.endDate !== 'string'
   ) {
     return null
   }
@@ -1554,26 +1564,35 @@ function payableConventionFromBaseline(raw: unknown): {
     partnerId: typeof snapshot.partnerId === 'string' ? snapshot.partnerId : null,
     resourceKind: snapshot.resourceKind,
     title: snapshot.title,
+    endDate: snapshot.endDate,
   }
 }
 
 function payableConventionChanged(
   baseline: NonNullable<ReturnType<typeof payableConventionFromBaseline>>,
   preview: {
+    resourceKind: 'segment' | 'departure' | string
     resource: {
       supplierId: string | null
       partnerId: string | null
       resourceKind: string
+      segment?: { departure: { endDate: Date } }
+      departure?: { endDate: Date }
     }
     spec: { amountCents: number; title: string }
   },
 ): boolean {
+  const liveEndDate =
+    preview.resourceKind === 'segment'
+      ? formatDateOnly(preview.resource.segment!.departure.endDate)
+      : formatDateOnly(preview.resource.departure!.endDate)
   return (
     baseline.amountCents !== preview.spec.amountCents ||
     baseline.title !== preview.spec.title ||
     baseline.resourceKind !== preview.resource.resourceKind ||
     baseline.supplierId !== (preview.resource.supplierId ?? null) ||
-    baseline.partnerId !== (preview.resource.partnerId ?? null)
+    baseline.partnerId !== (preview.resource.partnerId ?? null) ||
+    baseline.endDate !== liveEndDate
   )
 }
 
