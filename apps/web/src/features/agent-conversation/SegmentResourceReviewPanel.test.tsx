@@ -408,10 +408,8 @@ describe('SegmentResourceReviewPanel #449', () => {
     })
     renderPanel()
 
-    expect(await screen.findByText('资源已写入')).toBeInTheDocument()
-    expect(screen.getByText(/4月2日住宿。写入时未自动提交应付/)).toBeInTheDocument()
-    expect(screen.getByText(/未自动提交应付/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入资源' })).not.toBeInTheDocument()
+    expect(screen.queryByText('资源已写入')).not.toBeInTheDocument()
   })
 
   it('shows the later success after an earlier confirmation for the same package failed', async () => {
@@ -444,7 +442,7 @@ describe('SegmentResourceReviewPanel #449', () => {
     })
     renderPanel()
 
-    expect(await screen.findByText('资源已写入')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认写入资源' })).not.toBeInTheDocument()
     expect(screen.queryByText('资源种类「酒店」不属于该供应商的类别集合')).not.toBeInTheDocument()
   })
 

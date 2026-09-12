@@ -11,6 +11,7 @@ import {
   isFinanceTouched,
   PaymentScheduleSourceType,
   classifySourceOrderInitialReceivables,
+  classifyResourceInitialPayable,
   computeReceivableDueDate,
   shouldCancelSourceOrderScheduleOnConventionSync,
 } from '@xiaotuanbao/shared'
@@ -59,6 +60,10 @@ type DepartureResourceWithRelations = DepartureResource & {
   departure: { id: string; organizationId: string; status: string; endDate: Date }
 }
 
+type LoadedPayableResource =
+  | { resourceKind: 'segment'; resource: SegmentResourceWithRelations }
+  | { resourceKind: 'departure'; resource: DepartureResourceWithRelations }
+
 interface PayableSpec {
   amountCents: number
   title: string
@@ -68,6 +73,17 @@ interface PayableSpec {
 }
 
 export type ReceivableGenerationStrategy = 'ordinary' | 'initial_only'
+export type PayableGenerationStrategy = 'ordinary' | 'initial_only'
+
+export type PayableGenerationResult = {
+  resource: SegmentResourceWithRelations | DepartureResourceWithRelations
+  resourceKind: 'segment' | 'departure'
+  sourceType: string
+  sourceId: string
+  schedules: PaymentScheduleSummary[]
+  existingScheduleIds?: string[]
+  generation: 'created' | 'already_present' | 'not_needed'
+}
 
 export type ReceivableGenerationResult = {
   order: SourceOrderWithRelations
@@ -341,32 +357,69 @@ export class DepartureFinanceGenerationService {
     }
   }
 
+  async previewInitialPayable(
+    organizationId: string,
+    params: { sourceType: string; sourceId: string },
+    client: DbClient = this.prisma,
+  ) {
+    const loaded = await this.loadPayableResourceOrThrow(organizationId, params, client)
+    const existingSchedules = await this.findPayableSchedules(
+      organizationId,
+      params.sourceId,
+      params.sourceType,
+      client,
+    )
+    const spec = this.buildPayableSpec(loaded.resource)
+    const classification = classifyResourceInitialPayable({
+      resource: {
+        sourceType: params.sourceType,
+        sourceId: params.sourceId,
+        amountCents: spec.amountCents,
+        title: spec.title,
+      },
+      existingSchedules,
+    })
+    return { ...loaded, existingSchedules, spec, classification }
+  }
+
   async generateResourcePayable(
     organizationId: string,
     params: { sourceType: string; sourceId: string },
     assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
-  ): Promise<{
-    schedule: PaymentScheduleSummary
-    resource: SegmentResourceWithRelations | DepartureResourceWithRelations
-    resourceKind: 'segment' | 'departure'
-  }> {
-    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
-      const result = await this.generatePayable(
-        organizationId,
-        params.sourceId,
-        assertAllowsNewObligation,
-      )
-      return { ...result, resourceKind: 'segment' }
+    options?: { client?: DbClient; strategy?: PayableGenerationStrategy },
+  ): Promise<
+    LoadedPayableResource & {
+      schedule?: PaymentScheduleSummary
+      generation?: PayableGenerationResult['generation']
+      existingScheduleIds?: string[]
     }
-    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-      const result = await this.generateDepartureResourcePayable(
-        organizationId,
-        params.sourceId,
-        assertAllowsNewObligation,
-      )
-      return { ...result, resourceKind: 'departure' }
+  > {
+    if (
+      params.sourceType !== PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+      params.sourceType !== PaymentScheduleSourceType.DEPARTURE_RESOURCE
+    ) {
+      throw new BadRequestException('仅资源可提交应付')
     }
-    throw new BadRequestException('仅资源可提交应付')
+    if (options?.client) {
+      return this.generateResourcePayableInTx(
+        options.client,
+        organizationId,
+        params,
+        assertAllowsNewObligation,
+        options.strategy ?? 'ordinary',
+      )
+    }
+    return this.prisma.$transaction(
+      (tx) =>
+        this.generateResourcePayableInTx(
+          tx,
+          organizationId,
+          params,
+          assertAllowsNewObligation,
+          options?.strategy ?? 'ordinary',
+        ),
+      { maxWait: 20_000, timeout: 20_000 },
+    )
   }
 
   async generatePayable(
@@ -377,59 +430,18 @@ export class DepartureFinanceGenerationService {
     schedule: PaymentScheduleSummary
     resource: SegmentResourceWithRelations
   }> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM segment_resources
-          WHERE id = ${resourceId}
-          FOR UPDATE
-        `
-
-        const lockedResource = await this.loadSegmentResourceOrThrow(
-          organizationId,
-          resourceId,
-          tx,
-        )
-        assertAllowsNewObligation(lockedResource.segment.departure, '提交应付')
-
-        if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能提交应付')
-        }
-
-        const existingTrace = await this.findAnyPayableSchedule(
-          organizationId,
-          resourceId,
-          PaymentScheduleSourceType.SEGMENT_RESOURCE,
-          tx,
-        )
-        if (existingTrace) {
-          throw new ConflictException('当前资源已提交应付，不能再次提交')
-        }
-
-        const spec = this.buildPayableSpec(lockedResource)
-        const dueDate = formatDateOnly(lockedResource.segment.departure.endDate)
-        const createdSchedule = await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.payable,
-          {
-            departureId: lockedResource.segment.departure.id,
-            title: spec.title,
-            amountCents: spec.amountCents,
-            dueDate,
-            counterpartyType: spec.counterpartyType,
-            counterpartyId: spec.counterpartyId,
-            counterpartyName: spec.counterpartyName,
-            sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-            sourceId: resourceId,
-          },
-          tx,
-        )
-
-        return { resource: lockedResource, schedule: createdSchedule }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
+    const result = await this.generateResourcePayable(
+      organizationId,
+      { sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE, sourceId: resourceId },
+      assertAllowsNewObligation,
     )
+    if (!result.schedule) {
+      throw new BadRequestException('资源金额须大于 0 才能提交应付')
+    }
+    return {
+      schedule: result.schedule,
+      resource: result.resource as SegmentResourceWithRelations,
+    }
   }
 
   async generateDepartureResourcePayable(
@@ -440,59 +452,137 @@ export class DepartureFinanceGenerationService {
     schedule: PaymentScheduleSummary
     resource: DepartureResourceWithRelations
   }> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM departure_resources
-          WHERE id = ${resourceId}
-          FOR UPDATE
-        `
-
-        const lockedResource = await this.loadDepartureResourceOrThrow(
-          organizationId,
-          resourceId,
-          tx,
-        )
-        assertAllowsNewObligation(lockedResource.departure, '提交应付')
-
-        if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能提交应付')
-        }
-
-        const existingTrace = await this.findAnyPayableSchedule(
-          organizationId,
-          resourceId,
-          PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-          tx,
-        )
-        if (existingTrace) {
-          throw new ConflictException('当前资源已提交应付，不能再次提交')
-        }
-
-        const spec = this.buildPayableSpec(lockedResource)
-        const dueDate = formatDateOnly(lockedResource.departure.endDate)
-        const createdSchedule = await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.payable,
-          {
-            departureId: lockedResource.departure.id,
-            title: spec.title,
-            amountCents: spec.amountCents,
-            dueDate,
-            counterpartyType: spec.counterpartyType,
-            counterpartyId: spec.counterpartyId,
-            counterpartyName: spec.counterpartyName,
-            sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-            sourceId: resourceId,
-          },
-          tx,
-        )
-
-        return { resource: lockedResource, schedule: createdSchedule }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
+    const result = await this.generateResourcePayable(
+      organizationId,
+      { sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE, sourceId: resourceId },
+      assertAllowsNewObligation,
     )
+    if (!result.schedule) {
+      throw new BadRequestException('资源金额须大于 0 才能提交应付')
+    }
+    return {
+      schedule: result.schedule,
+      resource: result.resource as DepartureResourceWithRelations,
+    }
+  }
+
+  private async generateResourcePayableInTx(
+    tx: DbClient,
+    organizationId: string,
+    params: { sourceType: string; sourceId: string },
+    assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
+    strategy: PayableGenerationStrategy,
+  ): Promise<
+    LoadedPayableResource & {
+      schedule?: PaymentScheduleSummary
+      generation?: PayableGenerationResult['generation']
+      existingScheduleIds?: string[]
+    }
+  > {
+    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      await tx.$queryRaw`
+        SELECT id
+        FROM segment_resources
+        WHERE id = ${params.sourceId}
+        FOR UPDATE
+      `
+    } else {
+      await tx.$queryRaw`
+        SELECT id
+        FROM departure_resources
+        WHERE id = ${params.sourceId}
+        FOR UPDATE
+      `
+    }
+
+    const loaded = await this.loadPayableResourceOrThrow(organizationId, params, tx)
+    const departure =
+      loaded.resourceKind === 'segment'
+        ? loaded.resource.segment.departure
+        : loaded.resource.departure
+
+    const existingSchedules = await this.findPayableSchedules(
+      organizationId,
+      params.sourceId,
+      params.sourceType,
+      tx,
+    )
+    const spec = this.buildPayableSpec(loaded.resource)
+
+    if (strategy === 'initial_only') {
+      const classification = classifyResourceInitialPayable({
+        resource: {
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          amountCents: spec.amountCents,
+          title: spec.title,
+        },
+        existingSchedules,
+      })
+      if (classification.status === 'no_positive_amount') {
+        return { ...loaded, generation: 'not_needed' }
+      }
+      if (classification.status === 'complete_and_consistent') {
+        return {
+          ...loaded,
+          existingScheduleIds: classification.scheduleIds,
+          generation: 'already_present',
+        }
+      }
+      if (classification.status === 'anomaly') {
+        throw new ConflictException(classification.message)
+      }
+      // Ready path: gate closed/settled only when minting a new obligation.
+      assertAllowsNewObligation(departure, '提交应付')
+    } else {
+      // Ordinary HTTP generate: same ordering as receivables — closed gate before
+      // "already submitted", so archived write matrix surfaces 发团已关闭.
+      assertAllowsNewObligation(departure, '提交应付')
+      if (spec.amountCents <= 0) {
+        throw new BadRequestException('资源金额须大于 0 才能提交应付')
+      }
+      if (existingSchedules.some((schedule) => schedule.voidedAt == null)) {
+        throw new ConflictException('当前资源已提交应付，不能再次提交')
+      }
+    }
+
+    const createdSchedule = await this.paymentScheduleService.create(
+      organizationId,
+      PaymentScheduleDirection.payable,
+      {
+        departureId: departure.id,
+        title: spec.title,
+        amountCents: spec.amountCents,
+        dueDate: formatDateOnly(departure.endDate),
+        counterpartyType: spec.counterpartyType,
+        counterpartyId: spec.counterpartyId,
+        counterpartyName: spec.counterpartyName,
+        sourceType: params.sourceType,
+        sourceId: params.sourceId,
+      },
+      tx,
+    )
+    return { ...loaded, schedule: createdSchedule, generation: 'created' }
+  }
+
+  private async loadPayableResourceOrThrow(
+    organizationId: string,
+    params: { sourceType: string; sourceId: string },
+    client: DbClient,
+  ): Promise<LoadedPayableResource> {
+    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      return {
+        resource: await this.loadSegmentResourceOrThrow(organizationId, params.sourceId, client),
+        resourceKind: 'segment',
+      }
+    }
+    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+      return {
+        resource: await this.loadDepartureResourceOrThrow(organizationId, params.sourceId, client),
+        resourceKind: 'departure',
+      }
+    }
+    throw new BadRequestException('仅资源可提交应付')
   }
 
   async syncSegmentResourceConvention(
@@ -655,20 +745,20 @@ export class DepartureFinanceGenerationService {
     })
   }
 
-  private async findAnyPayableSchedule(
+  private async findPayableSchedules(
     organizationId: string,
     resourceId: string,
-    sourceType: string = PaymentScheduleSourceType.SEGMENT_RESOURCE,
+    sourceType: string,
     client: DbClient = this.prisma,
-  ): Promise<PaymentSchedule | null> {
-    return client.paymentSchedule.findFirst({
+  ): Promise<PaymentSchedule[]> {
+    return client.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: resourceId,
         sourceType,
         direction: PaymentScheduleDirection.payable,
-        voidedAt: null,
       },
+      orderBy: { createdAt: 'asc' },
     })
   }
 

@@ -110,6 +110,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/departure",
+    "route": "POST /api/agent/departures/:departureId/resource-payable-reviews",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/departure",
     "route": "POST /api/agent/departures/:departureId/source-order-receivable-reviews",
   },
   {
@@ -1074,6 +1079,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "GET /api/agent/departures/:departureId/collaboration [/departure]",
+    "POST /api/agent/departures/:departureId/resource-payable-reviews [/departure]",
     "POST /api/agent/departures/:departureId/source-order-receivable-reviews [/departure]",
     "POST /api/agent/review-decisions [/departure]",
     "GET /api/agent/review-decisions/:decisionCommandId [/departure]",
@@ -1277,6 +1283,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "GET /api/agent/departures/:departureId/collaboration [/departure]",
+    "POST /api/agent/departures/:departureId/resource-payable-reviews [/departure]",
     "POST /api/agent/departures/:departureId/source-order-receivable-reviews [/departure]",
     "POST /api/agent/review-decisions [/departure]",
     "GET /api/agent/review-decisions/:decisionCommandId [/departure]",
@@ -1448,6 +1455,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "GET /api/agent/departures/:departureId/collaboration [/departure]",
+    "POST /api/agent/departures/:departureId/resource-payable-reviews [/departure]",
     "POST /api/agent/departures/:departureId/source-order-receivable-reviews [/departure]",
     "POST /api/agent/review-decisions [/departure]",
     "GET /api/agent/review-decisions/:decisionCommandId [/departure]",

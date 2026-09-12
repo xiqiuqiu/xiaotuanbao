@@ -139,6 +139,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   generateReceivables: { gating: 'menuGated', endpointKey: '/departure' },
   generateReceivablesForDeparture: { gating: 'menuGated', endpointKey: '/departure' },
   prepareSourceOrderReceivableReview: { gating: 'menuGated', endpointKey: '/departure' },
+  prepareResourcePayableReviews: { gating: 'menuGated', endpointKey: '/departure' },
   settleByActualCollection: { gating: 'menuGated', endpointKey: '/departure' },
   // 员工管理挂 /system/users（能进入系统页 ⟺ 可调）。
   createEmployee: { gating: 'menuGated', endpointKey: '/system/users' },

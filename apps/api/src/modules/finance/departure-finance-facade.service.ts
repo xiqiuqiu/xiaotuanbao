@@ -409,6 +409,9 @@ export class DepartureFinanceFacade {
       params,
       (departure, action) => this.assertAllowsNewObligation(departure, action),
     )
+    if (!result.schedule) {
+      throw new BadRequestException('资源金额须大于 0 才能提交应付')
+    }
     if (result.resourceKind === 'segment') {
       const financeMeta = await this.getSegmentResourceFinanceState(
         organizationId,

@@ -11,8 +11,12 @@ import {
   SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+  RESOURCE_PAYABLE_CONFIRMATION_UNIT,
+  RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
   historyStatusFromClassification,
+  historyStatusFromPayableClassification,
   sourceOrderReceivableReviewCandidates,
+  resourcePayableReviewCandidates,
 } from '@xiaotuanbao/ai-contracts'
 import type {
   AcceptReviewConfirmationDto,
@@ -34,6 +38,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { DepartureResourceService } from '../departure/departure-resource.service'
+import { formatDateOnly } from '../departure/departure-date.utils'
 import { SegmentResourceService } from '../departure/segment-resource.service'
 import { SourceOrderService } from '../departure/source-order.service'
 import { AuthService } from '../auth/auth.service'
@@ -287,6 +292,210 @@ export class ReviewCollaborationService {
       })
       return toReviewPackageView(created)
     })
+  }
+
+  async prepareResourcePayableReviews(
+    organizationId: string,
+    userId: string,
+    departureId: string,
+    dto: {
+      conversationId: string
+      items: Array<{ sourceType: 'segment_resource' | 'departure_resource'; sourceId: string }>
+    },
+  ): Promise<AiReviewPackageView[]> {
+    const permissionKeys = await this.auth.getPermissionKeysForUser(userId)
+    if (!permissionKeys.includes('/departure')) {
+      throw new ForbiddenException('无权准备初始应付')
+    }
+    const uniqueKeys = new Set(dto.items.map((item) => `${item.sourceType}:${item.sourceId}`))
+    if (uniqueKeys.size !== dto.items.length) {
+      throw new BadRequestException('应付选择不能包含重复资源')
+    }
+    await this.departures.getById(organizationId, departureId)
+    return this.prisma.$transaction(async (tx) => {
+      await lockAgentConversation(tx, organizationId, dto.conversationId)
+      const conversation = await tx.aiConversation.findFirst({
+        where: { id: dto.conversationId, organizationId, creatorUserId: userId },
+      })
+      if (!conversation) {
+        throw new NotFoundException('会话不存在')
+      }
+      const successRecords = await tx.aiReviewRecord.findMany({
+        where: {
+          organizationId,
+          writeResult: AiReviewWriteResult.success,
+          package: {
+            conversationId: dto.conversationId,
+            payloadSchema: {
+              in: [SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA, DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA],
+            },
+            status: AiReviewPackageStatus.confirmed,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { package: true },
+      })
+      const prepared: AiReviewPackageView[] = []
+      for (const item of dto.items) {
+        prepared.push(
+          await this.prepareOneResourcePayableReview(tx, {
+            organizationId,
+            departureId,
+            conversationId: dto.conversationId,
+            sourceType: item.sourceType,
+            sourceId: item.sourceId,
+            successRecords,
+          }),
+        )
+      }
+      return prepared
+    })
+  }
+
+  private async prepareOneResourcePayableReview(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      departureId: string
+      conversationId: string
+      sourceType: 'segment_resource' | 'departure_resource'
+      sourceId: string
+      successRecords: Array<{
+        afterSnapshot: unknown
+        package: AiReviewPackage
+      }>
+    },
+  ): Promise<AiReviewPackageView> {
+    const expectedKind =
+      params.sourceType === 'segment_resource' ? 'segment_resource' : 'departure_resource'
+    const sourceRecord = params.successRecords.find((record) => {
+      const ref = parseStoredResultRef(record.afterSnapshot)
+      return ref?.objectKind === expectedKind && ref.objectId === params.sourceId
+    })
+    const sourcePackage = sourceRecord?.package
+    const taskId = sourcePackage?.taskId
+    const inputBatchId = sourcePackage?.inputBatchId
+    if (!sourcePackage || !taskId || !inputBatchId) {
+      throw new BadRequestException('只能从本次成功录入且尚未提交的资源继续提交应付')
+    }
+    await lockAiCreateTask(tx, params.organizationId, taskId)
+    const siblings = await tx.aiReviewPackage.findMany({
+      where: { organizationId: params.organizationId, conversationId: params.conversationId },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        itemIdentity: true,
+        payloadSchema: true,
+        baselineSnapshot: true,
+      },
+    })
+    const existing = siblings.find(
+      (pkg) =>
+        pkg.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA &&
+        payableSourceFromBaseline(pkg.baselineSnapshot)?.sourceType === params.sourceType &&
+        payableSourceFromBaseline(pkg.baselineSnapshot)?.sourceId === params.sourceId,
+    )
+    if (existing?.status === AiReviewPackageStatus.confirmed) {
+      const confirmed = await tx.aiReviewPackage.findFirstOrThrow({ where: { id: existing.id } })
+      return toReviewPackageView(confirmed)
+    }
+    if (existing?.status === AiReviewPackageStatus.pending) {
+      const inFlight = await findInFlightReviewConfirmJob(tx, existing.id)
+      if (inFlight) {
+        throw new ConflictException('该事项正在确认中，暂不可重复准备')
+      }
+    }
+    const preview = await this.generation.previewInitialPayable(
+      params.organizationId,
+      { sourceType: params.sourceType, sourceId: params.sourceId },
+      tx,
+    )
+    const departureIdFromResource =
+      preview.resourceKind === 'segment'
+        ? preview.resource.segment.departure.id
+        : preview.resource.departure.id
+    if (departureIdFromResource !== params.departureId) {
+      throw new BadRequestException('只能从本次成功录入且尚未提交的资源继续提交应付')
+    }
+    const candidates = resourcePayableReviewCandidates({
+      sourceType: params.sourceType,
+      sourceId: params.sourceId,
+      title: preview.spec.title,
+      resourceKind: preview.resource.resourceKind,
+      supplierName: preview.spec.counterpartyName ?? '未命名',
+      amountCents: preview.spec.amountCents,
+      classification: preview.classification,
+    })
+    const stored = toStoredCandidates(candidates)
+    const endDate =
+      preview.resourceKind === 'segment'
+        ? formatDateOnly(preview.resource.segment.departure.endDate)
+        : formatDateOnly(preview.resource.departure.endDate)
+    const baselineSnapshot = {
+      sourceType: params.sourceType,
+      sourceId: params.sourceId,
+      amountCents: preview.spec.amountCents,
+      supplierId: preview.resource.supplierId,
+      partnerId: preview.resource.partnerId,
+      resourceKind: preview.resource.resourceKind,
+      title: preview.spec.title,
+      // Payable dueDate is derived from departure.endDate at generation time.
+      endDate,
+    }
+    const departure = await tx.departure.findFirstOrThrow({
+      where: { id: params.departureId, organizationId: params.organizationId },
+      select: { updatedAt: true },
+    })
+    if (existing?.status === AiReviewPackageStatus.pending) {
+      const updated = await tx.aiReviewPackage.update({
+        where: { id: existing.id },
+        data: {
+          candidates: stored as unknown as Prisma.InputJsonValue,
+          baselineSnapshot,
+          proposalHash: reviewProposalHash({
+            confirmationUnit: RESOURCE_PAYABLE_CONFIRMATION_UNIT,
+            candidates,
+          }),
+          version: { increment: 1 },
+          baseObjectVersion: departureObjectVersion(departure.updatedAt),
+        },
+      })
+      return toReviewPackageView(updated)
+    }
+    const created = await tx.aiReviewPackage.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId,
+        conversationId: params.conversationId,
+        inputBatchId,
+        attemptId: sourcePackage.attemptId,
+        status: AiReviewPackageStatus.pending,
+        confirmationUnit: RESOURCE_PAYABLE_CONFIRMATION_UNIT,
+        payloadSchema: RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
+        capabilityKey: 'departure.resource-payable.prepare',
+        capabilityVersion: 1,
+        targetKind: 'departure',
+        targetId: params.departureId,
+        itemIdentity: nextReviewItemIdentity(
+          (
+            await tx.aiReviewPackage.findMany({
+              where: { inputBatchId },
+              select: { itemIdentity: true },
+            })
+          ).map((pkg) => pkg.itemIdentity),
+        ),
+        proposalHash: reviewProposalHash({
+          confirmationUnit: RESOURCE_PAYABLE_CONFIRMATION_UNIT,
+          candidates,
+        }),
+        baseObjectVersion: departureObjectVersion(departure.updatedAt),
+        baselineSnapshot,
+        candidates: stored as unknown as Prisma.InputJsonValue,
+        version: 1,
+      },
+    })
+    return toReviewPackageView(created)
   }
 
   async acceptReviewConfirmation(
@@ -811,6 +1020,9 @@ export class ReviewCollaborationService {
       if (current.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
         // 应收确认有意不卡发团 updatedAt：无关字段变更应放行。关闭/结清仍须当场拒绝。
         this.finance.assertAllowsNewObligation(departure, '提交应收')
+      } else if (current.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) {
+        // 应付：关闭/结清门禁推迟到真正新建义务时（generateResourcePayable）。
+        // no_positive_amount / already_present 在已关闭发团上仍应可确认。
       } else if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
         throw new ConflictException('发团已变化，请刷新后重试')
       }
@@ -974,6 +1186,67 @@ export class ReviewCollaborationService {
     }
   }
 
+  private async writeConfirmedResourcePayable(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string; scheduleIds: string[]; generation: string }> {
+    const source = payableSourceFromBaseline(pkg.baselineSnapshot)
+    if (!source) {
+      throw new BadRequestException('应付审核缺少正式资源')
+    }
+    if (source.sourceType === 'segment_resource') {
+      await tx.$queryRaw`
+        SELECT id
+        FROM segment_resources
+        WHERE id = ${source.sourceId}
+        FOR UPDATE
+      `
+    } else {
+      await tx.$queryRaw`
+        SELECT id
+        FROM departure_resources
+        WHERE id = ${source.sourceId}
+        FOR UPDATE
+      `
+    }
+    const preview = await this.generation.previewInitialPayable(
+      organizationId,
+      { sourceType: source.sourceType, sourceId: source.sourceId },
+      tx,
+    )
+    const baseline = payableConventionFromBaseline(pkg.baselineSnapshot)
+    if (!baseline || payableConventionChanged(baseline, preview)) {
+      throw new ConflictException('正式来源或已有账款已变化，请刷新后重试')
+    }
+    const liveStatus = historyStatusFromPayableClassification(preview.classification)
+    const previewStatus = payableHistoryStatusFromCandidates(pkg.candidates)
+    if (previewStatus && liveStatus !== previewStatus) {
+      throw new ConflictException('正式来源或已有账款已变化，请刷新后重试')
+    }
+    if (preview.classification.status === 'anomaly') {
+      throw new ConflictException(preview.classification.message)
+    }
+    const result = await this.generation.generateResourcePayable(
+      organizationId,
+      { sourceType: source.sourceType, sourceId: source.sourceId },
+      (departure, action) => this.finance.assertAllowsNewObligation(departure, action),
+      { client: tx, strategy: 'initial_only' },
+    )
+    const scheduleIds =
+      result.generation === 'already_present'
+        ? (result.existingScheduleIds ?? [])
+        : result.schedule
+          ? [result.schedule.id]
+          : []
+    return {
+      objectKind: 'resource_payable',
+      objectId: source.sourceId,
+      scheduleIds,
+      generation: result.generation ?? 'created',
+    }
+  }
+
   async failConfirmedItem(jobId: string, reason: string, retryable = true): Promise<void> {
     const job = await this.prisma.aiWorkflowJob.findUnique({
       where: { id: jobId },
@@ -988,7 +1261,12 @@ export class ReviewCollaborationService {
   private async resultRefForConfirmedPackage(
     job: { idempotencyRecord?: { resultJson?: unknown } | null },
     pkg: AiReviewPackage,
-  ): Promise<{ objectKind: string; objectId: string } | null> {
+  ): Promise<{
+    objectKind: string
+    objectId: string
+    scheduleIds?: string[]
+    generation?: string
+  } | null> {
     const expectedKind = pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
       ? 'segment_resource'
       : pkg.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
@@ -997,6 +1275,8 @@ export class ReviewCollaborationService {
         ? 'source_order'
       : pkg.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA
         ? 'source_order_receivables'
+      : pkg.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA
+        ? 'resource_payable'
       : null
     const fromResultJson = parseStoredResultRef(job.idempotencyRecord?.resultJson)
     if (fromResultJson && (!expectedKind || fromResultJson.objectKind === expectedKind)) {
@@ -1019,7 +1299,7 @@ export class ReviewCollaborationService {
     tx: Prisma.TransactionClient,
     organizationId: string,
     pkg: AiReviewPackage,
-  ): Promise<{ objectKind: string; objectId: string }> {
+  ): Promise<{ objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string }> {
     if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
       return this.writeConfirmedSegmentResource(tx, organizationId, pkg)
     }
@@ -1028,6 +1308,9 @@ export class ReviewCollaborationService {
     }
     if (pkg.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
       return this.writeConfirmedSourceOrderReceivables(tx, organizationId, pkg)
+    }
+    if (pkg.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) {
+      return this.writeConfirmedResourcePayable(tx, organizationId, pkg)
     }
     if (pkg.payloadSchema !== SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA) {
       return { objectKind: pkg.targetKind, objectId: pkg.targetId }
@@ -1048,7 +1331,7 @@ export class ReviewCollaborationService {
     job: { id: string; idempotencyRecordId: string | null },
     pkg: AiReviewPackage,
     status: 'succeeded' | 'failed' | 'conflict',
-    resultRef?: { objectKind: string; objectId: string },
+    resultRef?: { objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string },
     reason?: string,
     retryable = status === 'failed',
   ): Promise<void> {
@@ -1062,7 +1345,7 @@ export class ReviewCollaborationService {
     job: { id: string; idempotencyRecordId: string | null },
     pkg: AiReviewPackage,
     status: 'succeeded' | 'failed' | 'conflict',
-    resultRef?: { objectKind: string; objectId: string },
+    resultRef?: { objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string },
     reason?: string,
     retryable = status === 'failed',
   ): Promise<void> {
@@ -1125,7 +1408,12 @@ function reviewCorrectionValues(
   return raw as Partial<Record<string, string | number | null>>
 }
 
-function parseStoredResultRef(raw: unknown): { objectKind: string; objectId: string } | null {
+function parseStoredResultRef(raw: unknown): {
+  objectKind: string
+  objectId: string
+  scheduleIds?: string[]
+  generation?: string
+} | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return null
   }
@@ -1141,7 +1429,16 @@ function parseStoredResultRef(raw: unknown): { objectKind: string; objectId: str
   if (!candidate.objectKind || !candidate.objectId) {
     return null
   }
-  return { objectKind: candidate.objectKind, objectId: candidate.objectId }
+  const scheduleIds = Array.isArray(candidate.scheduleIds)
+    ? candidate.scheduleIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : undefined
+  const generation = typeof candidate.generation === 'string' ? candidate.generation : undefined
+  return {
+    objectKind: candidate.objectKind,
+    objectId: candidate.objectId,
+    ...(scheduleIds?.length ? { scheduleIds } : {}),
+    ...(generation ? { generation } : {}),
+  }
 }
 
 function sourceOrderIdFromBaseline(raw: unknown): string | null {
@@ -1217,5 +1514,89 @@ function receivableHistoryStatusFromCandidates(raw: unknown): string | null {
     }
   }
   return null
+}
+
+function payableSourceFromBaseline(raw: unknown): {
+  sourceType: 'segment_resource' | 'departure_resource'
+  sourceId: string
+} | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const snapshot = raw as Record<string, unknown>
+  if (
+    (snapshot.sourceType !== 'segment_resource' && snapshot.sourceType !== 'departure_resource') ||
+    typeof snapshot.sourceId !== 'string' ||
+    !snapshot.sourceId
+  ) {
+    return null
+  }
+  return { sourceType: snapshot.sourceType, sourceId: snapshot.sourceId }
+}
+
+function payableConventionFromBaseline(raw: unknown): {
+  sourceType: 'segment_resource' | 'departure_resource'
+  sourceId: string
+  amountCents: number
+  supplierId: string | null
+  partnerId: string | null
+  resourceKind: string
+  title: string
+  endDate: string
+} | null {
+  const source = payableSourceFromBaseline(raw)
+  if (!source || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const snapshot = raw as Record<string, unknown>
+  if (
+    typeof snapshot.amountCents !== 'number' ||
+    typeof snapshot.resourceKind !== 'string' ||
+    typeof snapshot.title !== 'string' ||
+    typeof snapshot.endDate !== 'string'
+  ) {
+    return null
+  }
+  return {
+    ...source,
+    amountCents: snapshot.amountCents,
+    supplierId: typeof snapshot.supplierId === 'string' ? snapshot.supplierId : null,
+    partnerId: typeof snapshot.partnerId === 'string' ? snapshot.partnerId : null,
+    resourceKind: snapshot.resourceKind,
+    title: snapshot.title,
+    endDate: snapshot.endDate,
+  }
+}
+
+function payableConventionChanged(
+  baseline: NonNullable<ReturnType<typeof payableConventionFromBaseline>>,
+  preview: {
+    resourceKind: 'segment' | 'departure' | string
+    resource: {
+      supplierId: string | null
+      partnerId: string | null
+      resourceKind: string
+      segment?: { departure: { endDate: Date } }
+      departure?: { endDate: Date }
+    }
+    spec: { amountCents: number; title: string }
+  },
+): boolean {
+  const liveEndDate =
+    preview.resourceKind === 'segment'
+      ? formatDateOnly(preview.resource.segment!.departure.endDate)
+      : formatDateOnly(preview.resource.departure!.endDate)
+  return (
+    baseline.amountCents !== preview.spec.amountCents ||
+    baseline.title !== preview.spec.title ||
+    baseline.resourceKind !== preview.resource.resourceKind ||
+    baseline.supplierId !== (preview.resource.supplierId ?? null) ||
+    baseline.partnerId !== (preview.resource.partnerId ?? null) ||
+    baseline.endDate !== liveEndDate
+  )
+}
+
+function payableHistoryStatusFromCandidates(raw: unknown): string | null {
+  return receivableHistoryStatusFromCandidates(raw)
 }
 
