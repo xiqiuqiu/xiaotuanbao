@@ -29,6 +29,22 @@ function candidateValues(candidates: AiReviewCandidateView[]): Record<string, un
   return values
 }
 
+function successCopy(
+  historyStatus: string,
+  generation?: string,
+): { title: string; toast: string } {
+  if (historyStatus === 'no_positive_amount' || generation === 'not_needed') {
+    return { title: '已确认无需生成', toast: '已确认无需生成' }
+  }
+  if (historyStatus === 'complete_and_consistent' || generation === 'already_present') {
+    return {
+      title: '已有约定应付与当前约定一致',
+      toast: '已核对已有约定应付，未重复提交',
+    }
+  }
+  return { title: '约定应付已提交', toast: '已提交约定应付' }
+}
+
 export function ResourcePayableReviewPanel({
   departureId,
   conversationId,
@@ -154,9 +170,7 @@ function ResourcePayableReviewItem({
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
       if (item?.status === 'succeeded') {
-        message.success(
-          alreadyPresent ? '已核对已有约定应付，未重复提交' : '已提交约定应付',
-        )
+        message.success(successCopy(historyStatus, item.resultRef?.generation).toast)
         setUnknownCommandId(null)
         for (const [key, commandId] of Object.entries(decisionCommandIds.current)) {
           if (commandId === result.decisionCommandId) delete decisionCommandIds.current[key]
@@ -190,9 +204,7 @@ function ResourcePayableReviewItem({
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
       if (item?.status === 'succeeded') {
         setUnknownCommandId(null)
-        message.success(
-          alreadyPresent ? '已核对已有约定应付，未重复提交' : '已提交约定应付',
-        )
+        message.success(successCopy(historyStatus, item.resultRef?.generation).toast)
       } else if (
         item?.status === 'accepted' ||
         item?.status === 'queued' ||
@@ -219,17 +231,18 @@ function ResourcePayableReviewItem({
       confirmation?.status !== 'conflict')
   if (!pending && writeSucceeded) {
     const generation = confirmation?.resultRef?.generation
+    const copy = successCopy(historyStatus, generation)
     return (
       <article className={styles.item} data-review-package-id={pkg.id} data-focused={focused || undefined}>
         <Alert
           type="success"
           showIcon
-          title={
-            alreadyPresent || generation === 'already_present'
-              ? '已有约定应付与当前约定一致'
-              : '约定应付已提交'
+          title={copy.title}
+          description={
+            noPositiveAmount || generation === 'not_needed'
+              ? `${title}。已确认当前无需生成约定应付。`
+              : `${title}。提交的是约定应付，不是付款。`
           }
-          description={`${title}。提交的是约定应付，不是付款。`}
         />
         <Button onClick={openOrdinaryPayables}>查看应付</Button>
       </article>

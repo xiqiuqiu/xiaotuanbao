@@ -56,7 +56,7 @@ it('prepares only the selected successful resources', async () => {
   expect(onPrepared).toHaveBeenCalledWith(['pkg-pay-1'])
 })
 
-it('omits resources that already have a payable review in this conversation', () => {
+it('omits resources that already have a confirmed payable review in this conversation', () => {
   expect(
     succeededResourceItems(
       [
@@ -90,6 +90,7 @@ it('omits resources that already have a payable review in this conversation', ()
         },
         {
           id: 'pkg-pay-hotel',
+          status: 'confirmed',
           payloadSchema: 'resource.payable@v1',
           candidates: [
             { fieldKey: 'sourceType', proposedValue: 'segment_resource' },
@@ -104,6 +105,57 @@ it('omits resources that already have a payable review in this conversation', ()
       sourceType: 'departure_resource',
       sourceId: 'res-transport',
       title: '关西交通',
+    },
+  ])
+})
+
+it('keeps resources selectable while payable review is pending or after cancel/reject', () => {
+  const confirmations = [
+    {
+      decisionCommandId: 'd-1',
+      accepted: true,
+      items: [
+        {
+          packageId: 'pkg-hotel',
+          status: 'succeeded' as const,
+          resultRef: { objectKind: 'segment_resource', objectId: 'res-hotel' },
+        },
+      ],
+    },
+  ]
+  const resourcePkg = {
+    id: 'pkg-hotel',
+    payloadSchema: 'departure.segment_resource@v1',
+    candidates: [{ fieldKey: 'title', proposedValue: '4月2日住宿' }],
+  }
+  const pendingPay = {
+    id: 'pkg-pay-hotel',
+    status: 'pending',
+    payloadSchema: 'resource.payable@v1',
+    candidates: [
+      { fieldKey: 'sourceType', proposedValue: 'segment_resource' },
+      { fieldKey: 'sourceId', proposedValue: 'res-hotel' },
+    ],
+  }
+  expect(succeededResourceItems(confirmations, [resourcePkg, pendingPay])).toEqual([
+    {
+      packageId: 'pkg-hotel',
+      sourceType: 'segment_resource',
+      sourceId: 'res-hotel',
+      title: '4月2日住宿',
+    },
+  ])
+  expect(
+    succeededResourceItems(confirmations, [
+      resourcePkg,
+      { ...pendingPay, status: 'cancelled' },
+    ]),
+  ).toEqual([
+    {
+      packageId: 'pkg-hotel',
+      sourceType: 'segment_resource',
+      sourceId: 'res-hotel',
+      title: '4月2日住宿',
     },
   ])
 })

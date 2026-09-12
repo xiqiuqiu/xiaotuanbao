@@ -195,3 +195,18 @@ it('shows already-present success without claiming a newly created payable', asy
   expect(await screen.findByText('已有约定应付与当前约定一致')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '确认提交约定应付' })).not.toBeInTheDocument()
 })
+
+it('shows not-needed success copy after confirming no payable is required', async () => {
+  renderPanel(
+    pkg({
+      status: 'confirmed',
+      candidates: pkg().candidates.map((candidate) =>
+        candidate.fieldKey === 'historyStatus'
+          ? { ...candidate, proposedValue: 'no_positive_amount' }
+          : candidate,
+      ),
+    }),
+  )
+  expect(await screen.findByText('已确认无需生成')).toBeInTheDocument()
+  expect(screen.queryByText('约定应付已提交')).not.toBeInTheDocument()
+})

@@ -107,12 +107,16 @@ function candidateValue(
 function submittedPayableKeys(
   packages: Array<{
     payloadSchema: string
+    status?: string
     candidates: Array<{ fieldKey: string; proposedValue?: unknown; userCorrectedValue?: unknown }>
   }>,
 ): Set<string> {
   return new Set(
     packages.flatMap((pkg) => {
+      // Only confirmed payables remove the resource from Continue.
+      // pending stays visible as 审核中; cancel/reject brings the resource back.
       if (pkg.payloadSchema !== RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) return []
+      if (pkg.status !== 'confirmed') return []
       const sourceType = candidateValue(pkg.candidates, 'sourceType')
       const sourceId = candidateValue(pkg.candidates, 'sourceId')
       if (
@@ -132,6 +136,7 @@ export function succeededResourceItems(
   packages: Array<{
     id: string
     payloadSchema: string
+    status?: string
     candidates: Array<{ fieldKey: string; proposedValue?: unknown; userCorrectedValue?: unknown }>
   }>,
 ): ResourcePayableContinueItem[] {
