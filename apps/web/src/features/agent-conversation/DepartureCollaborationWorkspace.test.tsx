@@ -293,7 +293,8 @@ it('offers payable follow-up only for successful resources without a payable rev
         candidates: [{ fieldKey: 'title', proposedValue: '关西交通', evidence: [] }],
       },
       {
-        ...item('pay-1', payable),
+        // confirmed payable removes hotel from Continue; pending would still show as 审核中
+        ...item('pay-1', payable, 'confirmed'),
         candidates: [
           { fieldKey: 'title', proposedValue: '4月2日住宿', evidence: [] },
           { fieldKey: 'sourceType', proposedValue: 'segment_resource', evidence: [] },
