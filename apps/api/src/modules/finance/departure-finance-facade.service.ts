@@ -51,6 +51,7 @@ import {
 import { DepartureFinanceActualCollectionService } from './departure-finance-actual-collection.service'
 import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
 import { lockResourceConvention } from './resource-convention-lock'
+import { lockSourceOrderConvention } from './source-order-convention-lock'
 import type {
   SourceOrderFinanceMeta,
   SourceOrderWithRelations,
@@ -305,9 +306,10 @@ export class DepartureFinanceFacade {
   async syncSourceOrderSchedules(
     organizationId: string,
     order: SourceOrderWithRelations,
+    tx: TxClient,
   ): Promise<SourceOrderFinanceMeta> {
-    await this.generation.syncSourceOrderConvention(organizationId, order)
-    return (await this.getSourceOrderFinanceState(organizationId, order.id, order)).meta
+    await this.generation.syncSourceOrderConvention(organizationId, order, tx)
+    return (await this.getSourceOrderFinanceState(organizationId, order.id, order, tx)).meta
   }
 
   async settleByActualCollection(
@@ -354,16 +356,27 @@ export class DepartureFinanceFacade {
     sourceOrderId: string,
     order: SourceOrderStoredAmounts,
     nextAmounts: SourceOrderAmountInput,
+    tx?: TxClient,
   ): Promise<void> {
     const { amountOutcomeChanged } = resolveSourceOrderAmountChange(order, nextAmounts)
     if (!amountOutcomeChanged) {
       return
     }
 
-    const meta = (await this.getSourceOrderFinanceState(organizationId, sourceOrderId)).meta
+    const { meta } = await this.getSourceOrderFinanceState(
+      organizationId, sourceOrderId, undefined, tx,
+    )
     if (meta.amountFieldsLocked) {
       throw new BadRequestException('当前客源单已发生收款，不允许修改金额')
     }
+  }
+
+  async lockSourceOrderConvention(
+    tx: TxClient,
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<void> {
+    await lockSourceOrderConvention(tx, organizationId, sourceOrderId)
   }
 
   async lockResourceConvention(
@@ -1463,6 +1476,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     sourceOrderIds: string[],
     agreedAmountsBySourceOrderId?: Map<string, SourceOrderPathAmountInput>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, SourceOrderFinanceState>> {
     const uniqueIds = [...new Set(sourceOrderIds)]
     const result = new Map<string, SourceOrderFinanceState>()
@@ -1471,18 +1485,18 @@ export class DepartureFinanceFacade {
     }
 
     const amountMap =
-      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds))
+      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds, client))
 
     const [pathMap, receivableSchedules, rebateSchedules] = await Promise.all([
-      this.getSourceOrderPathFinanceStates(organizationId, uniqueIds, amountMap),
-      this.prisma.paymentSchedule.findMany({
+      this.getSourceOrderPathFinanceStates(organizationId, uniqueIds, amountMap, client),
+      client.paymentSchedule.findMany({
         where: {
           organizationId,
           sourceId: { in: uniqueIds },
           direction: PaymentScheduleDirection.receivable,
         },
       }),
-      this.prisma.paymentSchedule.findMany({
+      client.paymentSchedule.findMany({
         where: {
           organizationId,
           sourceId: { in: uniqueIds },
@@ -1516,8 +1530,8 @@ export class DepartureFinanceFacade {
       (schedule) => schedule.id,
     )
     const [settledMap, historyMap] = await Promise.all([
-      this.batchGetSettledAmounts(touchScheduleIds),
-      this.batchHasVerificationHistory(touchScheduleIds),
+      this.batchGetSettledAmounts(touchScheduleIds, client),
+      this.batchHasVerificationHistory(touchScheduleIds, client),
     ])
 
     for (const sourceOrderId of uniqueIds) {
@@ -1541,12 +1555,14 @@ export class DepartureFinanceFacade {
     organizationId: string,
     sourceOrderId: string,
     order?: SourceOrderPathAmountInput,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<SourceOrderFinanceState> {
     const agreedAmounts = order ? new Map([[sourceOrderId, order]]) : undefined
     const map = await this.getSourceOrderFinanceStates(
       organizationId,
       [sourceOrderId],
       agreedAmounts,
+      client,
     )
     return map.get(sourceOrderId) ?? {
       paths: [],
@@ -1570,6 +1586,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     sourceOrderIds: string[],
     agreedAmountsBySourceOrderId?: Map<string, SourceOrderPathAmountInput>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, SourceOrderPathFinanceState[]>> {
     const uniqueIds = [...new Set(sourceOrderIds)]
     const result = new Map<string, SourceOrderPathFinanceState[]>()
@@ -1578,9 +1595,9 @@ export class DepartureFinanceFacade {
     }
 
     const amountMap =
-      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds))
+      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds, client))
 
-    const schedules = await this.prisma.paymentSchedule.findMany({
+    const schedules = await client.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: { in: uniqueIds },
@@ -1619,8 +1636,8 @@ export class DepartureFinanceFacade {
 
     const scheduleIds = [...scheduleByKey.values()].map((schedule) => schedule.id)
     const [settledMap, historyMap] = await Promise.all([
-      this.batchGetSettledAmounts(scheduleIds),
-      this.batchHasVerificationHistory(scheduleIds),
+      this.batchGetSettledAmounts(scheduleIds, client),
+      this.batchHasVerificationHistory(scheduleIds, client),
     ])
 
     for (const sourceOrderId of uniqueIds) {
@@ -1784,8 +1801,9 @@ export class DepartureFinanceFacade {
 
   private async loadSourceOrderPathAmounts(
     sourceOrderIds: string[],
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, SourceOrderPathAmountInput>> {
-    const rows = await this.prisma.sourceOrder.findMany({
+    const rows = await client.sourceOrder.findMany({
       where: { id: { in: sourceOrderIds } },
       select: {
         id: true,

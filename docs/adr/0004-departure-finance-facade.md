@@ -26,3 +26,5 @@ Departure 到 Finance 的 seam 由 Finance 拥有：Finance module 内新增 `De
 - Snapshot 与 Departure read model 不使用 `Math.max(..., 0)` 等方式掩盖守恒异常；API 返回原始有符号聚合与结构化 reconciliation anomalies。Web 保留真实负数或超过 100% 的文字结果、标红并解释差额，仅进度条视觉长度封顶。异常不阻止读取概览，但写操作继续由金额、核销与状态不变量约束。
 
 - **资源约定原子更新（2026-09）**：两类资源 update 由 Departure 开启事务，经 Facade 锁定资源、既有应付及发团，再读取金额锁定状态、更新资源并同步应付；该写路径显式传入同一 TransactionClient。任一步失败整体回滚，财务规则与 PaymentSchedule 写入仍由 Finance 拥有。读取接口继续默认使用独立查询。
+
+- **客源约定原子更新（2026-09）**：客源 update 同样由 Departure 开启事务，锁定客源、既有应收/返利及发团后再读取约定和财务介入状态；客源、调价项、流水差异标记和全部应收路径的关闭/更新/补建一起提交或回滚。Facade 同步与财务状态读取显式使用该事务；已介入及历史路径的业务规则保持不变。

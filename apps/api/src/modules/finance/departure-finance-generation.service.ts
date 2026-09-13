@@ -259,9 +259,10 @@ export class DepartureFinanceGenerationService {
   async syncSourceOrderConvention(
     organizationId: string,
     order: SourceOrderWithRelations,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
-    const allSchedules = await loadReceivableSchedules(this.prisma, organizationId, order.id)
-    const rebateSchedules = await loadRebateSchedules(this.prisma, organizationId, order.id)
+    const allSchedules = await loadReceivableSchedules(tx, organizationId, order.id)
+    const rebateSchedules = await loadRebateSchedules(tx, organizationId, order.id)
     if (allSchedules.length === 0 && rebateSchedules.length === 0) {
       return
     }
@@ -279,8 +280,8 @@ export class DepartureFinanceGenerationService {
     const touchResults = await Promise.all(
       schedulesForTouch.map(async (schedule) => {
         const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-          this.verificationService.getSettledAmountCents(schedule.id),
-          this.verificationService.hasVerificationHistory(schedule.id),
+          this.verificationService.getSettledAmountCents(schedule.id, tx),
+          this.verificationService.hasVerificationHistory(schedule.id, tx),
         ])
         return {
           schedule,
@@ -306,7 +307,7 @@ export class DepartureFinanceGenerationService {
 
     for (const { schedule } of touchResults) {
       if (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_REBATE) {
-        await this.cancelScheduleForConventionSync(schedule.id)
+        await this.cancelScheduleForConventionSync(schedule.id, tx)
         continue
       }
 
@@ -317,7 +318,7 @@ export class DepartureFinanceGenerationService {
           expectedAmountCents: expected?.amountCents,
         })
       ) {
-        await this.cancelScheduleForConventionSync(schedule.id)
+        await this.cancelScheduleForConventionSync(schedule.id, tx)
         continue
       }
       if (!expected || expected.amountCents <= 0) {
@@ -333,6 +334,7 @@ export class DepartureFinanceGenerationService {
         PaymentScheduleDirection.receivable,
         schedule.id,
         { amountCents: expected.amountCents, title: expected.title },
+        tx,
       )
     }
 
@@ -354,6 +356,7 @@ export class DepartureFinanceGenerationService {
           sourceType: path.sourceType,
           sourceId: order.id,
         },
+        tx,
       )
       remainingActiveSourceTypes.add(path.sourceType)
     }
@@ -622,8 +625,11 @@ export class DepartureFinanceGenerationService {
     })
   }
 
-  private async cancelScheduleForConventionSync(scheduleId: string): Promise<void> {
-    await this.prisma.paymentSchedule.update({
+  private async cancelScheduleForConventionSync(
+    scheduleId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.paymentSchedule.update({
       where: { id: scheduleId },
       data: {
         cancelledAt: new Date(),
