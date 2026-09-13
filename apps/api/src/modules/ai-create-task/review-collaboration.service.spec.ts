@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { ConflictException, NotFoundException } from '@nestjs/common'
 import {
   AiReviewPackageStatus,
@@ -22,6 +23,8 @@ function sqlTextFromQueryRaw(query: unknown): string {
   return String(query ?? '')
 }
 
+const objectVersion = Number.parseInt(createHash('sha256').update('{}').digest('hex').slice(0, 13), 16) + 1
+
 describe('ReviewCollaborationService #447', () => {
   const organizationId = 'org-1'
   const userId = 'user-1'
@@ -36,7 +39,7 @@ describe('ReviewCollaborationService #447', () => {
     taskId: 'task-1',
     targetKind: 'departure',
     targetId: 'departure-1',
-    baseObjectVersion: 3,
+    baseObjectVersion: objectVersion,
     candidates: [],
     userCorrections: {},
     task: { organizationId, ownerUserId: userId },
@@ -58,7 +61,7 @@ describe('ReviewCollaborationService #447', () => {
     }
     const tx = {
       aiInputBatch: { findFirst: jest.fn().mockResolvedValue(null) },
-      $queryRaw: jest.fn().mockResolvedValue([{ departureId: 'departure-1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ departureId: 'departure-1', snapshot: '{}' }]),
       aiReviewPackage: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve(packages.map((pkg) => ({ ...pkg })))),
         findFirst: jest.fn().mockImplementation(
@@ -267,6 +270,7 @@ describe('ReviewCollaborationService #447', () => {
     }
     const finance = {
       assertAllowsNewObligation: jest.fn(),
+      lockMutableById: jest.fn(),
     }
     const generation = {
       previewInitialReceivables: jest.fn(),
@@ -631,12 +635,12 @@ describe('ReviewCollaborationService #447', () => {
     })
   })
 
-  it('rejects independent confirm when the departure version no longer matches the package baseline', async () => {
+  it('rejects independent confirm when the departure is closed despite a matching package version', async () => {
     const sourcePackage = {
       ...pendingPackage,
       payloadSchema: 'source_order.create@v1',
       confirmationUnit: 'source_order_create',
-      baseObjectVersion: 3,
+      baseObjectVersion: objectVersion,
       candidates: [
         {
           fieldKey: 'partnerId',
@@ -647,11 +651,13 @@ describe('ReviewCollaborationService #447', () => {
         },
       ],
     }
-    const { service, prisma, tx, sourceOrders } = createService({ packages: [sourcePackage] })
+    const { service, prisma, tx, sourceOrders, finance } = createService({ packages: [sourcePackage] })
+    finance.lockMutableById.mockRejectedValue(new ConflictException('已关闭'))
     tx.departure.findFirst.mockResolvedValue({
       id: 'departure-1',
       updatedAt: new Date(99),
     })
+    tx.$queryRaw.mockResolvedValue([{ departureId: 'departure-1', snapshot: '{"changed":true}' }])
     prisma.aiWorkflowJob.findUnique.mockResolvedValue({
       id: 'job-1',
       type: AiWorkflowJobType.review_confirm,

@@ -1393,7 +1393,7 @@ export class AiWorkflowProcessor {
         throw new Error('发团协作任务缺少正式发团')
       }
       const departure = task.departure
-      const objectVersion = departureObjectVersion(departure.updatedAt)
+      const objectVersion = await departureObjectVersion(tx, job.organizationId, departure.id)
       const businessFacts = {
         taskId: task.id,
         status: task.status,
@@ -1600,7 +1600,7 @@ export class AiWorkflowProcessor {
         userText: budgetedContext.userText,
         userTextSha256: budgetedContext.userTextSha256,
       }
-    })
+    }, { isolationLevel: 'RepeatableRead' })
 
     for (const item of published) {
       const event = await this.prisma.aiConversationEvent.findUnique({

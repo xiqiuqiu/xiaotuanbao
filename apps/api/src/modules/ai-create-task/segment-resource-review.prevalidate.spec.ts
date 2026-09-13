@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
 
@@ -11,7 +12,7 @@ const attemptId = 'attempt-1'
 const contextManifestId = 'manifest-1'
 const eventId = 'event-3'
 const departureUpdatedAt = new Date('2026-09-07T00:00:00.000Z')
-const objectVersion = departureUpdatedAt.getTime()
+const objectVersion = Number.parseInt(createHash('sha256').update('{}').digest('hex').slice(0, 13), 16) + 1
 
 const caller = {
   userId,
@@ -135,6 +136,7 @@ function createService(options?: { segmentId?: string | null }) {
     }), count: jest.fn() },
   }
   const prisma = {
+    $queryRaw: jest.fn().mockResolvedValue([{ snapshot: '{}' }]),
     ...store,
     $transaction: jest.fn(async (callback: (client: typeof store) => Promise<unknown>) =>
       callback(store),

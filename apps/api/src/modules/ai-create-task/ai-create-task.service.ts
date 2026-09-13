@@ -208,14 +208,14 @@ export class AiCreateTaskService {
     )
   }
 
-  private assertCollaborationObjectVersion(
-    updatedAt: Date | string | null | undefined,
+  private async assertCollaborationObjectVersion(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    departureId: string | null | undefined,
     objectVersion: number,
-  ): void {
-    if (updatedAt == null) {
-      throw new NotFoundException('任务不存在')
-    }
-    if (departureObjectVersion(updatedAt) !== objectVersion) {
+  ): Promise<void> {
+    if (!departureId) throw new NotFoundException('任务不存在')
+    if (await departureObjectVersion(tx, organizationId, departureId) !== objectVersion) {
       throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
     }
   }
@@ -340,53 +340,58 @@ export class AiCreateTaskService {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
-    const collaborationTask = await this.prisma.agentTask.findFirst({
-      where: {
-        id: caller.taskId,
-        organizationId: caller.organizationId,
-        type: AgentTaskType.departure_collaboration,
-      },
-      include: {
-        departure: true,
-        reviewPackages: { where: { status: AiReviewPackageStatus.pending } },
-      },
-    })
-    if (collaborationTask) {
-      if (collaborationTask.ownerUserId !== caller.userId) {
-        throw new ForbiddenException('仅任务创建者可查询发团上下文')
-      }
-      const departure = collaborationTask.departure
-      if (!departure || departure.organizationId !== caller.organizationId) {
-        throw new NotFoundException('正式发团不存在')
-      }
-      await this.requireRunningAttempt(caller)
-      const snapshot = {
-        ...toFormalDepartureSnapshot(departure, null),
-        ...(await this.readFormalSourceOrderFacts(caller.organizationId, departure.id)),
-      }
-      const pending = collaborationTask.reviewPackages.find(
-        (pkg) => pkg.conversationId === caller.conversationId,
-      )
-      return getTaskContextOutputSchema.parse({
-        task: {
-          id: collaborationTask.id,
-          status:
-            collaborationTask.status === AgentTaskStatus.completed
-              ? 'completed'
-              : collaborationTask.status === AgentTaskStatus.cancelled ||
-                  collaborationTask.status === AgentTaskStatus.closed
-                ? 'abandoned'
-                : 'in_progress',
-          currentPhase: AiCreatePhase.BASIC_INFO,
-          creatorUserId: collaborationTask.ownerUserId,
+    const collaborationContext = await this.prisma.$transaction(async (tx) => {
+      const collaborationTask = await tx.agentTask.findFirst({
+        where: {
+          id: caller.taskId,
+          organizationId: caller.organizationId,
+          type: AgentTaskType.departure_collaboration,
         },
-        snapshot,
-        objectVersion: departureObjectVersion(departure.updatedAt),
-        pending: { hasPendingReview: Boolean(pending), reviewPackageId: pending?.id ?? null },
-        availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
-        fieldCoverage: classifyDraftFields(snapshot),
+        include: {
+          departure: true,
+          reviewPackages: { where: { status: AiReviewPackageStatus.pending } },
+        },
       })
-    }
+      if (collaborationTask) {
+        if (collaborationTask.ownerUserId !== caller.userId) {
+          throw new ForbiddenException('仅任务创建者可查询发团上下文')
+        }
+        const departure = collaborationTask.departure
+        if (!departure || departure.organizationId !== caller.organizationId) {
+          throw new NotFoundException('正式发团不存在')
+        }
+        await this.requireRunningAttempt(caller)
+        const snapshot = {
+          ...toFormalDepartureSnapshot(departure, null),
+          ...(await this.readFormalSourceOrderFacts(caller.organizationId, departure.id, tx)),
+        }
+        const pending = collaborationTask.reviewPackages.find(
+          (pkg) => pkg.conversationId === caller.conversationId,
+        )
+        return getTaskContextOutputSchema.parse({
+          task: {
+            id: collaborationTask.id,
+            status:
+              collaborationTask.status === AgentTaskStatus.completed
+                ? 'completed'
+                : collaborationTask.status === AgentTaskStatus.cancelled ||
+                    collaborationTask.status === AgentTaskStatus.closed
+                  ? 'abandoned'
+                  : 'in_progress',
+            currentPhase: AiCreatePhase.BASIC_INFO,
+            creatorUserId: collaborationTask.ownerUserId,
+          },
+          snapshot,
+          objectVersion: await departureObjectVersion(tx, caller.organizationId, departure.id),
+          pending: { hasPendingReview: Boolean(pending), reviewPackageId: pending?.id ?? null },
+          availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
+          fieldCoverage: classifyDraftFields(snapshot),
+        })
+      }
+
+      return null
+    }, { isolationLevel: 'RepeatableRead' })
+    if (collaborationContext) return collaborationContext
 
     const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
     await this.requireRunningAttempt(caller)
@@ -426,8 +431,8 @@ export class AiCreateTaskService {
     })
   }
 
-  private async readFormalSourceOrderFacts(organizationId: string, departureId: string) {
-    const sourceOrders = await this.prisma.sourceOrder.findMany({
+  private async readFormalSourceOrderFacts(organizationId: string, departureId: string, tx: Prisma.TransactionClient = this.prisma) {
+    const sourceOrders = await tx.sourceOrder.findMany({
       where: { departureId, departure: { organizationId } },
       select: {
         id: true,
@@ -676,7 +681,7 @@ export class AiCreateTaskService {
 
     const agentTask = await this.prisma.agentTask.findFirst({
       where: { id: caller.taskId, organizationId: caller.organizationId },
-      include: { departure: { select: { updatedAt: true } } },
+      include: { departure: { select: { id: true, updatedAt: true } } },
     })
     if (!agentTask) {
       throw new NotFoundException('任务不存在')
@@ -698,7 +703,7 @@ export class AiCreateTaskService {
             include: TASK_WITH_PENDING_INCLUDE,
           })
     if (agentTask.type === AgentTaskType.departure_collaboration) {
-      this.assertCollaborationObjectVersion(agentTask.departure?.updatedAt, input.objectVersion)
+      await this.assertCollaborationObjectVersion(this.prisma, caller.organizationId, agentTask.departure?.id, input.objectVersion)
     } else {
       if (!createTask?.draft) {
         throw new NotFoundException('AI 建团任务不存在')
@@ -816,7 +821,7 @@ export class AiCreateTaskService {
       throw new BadRequestException('仅进行中的发团协作任务可提交审核包')
     }
     await this.requireRunningAttempt(caller)
-    if (departureObjectVersion(task.departure.updatedAt) !== input.objectVersion) {
+    if (await departureObjectVersion(this.prisma, caller.organizationId, task.departure.id) !== input.objectVersion) {
       throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
     }
 
@@ -976,7 +981,7 @@ export class AiCreateTaskService {
       throw new BadRequestException('仅进行中的发团协作任务可提交审核包')
     }
     await this.requireRunningAttempt(caller)
-    if (departureObjectVersion(task.departure.updatedAt) !== input.objectVersion) {
+    if (await departureObjectVersion(this.prisma, caller.organizationId, task.departure.id) !== input.objectVersion) {
       throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
     }
 
@@ -1115,7 +1120,7 @@ export class AiCreateTaskService {
 
       const agentTask = await tx.agentTask.findFirst({
         where: { id: caller.taskId, organizationId: caller.organizationId },
-        include: { departure: { select: { updatedAt: true } } },
+        include: { departure: { select: { id: true, updatedAt: true } } },
       })
       if (!agentTask) {
         throw new NotFoundException('任务不存在')
@@ -1137,7 +1142,7 @@ export class AiCreateTaskService {
               include: TASK_WITH_PENDING_INCLUDE,
             })
       if (agentTask.type === AgentTaskType.departure_collaboration) {
-        this.assertCollaborationObjectVersion(agentTask.departure?.updatedAt, input.objectVersion)
+        await this.assertCollaborationObjectVersion(tx, caller.organizationId, agentTask.departure?.id, input.objectVersion)
       } else {
         if (!task?.draft) {
           throw new NotFoundException('AI 建团任务不存在')

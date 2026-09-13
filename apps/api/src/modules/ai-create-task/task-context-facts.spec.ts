@@ -1,3 +1,4 @@
+import { departureObjectVersion } from './departure-object-version'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { AiToolHttpAdapter } from './ai-tool-http.adapter'
@@ -29,17 +30,20 @@ describe('getTaskContext formal business facts', () => {
       type: 'departure_collaboration', departureId: task.departureId, departure: task.departure,
     }
     const draftRead = jest.fn().mockResolvedValue(collaboration ? null : task)
-    const service = new AiCreateTaskService({
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ snapshot: '{}' }]),
       agentTask: { findFirst: jest.fn().mockResolvedValue(collaboration ? agentTask : null) },
       aiCreateTask: { findFirst: draftRead },
       aiAgentAttempt: { findFirst: jest.fn().mockResolvedValue({ id: caller.runId }) },
       sourceOrder: { findMany: sourceRead },
-    } as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never)
-    return { service, sourceRead, draftRead, agentTask }
+    }
+    const transaction = jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
+    const service = new AiCreateTaskService({ ...tx, $transaction: transaction } as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never)
+    return { service, sourceRead, draftRead, agentTask, tx, transaction }
   }
 
   it('reads formal facts for an independent collaboration task without any creation draft', async () => {
-    const { service, draftRead } = setup(true, true)
+    const { service, draftRead, tx, transaction } = setup(true, true)
     const gateway = new AiActionGateway(
       { findOrCreate: jest.fn().mockResolvedValue(null) } as never,
       { findTask: jest.fn().mockResolvedValue({
@@ -55,7 +59,8 @@ describe('getTaskContext formal business facts', () => {
       departureId: 'departure-1', guestCount: 10,
       sourceOrders: [{ partnerName: '福建土楼专线地接' }],
     })
-    expect(result.objectVersion).toBe(now.getTime())
+    expect(result.objectVersion).toBe(await departureObjectVersion(tx as never, caller.organizationId, 'departure-1'))
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'RepeatableRead' })
     expect(draftRead).not.toHaveBeenCalled()
   })
 

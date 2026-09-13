@@ -241,10 +241,6 @@ export class ReviewCollaborationService {
         netReceivableCents: preview.order.netReceivableCents,
         partnerId: preview.order.partnerId,
       }
-      const departure = await tx.departure.findFirstOrThrow({
-        where: { id: departureId, organizationId },
-        select: { updatedAt: true },
-      })
       if (existing?.status === AiReviewPackageStatus.pending) {
         const updated = await tx.aiReviewPackage.update({
           where: { id: existing.id },
@@ -256,7 +252,7 @@ export class ReviewCollaborationService {
               candidates,
             }),
             version: { increment: 1 },
-            baseObjectVersion: departureObjectVersion(departure.updatedAt),
+            baseObjectVersion: await departureObjectVersion(tx, organizationId, departureId),
           },
         })
         return toReviewPackageView(updated)
@@ -287,7 +283,7 @@ export class ReviewCollaborationService {
             confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
             candidates,
           }),
-          baseObjectVersion: departureObjectVersion(departure.updatedAt),
+          baseObjectVersion: await departureObjectVersion(tx, organizationId, departureId),
           baselineSnapshot,
           candidates: stored as unknown as Prisma.InputJsonValue,
           version: 1,
@@ -446,10 +442,6 @@ export class ReviewCollaborationService {
       // Payable dueDate is derived from departure.endDate at generation time.
       endDate,
     }
-    const departure = await tx.departure.findFirstOrThrow({
-      where: { id: params.departureId, organizationId: params.organizationId },
-      select: { updatedAt: true },
-    })
     if (existing?.status === AiReviewPackageStatus.pending) {
       const updated = await tx.aiReviewPackage.update({
         where: { id: existing.id },
@@ -461,7 +453,7 @@ export class ReviewCollaborationService {
             candidates,
           }),
           version: { increment: 1 },
-          baseObjectVersion: departureObjectVersion(departure.updatedAt),
+          baseObjectVersion: await departureObjectVersion(tx, params.organizationId, params.departureId),
         },
       })
       return toReviewPackageView(updated)
@@ -492,7 +484,7 @@ export class ReviewCollaborationService {
           confirmationUnit: RESOURCE_PAYABLE_CONFIRMATION_UNIT,
           candidates,
         }),
-        baseObjectVersion: departureObjectVersion(departure.updatedAt),
+        baseObjectVersion: await departureObjectVersion(tx, params.organizationId, params.departureId),
         baselineSnapshot,
         candidates: stored as unknown as Prisma.InputJsonValue,
         version: 1,
@@ -1235,7 +1227,15 @@ export class ReviewCollaborationService {
       } else if (current.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) {
         // 应付：关闭/结清门禁推迟到真正新建义务时（generateResourcePayable）。
         // no_positive_amount / already_present 在已关闭发团上仍应可确认。
-      } else if (departureObjectVersion(departure.updatedAt) !== current.baseObjectVersion) {
+      } else if (
+        current.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ||
+        current.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ||
+        current.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+      ) {
+        // Additive items own their package version: a sibling creation must not stale this item.
+        // Lock and validate the parent; domain writes validate the current segment/counterparty.
+        await this.finance.lockMutableById(tx, organizationId, current.targetId, '确认审核事项')
+      } else if (await departureObjectVersion(tx, organizationId, current.targetId) !== current.baseObjectVersion) {
         throw new ConflictException('发团已变化，请刷新后重试')
       }
       const claimed = await tx.aiReviewPackage.updateMany({
