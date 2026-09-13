@@ -437,78 +437,86 @@ export class SegmentResourceService {
     resourceId: string,
     dto: UpdateSegmentResourceDto,
   ): Promise<SegmentResourceSummary> {
-    const resource = await this.findResourceOrThrow(organizationId, resourceId)
-    this.ensureDepartureEditable(resource.segment.departure)
-
-    const resourceKind = dto.resourceKind ?? resource.resourceKind
-    // 写路径统一走供应商；勿把历史 partnerId 并入 resolve（否则会与 supplier 冲突）。
-    // 无 supplier 时由 ForUpdate 保留历史 Partner 拼出行（ADR-0032）。
-    const supplierId =
-      dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
-
-    const counterparty = resolveSegmentResourceCounterpartyForUpdate({
-      resourceKind,
-      partnerId: dto.partnerId,
-      supplierId,
-      existing: {
-        counterpartyType: resource.counterpartyType,
-        partnerId: resource.partnerId,
-        supplierId: resource.supplierId,
-      },
-    })
-
-    if (counterparty.supplierId) {
-      await this.ensureSelectableSupplier(
-        this.prisma,
-        organizationId,
-        counterparty.supplierId,
-        resourceKind,
-      )
-    }
-
-    const nextAmountCents = dto.amountCents ?? resource.amountCents
-    await this.departureFinanceFacade.assertResourceAmountEditable(
-      organizationId,
-      resource.id,
-      resource.amountCents,
-      nextAmountCents,
-    )
-
-    const updated = await this.prisma.segmentResource.update({
-      where: { id: resource.id },
-      data: {
-        ...(dto.resourceKind !== undefined ? { resourceKind } : {}),
-        counterpartyType: counterparty.counterpartyType,
-        partnerId: counterparty.partnerId,
-        supplierId: counterparty.supplierId,
-        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(dto.amountCents !== undefined ? { amountCents: dto.amountCents } : {}),
-        ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
-        pendingCheck: false,
-      },
-      include: {
-        partner: true,
-        supplier: true,
-        segment: { include: { departure: true } },
-      },
-    })
-
-    const financeMeta = await this.departureFinanceFacade.syncSegmentResourceSchedule(
-      organizationId,
-      updated,
-    )
-
-    const remainingPendingResources = await this.prisma.segmentResource.count({
-      where: { segmentId: updated.segmentId, pendingCheck: true },
-    })
-    if (remainingPendingResources === 0 && updated.segment.pendingCheck) {
-      await this.prisma.itinerarySegment.update({
-        where: { id: updated.segmentId },
-        data: { pendingCheck: false },
+    return this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.lockResourceConvention(tx, organizationId, {
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        sourceId: resourceId,
       })
-    }
+      const resource = await this.findResourceOrThrow(organizationId, resourceId, tx)
+      this.ensureDepartureEditable(resource.segment.departure)
 
-    return this.toResourceSummary(updated, financeMeta)
+      const resourceKind = dto.resourceKind ?? resource.resourceKind
+      // 写路径统一走供应商；勿把历史 partnerId 并入 resolve（否则会与 supplier 冲突）。
+      // 无 supplier 时由 ForUpdate 保留历史 Partner 拼出行（ADR-0032）。
+      const supplierId =
+        dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
+
+      const counterparty = resolveSegmentResourceCounterpartyForUpdate({
+        resourceKind,
+        partnerId: dto.partnerId,
+        supplierId,
+        existing: {
+          counterpartyType: resource.counterpartyType,
+          partnerId: resource.partnerId,
+          supplierId: resource.supplierId,
+        },
+      })
+
+      if (counterparty.supplierId) {
+        await this.ensureSelectableSupplier(
+          tx,
+          organizationId,
+          counterparty.supplierId,
+          resourceKind,
+        )
+      }
+
+      const nextAmountCents = dto.amountCents ?? resource.amountCents
+      await this.departureFinanceFacade.assertResourceAmountEditable(
+        organizationId,
+        resource.id,
+        resource.amountCents,
+        nextAmountCents,
+        tx,
+      )
+
+      const updated = await tx.segmentResource.update({
+        where: { id: resource.id },
+        data: {
+          ...(dto.resourceKind !== undefined ? { resourceKind } : {}),
+          counterpartyType: counterparty.counterpartyType,
+          partnerId: counterparty.partnerId,
+          supplierId: counterparty.supplierId,
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(dto.amountCents !== undefined ? { amountCents: dto.amountCents } : {}),
+          ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
+          pendingCheck: false,
+        },
+        include: {
+          partner: true,
+          supplier: true,
+          segment: { include: { departure: true } },
+        },
+      })
+
+      const financeMeta = await this.departureFinanceFacade.syncSegmentResourceSchedule(
+        organizationId,
+        updated,
+        tx,
+      )
+
+      const remainingPendingResources = await tx.segmentResource.count({
+        where: { segmentId: updated.segmentId, pendingCheck: true },
+      })
+      if (remainingPendingResources === 0 && updated.segment.pendingCheck) {
+        await tx.itinerarySegment.update({
+          where: { id: updated.segmentId },
+          data: { pendingCheck: false },
+        })
+      }
+
+      return this.toResourceSummary(updated, financeMeta)
+    }, { maxWait: 20_000, timeout: 20_000 })
   }
 
   async remove(organizationId: string, resourceId: string): Promise<void> {
@@ -675,8 +683,9 @@ export class SegmentResourceService {
   private async findResourceOrThrow(
     organizationId: string,
     resourceId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<SegmentResourceWithRelations> {
-    const resource = await this.prisma.segmentResource.findFirst({
+    const resource = await client.segmentResource.findFirst({
       where: {
         id: resourceId,
         segment: { departure: { organizationId } },

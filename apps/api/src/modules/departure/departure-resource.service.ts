@@ -180,65 +180,73 @@ export class DepartureResourceService {
     resourceId: string,
     dto: UpdateDepartureResourceDto,
   ): Promise<DepartureResourceSummary> {
-    const resource = await this.findResourceOrThrow(organizationId, resourceId)
-    this.ensureDepartureEditable(resource.departure)
+    return this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.lockResourceConvention(tx, organizationId, {
+        sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+        sourceId: resourceId,
+      })
+      const resource = await this.findResourceOrThrow(organizationId, resourceId, tx)
+      this.ensureDepartureEditable(resource.departure)
 
-    const resourceKind = dto.resourceKind ?? resource.resourceKind
-    const supplierId =
-      dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
+      const resourceKind = dto.resourceKind ?? resource.resourceKind
+      const supplierId =
+        dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
 
-    const counterparty = resolveSegmentResourceCounterpartyForUpdate({
-      resourceKind,
-      partnerId: dto.partnerId,
-      supplierId,
-      existing: {
-        counterpartyType: resource.counterpartyType,
-        partnerId: resource.partnerId,
-        supplierId: resource.supplierId,
-      },
-    })
-
-    if (counterparty.supplierId) {
-      await this.ensureSelectableSupplier(
-        this.prisma,
-        organizationId,
-        counterparty.supplierId,
+      const counterparty = resolveSegmentResourceCounterpartyForUpdate({
         resourceKind,
+        partnerId: dto.partnerId,
+        supplierId,
+        existing: {
+          counterpartyType: resource.counterpartyType,
+          partnerId: resource.partnerId,
+          supplierId: resource.supplierId,
+        },
+      })
+
+      if (counterparty.supplierId) {
+        await this.ensureSelectableSupplier(
+          tx,
+          organizationId,
+          counterparty.supplierId,
+          resourceKind,
+        )
+      }
+
+      const nextAmountCents = dto.amountCents ?? resource.amountCents
+      await this.departureFinanceFacade.assertDepartureResourceAmountEditable(
+        organizationId,
+        resource.id,
+        resource.amountCents,
+        nextAmountCents,
+        tx,
       )
-    }
 
-    const nextAmountCents = dto.amountCents ?? resource.amountCents
-    await this.departureFinanceFacade.assertDepartureResourceAmountEditable(
-      organizationId,
-      resource.id,
-      resource.amountCents,
-      nextAmountCents,
-    )
+      const updated = await tx.departureResource.update({
+        where: { id: resource.id },
+        data: {
+          ...(dto.resourceKind !== undefined ? { resourceKind } : {}),
+          counterpartyType: counterparty.counterpartyType,
+          partnerId: counterparty.partnerId,
+          supplierId: counterparty.supplierId,
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(dto.amountCents !== undefined ? { amountCents: dto.amountCents } : {}),
+          ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
+          pendingCheck: false,
+        },
+        include: {
+          partner: true,
+          supplier: true,
+          departure: true,
+        },
+      })
 
-    const updated = await this.prisma.departureResource.update({
-      where: { id: resource.id },
-      data: {
-        ...(dto.resourceKind !== undefined ? { resourceKind } : {}),
-        counterpartyType: counterparty.counterpartyType,
-        partnerId: counterparty.partnerId,
-        supplierId: counterparty.supplierId,
-        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(dto.amountCents !== undefined ? { amountCents: dto.amountCents } : {}),
-        ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
-        pendingCheck: false,
-      },
-      include: {
-        partner: true,
-        supplier: true,
-        departure: true,
-      },
-    })
-
-    const financeMeta = await this.departureFinanceFacade.syncDepartureResourceSchedule(
-      organizationId,
-      updated,
-    )
-    return this.toResourceSummary(updated, financeMeta)
+      const financeMeta = await this.departureFinanceFacade.syncDepartureResourceSchedule(
+        organizationId,
+        updated,
+        tx,
+      )
+      return this.toResourceSummary(updated, financeMeta)
+    }, { maxWait: 20_000, timeout: 20_000 })
   }
 
   async remove(organizationId: string, resourceId: string): Promise<void> {
@@ -303,8 +311,9 @@ export class DepartureResourceService {
   private async findResourceOrThrow(
     organizationId: string,
     resourceId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<DepartureResourceWithRelations> {
-    const resource = await this.prisma.departureResource.findFirst({
+    const resource = await client.departureResource.findFirst({
       where: {
         id: resourceId,
         departure: { organizationId },

@@ -230,7 +230,7 @@ describe('DepartureFinanceGenerationService initial_only / preview', () => {
 
 describe('DepartureFinanceGenerationService payable initial_only / preview', () => {
   const tx = {
-    $queryRaw: jest.fn().mockResolvedValue([]),
+    $queryRaw: jest.fn().mockResolvedValue([{ departureId: 'dep-1' }]),
     paymentSchedule: { findMany: jest.fn() },
   }
   const create = jest.fn()

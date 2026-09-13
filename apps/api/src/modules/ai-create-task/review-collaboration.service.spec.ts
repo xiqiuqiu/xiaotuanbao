@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common'
+import { ConflictException, NotFoundException } from '@nestjs/common'
 import {
   AiReviewPackageStatus,
   AiWorkflowJobStatus,
@@ -58,7 +58,7 @@ describe('ReviewCollaborationService #447', () => {
     }
     const tx = {
       aiInputBatch: { findFirst: jest.fn().mockResolvedValue(null) },
-      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ departureId: 'departure-1' }]),
       aiReviewPackage: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve(packages.map((pkg) => ({ ...pkg })))),
         findFirst: jest.fn().mockImplementation(
@@ -811,6 +811,68 @@ describe('ReviewCollaborationService #447', () => {
       userMessageEvent: { payload: { path: ['reviewPackageId'], equals: 'pkg-1' } },
       status: { in: ['waiting_for_materials', 'ready_for_agent', 'preparing_context', 'agent_running', 'awaiting_user_input'] },
     }) }))
+  })
+
+  it.each(['segment_resource', 'departure_resource'])('projects a read-only %s convention comparison without rebasing the review', async (sourceType) => {
+    const baseline = {
+      sourceType, sourceId: 'res-1', amountCents: 880_000, endDate: '2026-04-08',
+      supplierId: 'sup-1', partnerId: null, resourceKind: 'hotel', title: '住宿',
+    }
+    const payable = { ...pendingPackage, payloadSchema: 'resource.payable@v1', baselineSnapshot: baseline }
+    const { service, prisma, tx, generation } = createService({ packages: [payable] })
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([{
+      conversationId: 'conv-1',
+      conversation: { id: 'conv-1', title: '发团协作', lastActivityAt: new Date() },
+    }])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([payable])
+    const preview = {
+      resourceKind: sourceType === 'segment_resource' ? 'segment' : 'departure',
+      resource: {
+        ...baseline,
+        segment: { id: 'segment-1', departure: { id: 'departure-1', endDate: new Date('2026-04-10T00:00:00.000Z') } },
+        departure: { id: 'departure-1', endDate: new Date('2026-04-10T00:00:00.000Z') },
+      },
+      spec: { title: '住宿', amountCents: 990_000 },
+      classification: { status: 'ready', amountCents: 990_000 },
+    }
+    generation.previewInitialPayable.mockResolvedValue(preview)
+
+    const changed = await service.listDepartureCollaboration(organizationId, userId, 'departure-1', 'conv-1')
+    expect(changed.items[0].payableConventionComparison).toEqual({
+      reviewed: { amountCents: 880_000, endDate: '2026-04-08' },
+      current: { amountCents: 990_000, endDate: '2026-04-10',
+        ...(sourceType === 'segment_resource' ? { segmentId: 'segment-1' } : {}),
+      }, changed: true,
+    })
+    expect(changed.items[0].baselineSnapshot).toEqual(baseline)
+    expect(changed.items[0].version).toBe(1)
+    expect(tx.aiReviewPackage.update).not.toHaveBeenCalled()
+    expect(generation.generateResourcePayable).not.toHaveBeenCalled()
+
+    tx.aiReviewRecord.findMany.mockResolvedValue([{
+      afterSnapshot: { objectKind: sourceType, objectId: 'res-1' },
+      package: { ...pendingPackage, status: AiReviewPackageStatus.confirmed },
+    }])
+    const prepared = await service.prepareResourcePayableReviews(organizationId, userId, 'departure-1', {
+      conversationId: 'conv-1',
+      items: [{ sourceType: sourceType as 'segment_resource' | 'departure_resource', sourceId: 'res-1' }],
+    })
+    expect(prepared[0].id).toBe(payable.id)
+    expect(prepared[0].version).toBe(2)
+    expect(prepared[0].status).toBe('pending')
+    expect(prepared[0].baselineSnapshot).toEqual(expect.objectContaining({ amountCents: 990_000, endDate: '2026-04-10' }))
+    expect(tx.aiWorkflowJob.upsert).not.toHaveBeenCalled()
+    expect(generation.generateResourcePayable).not.toHaveBeenCalled()
+
+    preview.spec.amountCents = baseline.amountCents
+    preview.resource.segment.departure.endDate = new Date('2026-04-08T00:00:00.000Z')
+    preview.resource.departure.endDate = new Date('2026-04-08T00:00:00.000Z')
+    const unchanged = await service.listDepartureCollaboration(organizationId, userId, 'departure-1', 'conv-1')
+    expect(unchanged.items[0].payableConventionComparison?.changed).toBe(false)
+    generation.previewInitialPayable.mockRejectedValue(new NotFoundException('资源不存在'))
+    const missing = await service.listDepartureCollaboration(organizationId, userId, 'departure-1', 'conv-1')
+    expect(missing.items[0].confirmationBlockedReason).toContain('正式资源已不存在')
+    expect(missing.items[0].payableConventionComparison).toBeUndefined()
   })
 
   it('lists pending and disposed packages for an existing departure', async () => {

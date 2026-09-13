@@ -1156,6 +1156,12 @@ export interface AiReviewPackageView {
   itemIdentity?: string
   confirmationBlockedReason?: string
   conflicts?: { fieldKey: string; proposedValue: unknown; userCorrectedValue: unknown }[]
+  /** 初始应付的只读约定对照；重新准备审核前不得接受已变化的约定。 */
+  payableConventionComparison?: {
+    reviewed: { amountCents: number; endDate: string }
+    current: { amountCents: number; endDate: string; segmentId?: string }
+    changed: boolean
+  }
   candidates: AiReviewCandidateView[]
   /** 候选提交时的发团创建草稿快照；确认前自动保存不得覆盖这些候选字段。 */
   baselineSnapshot: DepartureCreationDraftSnapshot

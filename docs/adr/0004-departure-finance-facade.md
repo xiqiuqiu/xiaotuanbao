@@ -24,3 +24,5 @@ Departure 到 Finance 的 seam 由 Finance 拥有：Finance module 内新增 `De
 - 发团详情 API 以嵌套 `overviewStats` 承载概览专用口径，包含客源路径已收/未收、尚未生成应收、其他应收提示金额、已关闭未收、尚未生成应付、其他应付、资源账款差异、确认应付、已付/未付、开放未付、已关闭未付、确认毛利、有效收入流水、有效支出流水、现金净流入及未核销收支；既有平铺 `verified*` 和 `openUnsettled*` 字段保持原位与原语义。实际应收、预计成本和预估毛利继续复用既有发团字段，不在 `overviewStats` 重复。
 - 收款/付款进度百分比不进入 `overviewStats` API；Web 使用已收、已付与对应分母实时派生。分母为零的「—」、百分比四舍五入和进度条视觉封顶属于展示规则，不由 Finance Snapshot 或 Departure read model 固化。
 - Snapshot 与 Departure read model 不使用 `Math.max(..., 0)` 等方式掩盖守恒异常；API 返回原始有符号聚合与结构化 reconciliation anomalies。Web 保留真实负数或超过 100% 的文字结果、标红并解释差额，仅进度条视觉长度封顶。异常不阻止读取概览，但写操作继续由金额、核销与状态不变量约束。
+
+- **资源约定原子更新（2026-09）**：两类资源 update 由 Departure 开启事务，经 Facade 锁定资源、既有应付及发团，再读取金额锁定状态、更新资源并同步应付；该写路径显式传入同一 TransactionClient。任一步失败整体回滚，财务规则与 PaymentSchedule 写入仍由 Finance 拥有。读取接口继续默认使用独立查询。

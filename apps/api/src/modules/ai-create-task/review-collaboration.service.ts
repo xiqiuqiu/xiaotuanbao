@@ -45,6 +45,7 @@ import { SourceOrderService } from '../departure/source-order.service'
 import { AuthService } from '../auth/auth.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import { DepartureFinanceGenerationService } from '../finance/departure-finance-generation.service'
+import { lockResourceConvention } from '../finance/resource-convention-lock'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -833,6 +834,34 @@ export class ReviewCollaborationService {
       }
     }
     const restored = await this.restorePersistedReceipts(organizationId, relatedPackages, confirmations)
+    const items = await Promise.all(relatedPackages.map(async (pkg) => {
+      const view = toReviewPackageView(pkg)
+      if (pkg.status !== AiReviewPackageStatus.pending) return view
+      if (revisingIds.has(pkg.id)) view.confirmationBlockedReason = REVISION_PENDING_REASON
+      if (pkg.payloadSchema !== RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) return view
+      const baseline = payableConventionFromBaseline(pkg.baselineSnapshot)
+      if (!baseline) {
+        view.confirmationBlockedReason ??= '审核约定不完整，请重新准备审核'
+        return view
+      }
+      try {
+        const preview = await this.generation.previewInitialPayable(organizationId, baseline)
+        view.payableConventionComparison = {
+          reviewed: { amountCents: baseline.amountCents, endDate: baseline.endDate },
+          current: {
+            amountCents: preview.spec.amountCents,
+            ...(preview.resourceKind === 'segment' ? { segmentId: preview.resource.segment.id } : {}),
+            endDate: formatDateOnly(preview.resourceKind === 'segment'
+              ? preview.resource.segment.departure.endDate : preview.resource.departure.endDate),
+          },
+          changed: payableConventionChanged(baseline, preview),
+        }
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) throw error
+        view.confirmationBlockedReason ??= '正式资源已不存在，无法继续确认应付'
+      }
+      return view
+    }))
     return {
       departureId,
       conversations: relatedLinks.map((link) => ({
@@ -840,11 +869,7 @@ export class ReviewCollaborationService {
         title: link.conversation.title,
         lastActivityAt: link.conversation.lastActivityAt.toISOString(),
       })),
-      items: relatedPackages.map((pkg) => ({
-        ...toReviewPackageView(pkg),
-        ...(pkg.status === AiReviewPackageStatus.pending && revisingIds.has(pkg.id)
-          ? { confirmationBlockedReason: REVISION_PENDING_REASON } : {}),
-      })),
+      items,
       confirmations: restored,
     }
   }
@@ -1383,21 +1408,7 @@ export class ReviewCollaborationService {
     if (!source) {
       throw new BadRequestException('应付审核缺少正式资源')
     }
-    if (source.sourceType === 'segment_resource') {
-      await tx.$queryRaw`
-        SELECT id
-        FROM segment_resources
-        WHERE id = ${source.sourceId}
-        FOR UPDATE
-      `
-    } else {
-      await tx.$queryRaw`
-        SELECT id
-        FROM departure_resources
-        WHERE id = ${source.sourceId}
-        FOR UPDATE
-      `
-    }
+    await lockResourceConvention(tx, organizationId, source)
     const preview = await this.generation.previewInitialPayable(
       organizationId,
       { sourceType: source.sourceType, sourceId: source.sourceId },
@@ -1856,4 +1867,3 @@ function confirmationStatusFromPersistedRecord(record: {
   if (record.writeResult === AiReviewWriteResult.conflict) return 'conflict'
   return 'failed'
 }
-
