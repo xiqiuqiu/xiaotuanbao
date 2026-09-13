@@ -931,19 +931,41 @@ export class ReviewCollaborationService {
       sourceOrderIds.length
         ? this.prisma.sourceOrder.findMany({
             where: { id: { in: sourceOrderIds }, departure: { organizationId } },
-            select: { id: true, displayName: true, adultGuestCount: true, childGuestCount: true, notes: true },
+            select: {
+              id: true,
+              displayName: true,
+              adultGuestCount: true,
+              childGuestCount: true,
+              notes: true,
+              partnerId: true,
+            },
           })
         : [],
       segmentIds.length
         ? this.prisma.segmentResource.findMany({
             where: { id: { in: segmentIds }, segment: { departure: { organizationId } } },
-            select: { id: true, title: true, amountCents: true, notes: true, supplierId: true },
+            select: {
+              id: true,
+              title: true,
+              amountCents: true,
+              notes: true,
+              supplierId: true,
+              resourceKind: true,
+              segmentId: true,
+            },
           })
         : [],
       departureResourceIds.length
         ? this.prisma.departureResource.findMany({
             where: { id: { in: departureResourceIds }, departure: { organizationId } },
-            select: { id: true, title: true, amountCents: true, notes: true, supplierId: true },
+            select: {
+              id: true,
+              title: true,
+              amountCents: true,
+              notes: true,
+              supplierId: true,
+              resourceKind: true,
+            },
           })
         : [],
     ])
@@ -959,6 +981,7 @@ export class ReviewCollaborationService {
                 adultGuestCount: row.adultGuestCount,
                 childGuestCount: row.childGuestCount,
                 notes: row.notes,
+                partnerId: row.partnerId,
               }
             : null,
         )
@@ -979,6 +1002,8 @@ export class ReviewCollaborationService {
                 amountCents: row.amountCents,
                 notes: row.notes,
                 supplierId: row.supplierId,
+                resourceKind: row.resourceKind,
+                ...('segmentId' in row ? { itinerarySegmentId: row.segmentId } : {}),
               }
             : null,
         )
@@ -1070,6 +1095,10 @@ export class ReviewCollaborationService {
         pkg,
         'succeeded',
         resultRef,
+        undefined,
+        false,
+        submittedValuesFromResultJson(job.idempotencyRecord?.resultJson)
+          ?? submittedValuesFromPackage(pkg),
       )
       return
     }
@@ -1094,7 +1123,15 @@ export class ReviewCollaborationService {
           },
           job.idempotencyRecord?.idempotencyKey,
         )
-        await this.completeItem(job, pkg, 'succeeded')
+        await this.completeItem(
+          job,
+          pkg,
+          'succeeded',
+          undefined,
+          undefined,
+          false,
+          submittedValuesFromPackage(pkg),
+        )
         return
       }
       await this.confirmIndependentItem(
@@ -1192,7 +1229,7 @@ export class ReviewCollaborationService {
       }
       const resultRef = await this.writeIndependentItemInTx(tx, organizationId, current)
       const view = toReviewPackageView(current)
-      const { corrections, submissions } = reviewConfirmValues(
+      const { corrections } = reviewConfirmValues(
         view.candidates.map((candidate) => ({
           fieldKey: candidate.fieldKey,
           proposedValue: candidate.proposedValue,
@@ -1202,6 +1239,7 @@ export class ReviewCollaborationService {
           evidence: candidate.evidence,
         })),
       )
+      const submissions = submittedValuesFromPackage(current) ?? {}
       await tx.aiReviewRecord.create({
         data: {
           organizationId,
@@ -1513,6 +1551,7 @@ export class ReviewCollaborationService {
       },
     })
     if (job.idempotencyRecordId) {
+      const frozenSubmitted = frozenSubmittedValues(submittedValues)
       await tx.aiCreateIdempotencyRecord.update({
         where: { id: job.idempotencyRecordId },
         data: {
@@ -1523,7 +1562,7 @@ export class ReviewCollaborationService {
             resultRef,
             reason,
             retryable,
-            ...(submittedValues ? { submittedValues } : {}),
+            ...(frozenSubmitted ? { submittedValues: frozenSubmitted } : {}),
           } as Prisma.InputJsonValue,
         },
       })
@@ -1756,6 +1795,51 @@ function payableHistoryStatusFromCandidates(raw: unknown): string | null {
 function frozenSubmittedValues(raw: unknown): Record<string, unknown> | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   return Object.keys(raw).length > 0 ? (raw as Record<string, unknown>) : undefined
+}
+
+function submittedValuesFromResultJson(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  return frozenSubmittedValues((raw as { submittedValues?: unknown }).submittedValues)
+}
+
+function submittedValuesFromPackage(pkg: Parameters<typeof toReviewPackageView>[0]): Record<string, unknown> | undefined {
+  const view = toReviewPackageView(pkg)
+  const fromView = frozenSubmittedValues(
+    reviewConfirmValues(
+      view.candidates.map((candidate) => ({
+        fieldKey: candidate.fieldKey,
+        proposedValue: candidate.proposedValue,
+        userCorrectedValue: candidate.userCorrectedValue,
+        clarity: candidate.clarity,
+        status: candidate.status,
+        evidence: candidate.evidence,
+      })),
+    ).submissions,
+  )
+  if (fromView) return fromView
+  if (!Array.isArray(pkg.candidates)) return undefined
+  const corrections =
+    pkg.userCorrections && typeof pkg.userCorrections === 'object' && !Array.isArray(pkg.userCorrections)
+      ? (pkg.userCorrections as Record<string, unknown>)
+      : {}
+  const values: Record<string, unknown> = {}
+  for (const item of pkg.candidates) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as {
+      fieldKey?: unknown
+      proposedValue?: unknown
+      userCorrectedValue?: unknown
+    }
+    if (typeof candidate.fieldKey !== 'string' || !candidate.fieldKey) continue
+    values[candidate.fieldKey] =
+      candidate.userCorrectedValue !== undefined
+        ? candidate.userCorrectedValue
+        : candidate.proposedValue
+  }
+  for (const [key, value] of Object.entries(corrections)) {
+    values[key] = value
+  }
+  return frozenSubmittedValues(values)
 }
 
 function confirmationStatusFromPersistedRecord(record: {

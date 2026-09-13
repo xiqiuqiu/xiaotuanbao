@@ -280,6 +280,34 @@ it('keeps source-order receivable and resource payable reviews in the finance ca
   expect(screen.queryByText('暂无财务事项')).not.toBeInTheDocument()
 })
 
+it('still offers payable follow-up after a historically restored successful resource with no payable package', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      {
+        ...item('resource-1', resource, 'confirmed'),
+        candidates: [{ fieldKey: 'title', proposedValue: '希尔顿', evidence: [] }],
+      },
+    ],
+    confirmations: [
+      {
+        decisionCommandId: 'receipt:resource-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'resource-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'res-hotel' },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('tab', { name: '希尔顿 已确认' }))
+  expect(within(screen.getByRole('tabpanel')).getByText('继续提交应付候选 希尔顿')).toBeVisible()
+})
+
 it('offers payable follow-up only for successful resources without a payable review', async () => {
   getCollaboration.mockImplementation(async () => ({
     conversations: [{ id: 'conv-1', title: '协作一' }],
@@ -395,6 +423,47 @@ it('distinguishes confirmed receipt values from later formal edits and opens the
     to: '/departure/$departureId',
     params: { departureId: 'dep-1' },
     search: { tab: 'sourceOrders', highlightSourceOrderId: 'so-9' },
+  })
+})
+
+it('opens a confirmed segment resource on the submitted itinerary segment, not the original candidate', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      {
+        ...item('resource-1', resource, 'confirmed'),
+        confirmationUnit: 'segment_resource',
+        candidates: [
+          { fieldKey: 'title', proposedValue: '希尔顿', evidence: [] },
+          { fieldKey: 'itinerarySegmentId', proposedValue: 'seg-proposed', evidence: [] },
+        ],
+      },
+    ],
+    confirmations: [
+      {
+        decisionCommandId: 'receipt:resource-1',
+        accepted: true,
+        items: [
+          {
+            packageId: 'resource-1',
+            status: 'succeeded',
+            resultRef: { objectKind: 'segment_resource', objectId: 'res-9' },
+            submittedValues: { title: '希尔顿', itinerarySegmentId: 'seg-submitted' },
+          },
+        ],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
+  expect(navigate).toHaveBeenCalledWith({
+    to: '/departure/$departureId',
+    params: { departureId: 'dep-1' },
+    search: {
+      tab: 'execution',
+      highlightSegmentResourceId: 'res-9',
+      segmentId: 'seg-submitted',
+    },
   })
 })
 

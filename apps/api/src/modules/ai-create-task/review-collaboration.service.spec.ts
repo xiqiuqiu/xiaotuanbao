@@ -889,7 +889,14 @@ describe('ReviewCollaborationService #447', () => {
       },
     ])
     prisma.sourceOrder.findMany.mockResolvedValue([
-      { id: 'so-1', displayName: '华东旅行社（已改名）', adultGuestCount: 12 },
+      {
+        id: 'so-1',
+        displayName: '华东旅行社（已改名）',
+        adultGuestCount: 12,
+        childGuestCount: 1,
+        notes: '已改备注',
+        partnerId: 'partner-2',
+      },
     ])
 
     const view = await service.listDepartureCollaboration(
@@ -908,7 +915,13 @@ describe('ReviewCollaborationService #447', () => {
             status: 'succeeded',
             resultRef: { objectKind: 'source_order', objectId: 'so-1' },
             submittedValues: { displayName: '华东旅行社', adultGuestCount: 10 },
-            currentFormalValues: { displayName: '华东旅行社（已改名）', adultGuestCount: 12 },
+            currentFormalValues: {
+              displayName: '华东旅行社（已改名）',
+              adultGuestCount: 12,
+              childGuestCount: 1,
+              notes: '已改备注',
+              partnerId: 'partner-2',
+            },
           }),
         ],
       }),
@@ -963,7 +976,15 @@ describe('ReviewCollaborationService #447', () => {
       },
     ])
     prisma.segmentResource.findMany.mockResolvedValue([
-      { id: 'res-1', title: '希尔顿（加早）', amountCents: 138000 },
+      {
+        id: 'res-1',
+        title: '希尔顿（加早）',
+        amountCents: 138000,
+        notes: '加早',
+        supplierId: 'sup-2',
+        resourceKind: 'hotel',
+        segmentId: 'seg-live',
+      },
     ])
 
     const view = await service.listDepartureCollaboration(organizationId, userId, 'departure-1')
@@ -974,7 +995,14 @@ describe('ReviewCollaborationService #447', () => {
       expect.objectContaining({
         packageId: 'pkg-archived',
         submittedValues: { title: '希尔顿', amountCents: 128000 },
-        currentFormalValues: { title: '希尔顿（加早）', amountCents: 138000 },
+        currentFormalValues: {
+          title: '希尔顿（加早）',
+          amountCents: 138000,
+          notes: '加早',
+          supplierId: 'sup-2',
+          resourceKind: 'hotel',
+          itinerarySegmentId: 'seg-live',
+        },
       }),
     )
   })
@@ -1188,6 +1216,12 @@ describe('ReviewCollaborationService #447', () => {
           resultJson: expect.objectContaining({
             status: 'succeeded',
             resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' },
+            submittedValues: expect.objectContaining({
+              itinerarySegmentId: 'seg-1',
+              resourceKind: 'hotel',
+              title: '希尔顿',
+              amountCents: 128_000,
+            }),
           }),
         }),
       }),
@@ -1273,6 +1307,157 @@ describe('ReviewCollaborationService #447', () => {
           resultJson: expect.objectContaining({
             status: 'succeeded',
             resultRef: { objectKind: 'segment_resource', objectId: 'resource-1' },
+            submittedValues: expect.objectContaining({
+              itinerarySegmentId: 'seg-1',
+              resourceKind: 'hotel',
+              title: '希尔顿',
+            }),
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('still freezes submittedValues when listing after a job result omitted them', async () => {
+    const { service, prisma } = createService()
+    prisma.conversationDepartureLink.findMany.mockResolvedValue([
+      {
+        conversationId: 'conv-1',
+        conversation: {
+          id: 'conv-1',
+          title: '发团协作',
+          lastActivityAt: new Date('2026-09-07T00:00:00.000Z'),
+        },
+      },
+    ])
+    prisma.aiReviewPackage.findMany.mockResolvedValue([
+      {
+        ...pendingPackage,
+        id: 'pkg-done',
+        status: AiReviewPackageStatus.confirmed,
+        payloadSchema: 'source_order.create@v1',
+        confirmationUnit: 'source_order_create',
+        itemIdentity: 'item:1',
+        candidates: [
+          {
+            fieldKey: 'displayName',
+            proposedValue: '华东旅行社',
+            userCorrectedValue: '华东旅行社（审核改）',
+            clarity: 'clear',
+            status: 'confirmed',
+            evidence: [],
+          },
+        ],
+      },
+    ])
+    prisma.aiWorkflowJob.findMany.mockResolvedValue([
+      {
+        organizationId,
+        type: AiWorkflowJobType.review_confirm,
+        jobKey: 'review_confirm:decision-1:pkg-done',
+        reviewPackageId: 'pkg-done',
+        status: AiWorkflowJobStatus.succeeded,
+        reviewPackage: { itemIdentity: 'item:1' },
+      },
+    ])
+    prisma.aiCreateIdempotencyRecord.findUnique
+      .mockResolvedValueOnce({
+        operatorUserId: userId,
+        resultJson: { decisionCommandId: 'decision-1', accepted: true },
+      })
+      .mockResolvedValueOnce({
+        resultJson: {
+          status: 'succeeded',
+          packageId: 'pkg-done',
+          resultRef: { objectKind: 'source_order', objectId: 'so-1' },
+        },
+      })
+    prisma.aiReviewRecord.findMany.mockResolvedValue([
+      {
+        packageId: 'pkg-done',
+        action: 'confirm',
+        writeResult: 'success',
+        submittedValues: { displayName: '华东旅行社（审核改）', partnerId: 'partner-1' },
+        afterSnapshot: { objectKind: 'source_order', objectId: 'so-1' },
+        createdAt: new Date('2026-09-07T01:00:00.000Z'),
+      },
+    ])
+    prisma.sourceOrder.findMany.mockResolvedValue([
+      {
+        id: 'so-1',
+        displayName: '华东旅行社（已改名）',
+        adultGuestCount: 12,
+        childGuestCount: 0,
+        notes: null,
+        partnerId: 'partner-2',
+      },
+    ])
+
+    const view = await service.listDepartureCollaboration(organizationId, userId, 'departure-1')
+
+    expect(view.confirmations[0]?.items[0]).toEqual(
+      expect.objectContaining({
+        packageId: 'pkg-done',
+        submittedValues: { displayName: '华东旅行社（审核改）', partnerId: 'partner-1' },
+        currentFormalValues: expect.objectContaining({
+          displayName: '华东旅行社（已改名）',
+          partnerId: 'partner-2',
+        }),
+      }),
+    )
+  })
+
+  it('writes submittedValues when a departure creation draft confirm succeeds', async () => {
+    const pkg = {
+      ...pendingPackage,
+      payloadSchema: 'departure.basic_info_draft@v1',
+      confirmationUnit: 'basic_info_draft',
+      targetKind: 'departure_creation_draft',
+      targetId: 'draft-1',
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '关西六日',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '关西六日' }],
+        },
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-01',
+          userCorrectedValue: '2026-09-02',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月1日' }],
+        },
+      ],
+    }
+    const { service, prisma, tx, tasks } = createService({ packages: [pkg] })
+    prisma.aiWorkflowJob.findUnique.mockResolvedValue({
+      id: 'job-1',
+      type: AiWorkflowJobType.review_confirm,
+      organizationId,
+      reviewPackage: pkg,
+      idempotencyRecord: {
+        operatorUserId: userId,
+        idempotencyKey: 'decision-1:pkg-1',
+        requestSnapshot: { expectedPackageVersion: 1 },
+      },
+      idempotencyRecordId: 'idem-item-1',
+    })
+
+    await service.executeConfirmedItem('job-1')
+
+    expect(tasks.confirmDepartureReviewPackage).toHaveBeenCalled()
+    expect(tx.aiCreateIdempotencyRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          resultJson: expect.objectContaining({
+            status: 'succeeded',
+            submittedValues: expect.objectContaining({
+              name: '关西六日',
+              startDate: '2026-09-02',
+            }),
           }),
         }),
       }),

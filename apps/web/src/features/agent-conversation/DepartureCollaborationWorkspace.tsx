@@ -97,14 +97,23 @@ function formalResourceSearch(
       ...(typeof objectId === 'string' ? { highlightDepartureResourceId: objectId } : {}),
     }
   }
-  const objectId = confirmationForPackage(confirmations, selected.id)?.resultRef?.objectId
+  const confirmation = confirmationForPackage(confirmations, selected.id)
+  const objectId = confirmation?.resultRef?.objectId
+  const submittedSegment = confirmation?.submittedValues?.itinerarySegmentId
+  const currentSegment = confirmation?.currentFormalValues?.itinerarySegmentId
   const segment = selected.candidates.find(
     (candidate) => candidate.fieldKey === 'itinerarySegmentId',
   )
-  const segmentId =
+  const candidateSegment =
     segment?.userCorrectedValue !== undefined
       ? segment.userCorrectedValue
       : segment?.proposedValue
+  const segmentId =
+    typeof submittedSegment === 'string' && submittedSegment
+      ? submittedSegment
+      : typeof currentSegment === 'string' && currentSegment
+        ? currentSegment
+        : candidateSegment
   return {
     tab: 'execution' as const,
     ...(typeof objectId === 'string' ? { highlightSegmentResourceId: objectId } : {}),
