@@ -8,6 +8,7 @@ import { ResourcePayableReviewPanel } from './ResourcePayableReviewPanel'
 const acceptReviewConfirmation = vi.fn()
 const getReviewConfirmation = vi.fn()
 const getDepartureCollaboration = vi.fn()
+const prepareResourcePayableReviews = vi.fn()
 const navigate = vi.fn()
 const closeGlobalForBusinessNavigation = vi.fn()
 
@@ -23,6 +24,7 @@ vi.mock('@/services/agent-collaboration.service', () => ({
   acceptReviewConfirmation: (...args: unknown[]) => acceptReviewConfirmation(...args),
   getReviewConfirmation: (...args: unknown[]) => getReviewConfirmation(...args),
   getDepartureCollaboration: (...args: unknown[]) => getDepartureCollaboration(...args),
+  prepareResourcePayableReviews: (...args: unknown[]) => prepareResourcePayableReviews(...args),
 }))
 
 function pkg(overrides?: Partial<AiReviewPackageView>): AiReviewPackageView {
@@ -129,6 +131,7 @@ afterEach(() => {
   acceptReviewConfirmation.mockReset()
   getReviewConfirmation.mockReset()
   getDepartureCollaboration.mockReset()
+  prepareResourcePayableReviews.mockReset()
   navigate.mockReset()
   closeGlobalForBusinessNavigation.mockReset()
 })
@@ -209,4 +212,63 @@ it('shows not-needed success copy after confirming no payable is required', asyn
   )
   expect(await screen.findByText('已确认无需生成')).toBeInTheDocument()
   expect(screen.queryByText('约定应付已提交')).not.toBeInTheDocument()
+})
+
+it.each(['segment_resource', 'departure_resource'])('compares %s conventions and requires a fresh explicit confirmation', async (sourceType) => {
+  const reviewed = { amountCents: 880_000, endDate: '2026-04-08' }
+  const current = { amountCents: 990_000, endDate: '2026-04-10',
+    ...(sourceType === 'segment_resource' ? { segmentId: 'segment-1' } : {}),
+  }
+  const stale = pkg({
+    candidates: pkg().candidates.map((candidate) => candidate.fieldKey === 'sourceType'
+      ? { ...candidate, proposedValue: sourceType } : candidate),
+    payableConventionComparison: { reviewed, current, changed: true },
+  })
+  renderPanel(stale)
+  expect(await screen.findByText('正式资源约定已变化')).toBeInTheDocument()
+  expect(screen.getByText('2026-04-08')).toBeInTheDocument()
+  expect(screen.getByText('2026-04-10')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '确认提交约定应付' })).toBeDisabled()
+  expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '前往修改资源' }))
+  expect(navigate).toHaveBeenCalledWith({
+    to: '/departure/$departureId', params: { departureId: 'departure-1' },
+    search: { tab: 'execution',
+      [sourceType === 'segment_resource' ? 'highlightSegmentResourceId' : 'highlightDepartureResourceId']: 'res-1',
+      ...(sourceType === 'segment_resource' ? { segmentId: 'segment-1' } : {}),
+    },
+  })
+
+  const fresh = { ...stale, version: 2, payableConventionComparison: { reviewed: current, current, changed: false } }
+  prepareResourcePayableReviews.mockImplementation(async () => {
+    getDepartureCollaboration.mockResolvedValue({ items: [fresh], confirmations: [] })
+    return [fresh]
+  })
+  fireEvent.click(screen.getByRole('button', { name: '重新准备审核' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '确认提交约定应付' })).toBeEnabled())
+  expect(prepareResourcePayableReviews).toHaveBeenCalledWith('departure-1', {
+    conversationId: 'conv-1', items: [{ sourceType, sourceId: 'res-1' }],
+  })
+  expect(acceptReviewConfirmation).not.toHaveBeenCalled()
+  expect(screen.queryByText('正式资源约定已变化')).not.toBeInTheDocument()
+  acceptReviewConfirmation.mockResolvedValue({
+    decisionCommandId: 'd-2', accepted: true, items: [{ packageId: 'pkg-pay', status: 'succeeded' }],
+  })
+  fireEvent.click(screen.getByRole('button', { name: '确认提交约定应付' }))
+  await waitFor(() => expect(acceptReviewConfirmation).toHaveBeenCalledWith({
+    decisionCommandId: expect.any(String), items: [{ packageId: 'pkg-pay', expectedPackageVersion: 2 }],
+  }))
+})
+
+it('keeps the old review blocked when preparing the current convention fails', async () => {
+  renderPanel(pkg({ payableConventionComparison: {
+    reviewed: { amountCents: 880_000, endDate: '2026-04-08' },
+    current: { amountCents: 990_000, endDate: '2026-04-10' }, changed: true,
+  } }))
+  prepareResourcePayableReviews.mockRejectedValue(new Error('暂时无法重新准备'))
+  fireEvent.click(await screen.findByRole('button', { name: '重新准备审核' }))
+  expect(await screen.findByText('暂时无法重新准备')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '确认提交约定应付' })).toBeDisabled()
+  expect(acceptReviewConfirmation).not.toHaveBeenCalled()
 })
