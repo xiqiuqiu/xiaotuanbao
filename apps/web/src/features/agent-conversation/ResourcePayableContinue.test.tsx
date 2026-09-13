@@ -159,3 +159,40 @@ it('keeps resources selectable while payable review is pending or after cancel/r
     },
   ])
 })
+
+it('still exposes payable follow-up for a historically restored successful resource without a payable package', () => {
+  // Product currently re-offers 继续提交应付 after receipt restore when no payable
+  // package exists yet. Keep this assertion so a later hide-on-history change is explicit.
+  expect(
+    succeededResourceItems(
+      [
+        {
+          decisionCommandId: 'receipt:pkg-hotel',
+          accepted: true,
+          items: [
+            {
+              packageId: 'pkg-hotel',
+              status: 'succeeded',
+              resultRef: { objectKind: 'segment_resource', objectId: 'res-hotel' },
+            },
+          ],
+        },
+      ],
+      [
+        {
+          id: 'pkg-hotel',
+          payloadSchema: 'departure.segment_resource@v1',
+          status: 'confirmed',
+          candidates: [{ fieldKey: 'title', proposedValue: '4月2日住宿' }],
+        },
+      ],
+    ),
+  ).toEqual([
+    {
+      packageId: 'pkg-hotel',
+      sourceType: 'segment_resource',
+      sourceId: 'res-hotel',
+      title: '4月2日住宿',
+    },
+  ])
+})

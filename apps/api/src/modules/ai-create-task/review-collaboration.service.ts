@@ -22,6 +22,7 @@ import type {
   AcceptReviewConfirmationDto,
   AiReviewPackageView,
   DepartureCollaborationView,
+  ReviewConfirmationItemResult,
   ReviewConfirmationView,
   ReviewRevisionView,
 } from '@xiaotuanbao/shared'
@@ -60,6 +61,7 @@ import {
   REVIEW_CONFIRM_BATCH_OPERATION,
   REVIEW_CONFIRM_ITEM_OPERATION,
   decisionCommandIdFromReviewConfirmJobKey,
+  persistedReceiptDecisionCommandId,
   reviewConfirmItemKey,
   reviewConfirmJobKey,
 } from './review-collaboration.constants'
@@ -701,6 +703,7 @@ export class ReviewCollaborationService {
               reason?: string
               retryable?: boolean
               resultRef?: { objectKind: string; objectId: string }
+              submittedValues?: Record<string, unknown>
             }
           | null
         if (saved?.status) {
@@ -711,6 +714,7 @@ export class ReviewCollaborationService {
             reason: saved.reason,
             retryable: saved.retryable,
             resultRef: saved.resultRef,
+            ...(saved.submittedValues ? { submittedValues: saved.submittedValues } : {}),
           }
         }
         if (job.status === AiWorkflowJobStatus.failed) {
@@ -815,7 +819,7 @@ export class ReviewCollaborationService {
         }),
       ),
     ]
-    const confirmations = []
+    const confirmations: ReviewConfirmationView[] = []
     for (const decisionCommandId of decisionIds) {
       try {
         confirmations.push(
@@ -828,6 +832,7 @@ export class ReviewCollaborationService {
         throw error
       }
     }
+    const restored = await this.restorePersistedReceipts(organizationId, relatedPackages, confirmations)
     return {
       departureId,
       conversations: relatedLinks.map((link) => ({
@@ -840,8 +845,178 @@ export class ReviewCollaborationService {
         ...(pkg.status === AiReviewPackageStatus.pending && revisingIds.has(pkg.id)
           ? { confirmationBlockedReason: REVISION_PENDING_REASON } : {}),
       })),
-      confirmations,
+      confirmations: restored,
     }
+  }
+
+  private async restorePersistedReceipts(
+    organizationId: string,
+    packages: AiReviewPackage[],
+    confirmations: ReviewConfirmationView[],
+  ): Promise<ReviewConfirmationView[]> {
+    const covered = new Set(
+      confirmations.flatMap((confirmation) => confirmation.items.map((item) => item.packageId)),
+    )
+    const receiptPackageIds = packages
+      .filter((pkg) => pkg.status !== AiReviewPackageStatus.pending)
+      .map((pkg) => pkg.id)
+    const records = receiptPackageIds.length
+      ? await this.prisma.aiReviewRecord.findMany({
+          where: {
+            organizationId,
+            packageId: { in: receiptPackageIds },
+            action: { in: [AiReviewRecordAction.confirm, AiReviewRecordAction.reject] },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+    const latestByPackage = new Map<string, (typeof records)[number]>()
+    for (const record of records) {
+      latestByPackage.set(record.packageId, record)
+    }
+    const restoredItems: ReviewConfirmationItemResult[] = []
+    for (const pkg of packages) {
+      const record = latestByPackage.get(pkg.id)
+      if (!record || covered.has(pkg.id)) continue
+      const status = confirmationStatusFromPersistedRecord(record)
+      const resultRef =
+        status === 'succeeded' ? parseStoredResultRef(record.afterSnapshot) : null
+      restoredItems.push({
+        packageId: pkg.id,
+        itemIdentity: pkg.itemIdentity,
+        status,
+        resultRef: resultRef ?? undefined,
+        submittedValues: frozenSubmittedValues(record.submittedValues),
+      })
+    }
+    const withSubmitted = confirmations.map((confirmation) => ({
+      ...confirmation,
+      items: confirmation.items.map((item) => {
+        if (item.submittedValues) return item
+        const record = latestByPackage.get(item.packageId)
+        const submittedValues = frozenSubmittedValues(record?.submittedValues)
+        return submittedValues ? { ...item, submittedValues } : item
+      }),
+    }))
+    const merged = restoredItems.length
+      ? [
+          ...withSubmitted,
+          ...restoredItems.map((item) => ({
+            decisionCommandId: persistedReceiptDecisionCommandId(item.packageId),
+            accepted: true,
+            items: [item],
+          })),
+        ]
+      : withSubmitted
+    return this.attachCurrentFormalValues(organizationId, merged)
+  }
+
+  private async attachCurrentFormalValues(
+    organizationId: string,
+    confirmations: ReviewConfirmationView[],
+  ): Promise<ReviewConfirmationView[]> {
+    const refs = confirmations.flatMap((confirmation) =>
+      confirmation.items.flatMap((item) => {
+        const resultRef = item.resultRef
+        return resultRef?.objectKind && resultRef.objectId ? [{ packageId: item.packageId, ...resultRef }] : []
+      }),
+    )
+    if (refs.length === 0) return confirmations
+    const sourceOrderIds = refs.filter((ref) => ref.objectKind === 'source_order').map((ref) => ref.objectId)
+    const segmentIds = refs.filter((ref) => ref.objectKind === 'segment_resource').map((ref) => ref.objectId)
+    const departureResourceIds = refs
+      .filter((ref) => ref.objectKind === 'departure_resource')
+      .map((ref) => ref.objectId)
+    const [sourceOrders, segmentResources, departureResources] = await Promise.all([
+      sourceOrderIds.length
+        ? this.prisma.sourceOrder.findMany({
+            where: { id: { in: sourceOrderIds }, departure: { organizationId } },
+            select: {
+              id: true,
+              displayName: true,
+              adultGuestCount: true,
+              childGuestCount: true,
+              notes: true,
+              partnerId: true,
+            },
+          })
+        : [],
+      segmentIds.length
+        ? this.prisma.segmentResource.findMany({
+            where: { id: { in: segmentIds }, segment: { departure: { organizationId } } },
+            select: {
+              id: true,
+              title: true,
+              amountCents: true,
+              notes: true,
+              supplierId: true,
+              resourceKind: true,
+              segmentId: true,
+            },
+          })
+        : [],
+      departureResourceIds.length
+        ? this.prisma.departureResource.findMany({
+            where: { id: { in: departureResourceIds }, departure: { organizationId } },
+            select: {
+              id: true,
+              title: true,
+              amountCents: true,
+              notes: true,
+              supplierId: true,
+              resourceKind: true,
+            },
+          })
+        : [],
+    ])
+    const currentByPackage = new Map<string, Record<string, unknown> | null>()
+    for (const ref of refs) {
+      if (ref.objectKind === 'source_order') {
+        const row = sourceOrders.find((item) => item.id === ref.objectId)
+        currentByPackage.set(
+          ref.packageId,
+          row
+            ? {
+                displayName: row.displayName,
+                adultGuestCount: row.adultGuestCount,
+                childGuestCount: row.childGuestCount,
+                notes: row.notes,
+                partnerId: row.partnerId,
+              }
+            : null,
+        )
+        continue
+      }
+      const row =
+        ref.objectKind === 'segment_resource'
+          ? segmentResources.find((item) => item.id === ref.objectId)
+          : ref.objectKind === 'departure_resource'
+            ? departureResources.find((item) => item.id === ref.objectId)
+            : undefined
+      if (ref.objectKind === 'segment_resource' || ref.objectKind === 'departure_resource') {
+        currentByPackage.set(
+          ref.packageId,
+          row
+            ? {
+                title: row.title,
+                amountCents: row.amountCents,
+                notes: row.notes,
+                supplierId: row.supplierId,
+                resourceKind: row.resourceKind,
+                ...('segmentId' in row ? { itinerarySegmentId: row.segmentId } : {}),
+              }
+            : null,
+        )
+      }
+    }
+    return confirmations.map((confirmation) => ({
+      ...confirmation,
+      items: confirmation.items.map((item) =>
+        currentByPackage.has(item.packageId)
+          ? { ...item, currentFormalValues: currentByPackage.get(item.packageId) ?? null }
+          : item,
+      ),
+    }))
   }
 
   private async assertNoPendingRevision(
@@ -920,6 +1095,10 @@ export class ReviewCollaborationService {
         pkg,
         'succeeded',
         resultRef,
+        undefined,
+        false,
+        submittedValuesFromResultJson(job.idempotencyRecord?.resultJson)
+          ?? submittedValuesFromPackage(pkg),
       )
       return
     }
@@ -944,7 +1123,15 @@ export class ReviewCollaborationService {
           },
           job.idempotencyRecord?.idempotencyKey,
         )
-        await this.completeItem(job, pkg, 'succeeded')
+        await this.completeItem(
+          job,
+          pkg,
+          'succeeded',
+          undefined,
+          undefined,
+          false,
+          submittedValuesFromPackage(pkg),
+        )
         return
       }
       await this.confirmIndependentItem(
@@ -1042,7 +1229,7 @@ export class ReviewCollaborationService {
       }
       const resultRef = await this.writeIndependentItemInTx(tx, organizationId, current)
       const view = toReviewPackageView(current)
-      const { corrections, submissions } = reviewConfirmValues(
+      const { corrections } = reviewConfirmValues(
         view.candidates.map((candidate) => ({
           fieldKey: candidate.fieldKey,
           proposedValue: candidate.proposedValue,
@@ -1052,6 +1239,7 @@ export class ReviewCollaborationService {
           evidence: candidate.evidence,
         })),
       )
+      const submissions = submittedValuesFromPackage(current) ?? {}
       await tx.aiReviewRecord.create({
         data: {
           organizationId,
@@ -1076,7 +1264,7 @@ export class ReviewCollaborationService {
         inputBatchId: pkg.inputBatchId,
         disposition: 'confirmed',
       })
-      await this.completeItemInTx(tx, job, current, 'succeeded', resultRef)
+      await this.completeItemInTx(tx, job, current, 'succeeded', resultRef, undefined, false, submissions)
       return { events }
     })
     for (const event of events) {
@@ -1334,9 +1522,10 @@ export class ReviewCollaborationService {
     resultRef?: { objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string },
     reason?: string,
     retryable = status === 'failed',
+    submittedValues?: Record<string, unknown>,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      await this.completeItemInTx(tx, job, pkg, status, resultRef, reason, retryable)
+      await this.completeItemInTx(tx, job, pkg, status, resultRef, reason, retryable, submittedValues)
     })
   }
 
@@ -1348,6 +1537,7 @@ export class ReviewCollaborationService {
     resultRef?: { objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string },
     reason?: string,
     retryable = status === 'failed',
+    submittedValues?: Record<string, unknown>,
   ): Promise<void> {
     await tx.aiWorkflowJob.update({
       where: { id: job.id },
@@ -1361,6 +1551,7 @@ export class ReviewCollaborationService {
       },
     })
     if (job.idempotencyRecordId) {
+      const frozenSubmitted = frozenSubmittedValues(submittedValues)
       await tx.aiCreateIdempotencyRecord.update({
         where: { id: job.idempotencyRecordId },
         data: {
@@ -1371,6 +1562,7 @@ export class ReviewCollaborationService {
             resultRef,
             reason,
             retryable,
+            ...(frozenSubmitted ? { submittedValues: frozenSubmitted } : {}),
           } as Prisma.InputJsonValue,
         },
       })
@@ -1598,5 +1790,70 @@ function payableConventionChanged(
 
 function payableHistoryStatusFromCandidates(raw: unknown): string | null {
   return receivableHistoryStatusFromCandidates(raw)
+}
+
+function frozenSubmittedValues(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  return Object.keys(raw).length > 0 ? (raw as Record<string, unknown>) : undefined
+}
+
+function submittedValuesFromResultJson(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  return frozenSubmittedValues((raw as { submittedValues?: unknown }).submittedValues)
+}
+
+function submittedValuesFromPackage(pkg: Parameters<typeof toReviewPackageView>[0]): Record<string, unknown> | undefined {
+  const view = toReviewPackageView(pkg)
+  const fromView = frozenSubmittedValues(
+    reviewConfirmValues(
+      view.candidates.map((candidate) => ({
+        fieldKey: candidate.fieldKey,
+        proposedValue: candidate.proposedValue,
+        userCorrectedValue: candidate.userCorrectedValue,
+        clarity: candidate.clarity,
+        status: candidate.status,
+        evidence: candidate.evidence,
+      })),
+    ).submissions,
+  )
+  if (fromView) return fromView
+  if (!Array.isArray(pkg.candidates)) return undefined
+  const corrections =
+    pkg.userCorrections && typeof pkg.userCorrections === 'object' && !Array.isArray(pkg.userCorrections)
+      ? (pkg.userCorrections as Record<string, unknown>)
+      : {}
+  const values: Record<string, unknown> = {}
+  for (const item of pkg.candidates) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as {
+      fieldKey?: unknown
+      proposedValue?: unknown
+      userCorrectedValue?: unknown
+    }
+    if (typeof candidate.fieldKey !== 'string' || !candidate.fieldKey) continue
+    values[candidate.fieldKey] =
+      candidate.userCorrectedValue !== undefined
+        ? candidate.userCorrectedValue
+        : candidate.proposedValue
+  }
+  for (const [key, value] of Object.entries(corrections)) {
+    values[key] = value
+  }
+  return frozenSubmittedValues(values)
+}
+
+function confirmationStatusFromPersistedRecord(record: {
+  action: AiReviewRecordAction
+  writeResult: AiReviewWriteResult
+}): ReviewConfirmationItemResult['status'] {
+  if (
+    record.action === AiReviewRecordAction.reject &&
+    record.writeResult === AiReviewWriteResult.rejected
+  ) {
+    return 'rejected'
+  }
+  if (record.writeResult === AiReviewWriteResult.success) return 'succeeded'
+  if (record.writeResult === AiReviewWriteResult.conflict) return 'conflict'
+  return 'failed'
 }
 

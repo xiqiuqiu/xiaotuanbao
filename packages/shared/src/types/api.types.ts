@@ -1189,6 +1189,7 @@ export type ReviewConfirmationItemStatus =
   | 'failed'
   | 'conflict'
   | 'skipped'
+  | 'rejected'
 
 export interface ReviewConfirmationItemInput {
   packageId: string
@@ -1227,6 +1228,10 @@ export interface ReviewConfirmationItemResult {
     scheduleIds?: string[]
     generation?: string
   }
+  /** 审核确认时实际提交的字段快照；后续人工改正式记录不得回写这里。 */
+  submittedValues?: Record<string, unknown>
+  /** 当前正式记录可读字段；与 submittedValues 分开，用于对照事后修改。 */
+  currentFormalValues?: Record<string, unknown> | null
 }
 
 export interface ReviewConfirmationView {

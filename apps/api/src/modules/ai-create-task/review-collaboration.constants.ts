@@ -20,3 +20,7 @@ export function decisionCommandIdFromReviewConfirmJobKey(
   }
   return jobKey.slice(prefix.length, jobKey.length - suffix.length)
 }
+
+export function persistedReceiptDecisionCommandId(packageId: string): string {
+  return `receipt:${packageId}`
+}

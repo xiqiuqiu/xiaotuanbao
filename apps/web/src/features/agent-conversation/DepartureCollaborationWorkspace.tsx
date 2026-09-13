@@ -25,7 +25,6 @@ import {
   resolveReviewField,
 } from '@xiaotuanbao/ai-contracts'
 import type {
-  AiReviewCandidateView,
   AiReviewPackageView,
   ReviewConfirmationView,
 } from '@/types/api'
@@ -98,16 +97,38 @@ function formalResourceSearch(
       ...(typeof objectId === 'string' ? { highlightDepartureResourceId: objectId } : {}),
     }
   }
+  const confirmation = confirmationForPackage(confirmations, selected.id)
+  const objectId = confirmation?.resultRef?.objectId
+  const submittedSegment = confirmation?.submittedValues?.itinerarySegmentId
+  const currentSegment = confirmation?.currentFormalValues?.itinerarySegmentId
   const segment = selected.candidates.find(
     (candidate) => candidate.fieldKey === 'itinerarySegmentId',
   )
-  const segmentId =
+  const candidateSegment =
     segment?.userCorrectedValue !== undefined
       ? segment.userCorrectedValue
       : segment?.proposedValue
+  const segmentId =
+    typeof submittedSegment === 'string' && submittedSegment
+      ? submittedSegment
+      : typeof currentSegment === 'string' && currentSegment
+        ? currentSegment
+        : candidateSegment
   return {
     tab: 'execution' as const,
+    ...(typeof objectId === 'string' ? { highlightSegmentResourceId: objectId } : {}),
     ...(typeof segmentId === 'string' ? { segmentId } : {}),
+  }
+}
+
+function formalSourceOrderSearch(
+  selected: AiReviewPackageView,
+  confirmations: ReviewConfirmationView[],
+) {
+  const objectId = confirmationForPackage(confirmations, selected.id)?.resultRef?.objectId
+  return {
+    tab: 'sourceOrders' as const,
+    ...(typeof objectId === 'string' ? { highlightSourceOrderId: objectId } : {}),
   }
 }
 function itemTitle(pkg: AiReviewPackageView, ordinal: number) {
@@ -541,6 +562,7 @@ function WorkspaceReviewItem({
       (item) =>
         item.packageId === selected.id && (item.status === 'failed' || item.status === 'conflict'),
     )
+  const writeFailed = Boolean(failure) && selected.status !== 'rejected'
   return (
     <>
       <Space className={styles.context}>
@@ -560,8 +582,11 @@ function WorkspaceReviewItem({
           <Button size="small" onClick={onAsk}>针对此项提问</Button>
         ) : null}
       </Space>
-      {failure ? (
-        <Alert type="error" showIcon title={failure.reason ?? '此项未完成，请核对后重试'} />
+      {writeFailed ? (
+        <Alert type="error" showIcon title={failure?.reason ?? '此项未完成，请核对后重试'} />
+      ) : null}
+      {selected.status === 'rejected' ? (
+        <Alert type="info" showIcon title="此项已拒绝，草稿未写入" />
       ) : null}
       <ReviewRevisionHistory pkg={selected} focused={focused} />
       <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
@@ -660,29 +685,28 @@ function WorkspaceReviewItem({
           onPrepared={onPreparedPayableReviews}
         />
       ) : null}
-      {selected.status !== 'pending' &&
+      {(selected.status === 'confirmed' || selected.status === 'rejected') &&
       !isReceivableReviewSchema(selected.payloadSchema) &&
       !isPayableReviewSchema(selected.payloadSchema) ? (
-        <section className={styles.snapshot} aria-label="审核时的确认内容">
-          <Descriptions
-            title="审核记录"
-            bordered
-            size="small"
-            column={1}
-            items={selected.candidates.map((item) => ({
-              key: item.fieldKey,
-              label:
-                resolveReviewField(selected.payloadSchema, selected.confirmationUnit, item.fieldKey)
-                  ?.label ?? item.fieldKey,
-              children: (
-                <ReviewSnapshotField item={item} pkg={selected} departureId={departureId} />
-              ),
-            }))}
-          />
-          <Typography.Paragraph type="secondary">
-            以上为本次审核快照，正式业务记录可能已更新。
-          </Typography.Paragraph>
-        </section>
+        <ConfirmedReceiptCompare
+          selected={selected}
+          departureId={departureId}
+          confirmations={confirmations}
+        />
+      ) : null}
+      {selected.status === 'confirmed' && selected.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ? (
+        <Button
+          onClick={() => {
+            useAgentConversationStore.getState().closeGlobalForBusinessNavigation()
+            void navigate({
+              to: '/departure/$departureId',
+              params: { departureId },
+              search: formalSourceOrderSearch(selected, confirmations),
+            })
+          }}
+        >
+          查看客源单
+        </Button>
       ) : null}
       {selected.status === 'confirmed' && isResourceReviewSchema(selected.payloadSchema) ? (
         <Button
@@ -702,51 +726,145 @@ function WorkspaceReviewItem({
   )
 }
 
-function ReviewSnapshotField({
-  item,
+function receiptFieldKeys(
+  selected: AiReviewPackageView,
+  submitted?: Record<string, unknown>,
+  current?: Record<string, unknown> | null,
+) {
+  const fields = selected.candidates.map((item) => item.fieldKey)
+  const seen = new Set(fields)
+  const extras = [...Object.keys(submitted ?? {}), ...Object.keys(current ?? {})].filter((key) => {
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return [...fields, ...extras]
+}
+
+function receiptValue(
+  key: string,
+  selected: AiReviewPackageView,
+  snapshot?: Record<string, unknown>,
+) {
+  if (snapshot && key in snapshot) return snapshot[key]
+  const item = selected.candidates.find((candidate) => candidate.fieldKey === key)
+  if (!item) return undefined
+  return item.userCorrectedValue !== undefined ? item.userCorrectedValue : item.proposedValue
+}
+
+function ConfirmedReceiptCompare({
+  selected,
+  departureId,
+  confirmations,
+}: {
+  selected: AiReviewPackageView
+  departureId: string
+  confirmations: ReviewConfirmationView[]
+}) {
+  const confirmation = confirmationForPackage(confirmations, selected.id)
+  const submitted = confirmation?.submittedValues
+  const current = confirmation?.currentFormalValues
+  const keys = receiptFieldKeys(selected, submitted, current)
+  const rejected = selected.status === 'rejected'
+  return (
+    <section
+      className={styles.snapshot}
+      aria-label={rejected ? '审核时的拒绝内容' : '审核时的确认内容'}
+    >
+      <Descriptions
+        title={rejected ? '审核时拒绝' : '审核时确认'}
+        bordered
+        size="small"
+        column={1}
+        items={keys.map((key) => ({
+          key,
+          label:
+            resolveReviewField(selected.payloadSchema, selected.confirmationUnit, key)?.label ??
+            key,
+          children: (
+            <ReviewSnapshotValue
+              fieldKey={key}
+              value={receiptValue(key, selected, submitted)}
+              pkg={selected}
+              departureId={departureId}
+            />
+          ),
+        }))}
+      />
+      {current ? (
+        <Descriptions
+          title="当前正式记录"
+          bordered
+          size="small"
+          column={1}
+          items={Object.keys(current).map((key) => ({
+            key,
+            label:
+              resolveReviewField(selected.payloadSchema, selected.confirmationUnit, key)?.label ??
+              key,
+            children: (
+              <ReviewSnapshotValue
+                fieldKey={key}
+                value={current[key]}
+                pkg={selected}
+                departureId={departureId}
+              />
+            ),
+          }))}
+        />
+      ) : (
+        <Typography.Paragraph type="secondary">
+          {rejected
+            ? '以上为拒绝时的候选内容，未写入正式业务记录。'
+            : '以上为本次审核快照，正式业务记录可能已更新。'}
+        </Typography.Paragraph>
+      )}
+    </section>
+  )
+}
+
+function ReviewSnapshotValue({
+  fieldKey,
+  value,
   pkg,
   departureId,
 }: {
-  item: AiReviewCandidateView
+  fieldKey: string
+  value: unknown
   pkg: AiReviewPackageView
   departureId: string
 }) {
-  const field = resolveReviewField(pkg.payloadSchema, pkg.confirmationUnit, item.fieldKey)
-  const value = item.userCorrectedValue !== undefined ? item.userCorrectedValue : item.proposedValue
+  const field = resolveReviewField(pkg.payloadSchema, pkg.confirmationUnit, fieldKey)
   const isReference =
-    ['supplierId', 'partnerId', 'itinerarySegmentId'].includes(item.fieldKey) &&
-    typeof value === 'string'
+    ['supplierId', 'partnerId', 'itinerarySegmentId'].includes(fieldKey) && typeof value === 'string'
   const reference = useQuery({
-    queryKey: ['review-reference-label', departureId, item.fieldKey, value],
+    queryKey: ['review-reference-label', departureId, fieldKey, value],
     enabled: isReference,
     queryFn: async () => {
-      if (item.fieldKey === 'supplierId') return (await getSupplier(String(value))).name
-      if (item.fieldKey === 'partnerId') return (await getPartner(String(value))).name
+      if (fieldKey === 'supplierId') return (await getSupplier(String(value))).name
+      if (fieldKey === 'partnerId') return (await getPartner(String(value))).name
       return (
         (await listSegments(departureId)).items.find((segment) => segment.id === value)?.name ??
         '行程段已不可用'
       )
     },
   })
-  if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA && field)
+  if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA && field) {
     return (
-      <>
-        <SourceOrderReviewField
-          field={field}
-          value={value}
-          editing={false}
-          onChange={() => {}}
-          onDraftPresenceChange={() => {}}
-        />
-      </>
+      <SourceOrderReviewField
+        field={field}
+        value={value}
+        editing={false}
+        onChange={() => {}}
+        onDraftPresenceChange={() => {}}
+      />
     )
-  return (
-    <>
-      {isReference
-        ? (reference.data ?? (reference.isError ? '关联对象暂不可用' : '加载中…'))
-        : field
-          ? field.format(value)
-          : String(value ?? '未提供')}
-    </>
-  )
+  }
+  if (isReference) {
+    return <>{reference.data ?? (reference.isError ? '关联对象暂不可用' : '加载中…')}</>
+  }
+  if (field) {
+    return <>{field.format(value)}</>
+  }
+  return <>{String(value ?? '未提供')}</>
 }

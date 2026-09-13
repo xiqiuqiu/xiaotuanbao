@@ -135,6 +135,7 @@ export type {
   CancelAiReviewPackageDto,
   PatchAiReviewPackageDto,
   AcceptReviewConfirmationDto,
+  ReviewConfirmationItemResult,
   PrepareSourceOrderReceivableReviewDto,
   PrepareResourcePayableReviewItemDto,
   PrepareResourcePayableReviewDto,
