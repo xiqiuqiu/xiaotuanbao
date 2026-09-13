@@ -486,6 +486,30 @@ export {
   type OfflineEvalReport,
 } from './eval/runner'
 export {
+  BUSINESS_ACCEPTANCE_CATALOG_VERSION,
+  BUSINESS_ACCEPTANCE_FIELD_ASSERTION_KINDS,
+  BUSINESS_ACCEPTANCE_HARD_GATE_IDS,
+  BUSINESS_ACCEPTANCE_HARD_GATE_KINDS,
+  businessAcceptanceEvalCatalog,
+  type BusinessAcceptanceFieldAssertionKind,
+  type BusinessAcceptanceHardGateId,
+  type BusinessAcceptanceScenarioId,
+} from './eval/business-acceptance-catalog'
+export {
+  allBusinessAcceptanceMaterials,
+  businessAcceptanceFieldMaterials,
+  businessAcceptanceMaterials,
+} from './eval/business-acceptance-fixtures'
+export {
+  BUSINESS_ACCEPTANCE_BASELINE_INPUT,
+  compareBusinessAcceptanceReports,
+  runBusinessAcceptanceEval,
+  runBusinessAcceptanceEvalBaseline,
+  type BusinessAcceptanceEvalInput,
+  type BusinessAcceptanceEvalReport,
+  type BusinessAcceptanceObservation,
+} from './eval/business-acceptance-runner'
+export {
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
   AI_CREATE_AGENT_DEFINITION_REF,
   AI_CREATE_CAPABILITY_DEFINITIONS,

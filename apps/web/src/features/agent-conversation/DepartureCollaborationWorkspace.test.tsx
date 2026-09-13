@@ -107,6 +107,17 @@ function view(expanded: boolean, onExpand = vi.fn()) {
     />
   )
 }
+
+const queryClients: QueryClient[] = []
+
+function createQueryClient() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+  queryClients.push(client)
+  return client
+}
+
 beforeEach(() => {
   sessionStorage.clear()
   navigate.mockClear()
@@ -132,9 +143,16 @@ beforeEach(() => {
     confirmations: [],
   }))
 })
-afterEach(cleanup)
+afterEach(async () => {
+  await Promise.all(queryClients.map((client) => client.cancelQueries()))
+  for (const client of queryClients) {
+    client.clear()
+  }
+  queryClients.length = 0
+  cleanup()
+})
 it('binds questions to a package ID while retaining the draft, and clears only after sending', async () => {
-  const client = new QueryClient()
+  const client = createQueryClient()
   const rendered = render(<QueryClientProvider client={client}>{view(true)}</QueryClientProvider>)
   fireEvent.change(screen.getByLabelText('会话输入'), { target: { value: '请核对早餐' } })
   fireEvent.click(await screen.findByRole('tab', { name: 'resource-1 待审核' }))
@@ -154,9 +172,7 @@ it('binds questions to a package ID while retaining the draft, and clears only a
   expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBeNull()
 })
 it('keeps one chat mounted when switching between sidebar and three columns', async () => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
+  const client = createQueryClient()
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   )
@@ -181,14 +197,14 @@ it('keeps one chat mounted when switching between sidebar and three columns', as
 })
 it('restores selection after remount and isolates it between conversations', async () => {
   sessionStorage.setItem('collaboration-selection:dep-1:conv-1', 'source-2')
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   expect(await screen.findByText('客源审核 source-2')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '协作二' }))
   expect(await screen.findByText('从材料开始协作')).toBeInTheDocument()
   expect(screen.queryByText('客源审核 source-2')).not.toBeInTheDocument()
 })
 it('keeps the object rail stable after a package is confirmed', async () => {
-  const client = new QueryClient()
+  const client = createQueryClient()
   render(<QueryClientProvider client={client}>{view(true)}</QueryClientProvider>)
   await screen.findByText('客源审核 source-1')
   const rail = screen.getByRole('complementary', { name: '业务对象' })
@@ -205,7 +221,7 @@ it('keeps the object rail stable after a package is confirmed', async () => {
 })
 
 it('distinguishes an empty category from a conversation without reviews', async () => {
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   const review = await screen.findByText('客源审核 source-1')
   fireEvent.click(screen.getByRole('button', { name: '财务' }))
   expect(review).toBeInTheDocument()
@@ -222,7 +238,7 @@ it('shows query failures without presenting a misleading empty state', async () 
   getCollaboration.mockRejectedValue(new Error('offline'))
   render(
     <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      client={createQueryClient()}
     >
       {view(true)}
     </QueryClientProvider>,
@@ -233,7 +249,7 @@ it('shows query failures without presenting a misleading empty state', async () 
 })
 
 it('keeps source, segment, and departure resource reviews independent', async () => {
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   expect(await screen.findByText('客源审核 source-1')).toBeVisible()
   expect(screen.getByRole('tab', { name: 'source-1 待审核' })).toBeInTheDocument()
   expect(screen.getByRole('tab', { name: 'resource-1 待审核' })).toBeInTheDocument()
@@ -271,7 +287,7 @@ it('keeps source-order receivable and resource payable reviews in the finance ca
     ],
     confirmations: [],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('button', { name: '财务' }))
   expect(await screen.findByText('应收审核 recv-1')).toBeVisible()
   expect(screen.getByRole('tab', { name: '华东旅行社客源 待审核' })).toBeInTheDocument()
@@ -303,7 +319,7 @@ it('still offers payable follow-up after a historically restored successful reso
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('tab', { name: '希尔顿 已确认' }))
   expect(within(screen.getByRole('tabpanel')).getByText('继续提交应付候选 希尔顿')).toBeVisible()
 })
@@ -349,7 +365,7 @@ it('offers payable follow-up only for successful resources without a payable rev
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('tab', { name: '关西交通 已确认' }))
   const panel = screen.getByRole('tabpanel')
   expect(within(panel).getByText('继续提交应付候选 关西交通')).toBeVisible()
@@ -374,7 +390,7 @@ it('does not treat a user reject as a write failure, and still shows the rejecte
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('tab', { name: '希尔顿 已拒绝' }))
   const panel = screen.getByRole('tabpanel')
   expect(within(panel).getByText('此项已拒绝，草稿未写入')).toBeVisible()
@@ -412,7 +428,7 @@ it('distinguishes confirmed receipt values from later formal edits and opens the
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   expect(await screen.findByRole('region', { name: '审核时的确认内容' })).toBeVisible()
   expect(screen.getByText('审核时确认')).toBeVisible()
   expect(screen.getAllByText('当前正式记录').length).toBeGreaterThan(0)
@@ -454,7 +470,7 @@ it('opens a confirmed segment resource on the submitted itinerary segment, not t
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
   expect(navigate).toHaveBeenCalledWith({
     to: '/departure/$departureId',
@@ -485,7 +501,7 @@ it('opens a confirmed departure resource from the execution tab highlight', asyn
       },
     ],
   }))
-  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
   fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
   expect(navigate).toHaveBeenCalledWith({
     to: '/departure/$departureId',
