@@ -233,6 +233,30 @@ describe('projectPendingReviewPackage', () => {
     })
   })
 
+  it('keeps the first pending package when a late generation reuses the same item identity', async () => {
+    const { tx, reviewCreate } = createTx({
+      existing: {
+        id: 'pkg-existing',
+        sourceActionId: 'action-first',
+        candidates: [{ fieldKey: 'name' }],
+        itemIdentity: 'item:0',
+      },
+    })
+
+    const id = await projectPendingReviewPackage(tx as never, {
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      reviewPackage,
+      sourceActionId: 'action-later',
+      itemIdentity: 'item:0',
+    })
+
+    expect(id).toBe('pkg-existing')
+    expect(reviewCreate).not.toHaveBeenCalled()
+  })
+
   it('does not treat a different conversation pending package as a task-level lock', async () => {
     const { tx, reviewCreate } = createTx()
 

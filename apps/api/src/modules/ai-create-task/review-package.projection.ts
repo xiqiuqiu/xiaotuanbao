@@ -74,11 +74,8 @@ export async function projectPendingReviewPackage(
     }
     const existing = await findReviewPackageByItemIdentity(tx, identity)
     if (existing) {
-      if (existing.sourceActionId === params.sourceActionId) {
+      if (existing.sourceActionId === params.sourceActionId || params.itemIdentity) {
         return existing.id
-      }
-      if (params.itemIdentity) {
-        throw new Error('REVIEW_ITEM_IDENTITY_TAKEN')
       }
       itemIdentity = await allocateNextItemIdentity(tx, params.inputBatchId, [itemIdentity])
       continue
@@ -111,11 +108,8 @@ export async function projectPendingReviewPackage(
       if (!raced) {
         throw error
       }
-      if (raced.sourceActionId === params.sourceActionId) {
+      if (raced.sourceActionId === params.sourceActionId || params.itemIdentity) {
         return raced.id
-      }
-      if (params.itemIdentity) {
-        throw error
       }
       itemIdentity = await allocateNextItemIdentity(tx, params.inputBatchId, [
         itemIdentity,

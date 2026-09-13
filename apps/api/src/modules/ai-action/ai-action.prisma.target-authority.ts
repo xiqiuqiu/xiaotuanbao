@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { departureObjectVersion } from '../ai-create-task/departure-object-version'
 import type {
   AiActionConversationFact,
   AiActionConversationSourceFact,
@@ -16,6 +17,7 @@ type TargetAuthorityDb = {
   conversationSourceParseRun: Prisma.TransactionClient['conversationSourceParseRun']
   inputBatchSource: Prisma.TransactionClient['inputBatchSource']
   aiConversation: Prisma.TransactionClient['aiConversation']
+  $queryRaw: Prisma.TransactionClient['$queryRaw']
 }
 
 export function createPrismaAiActionTargetAuthority(client: TargetAuthorityDb): AiActionTargetAuthority {
@@ -28,7 +30,7 @@ export function createPrismaAiActionTargetAuthority(client: TargetAuthorityDb): 
           organizationId: true,
           ownerUserId: true,
           departureId: true,
-          departure: { select: { updatedAt: true } },
+          departure: { select: { id: true } },
           departureCreationTask: {
             select: {
               draft: { select: { id: true, version: true } },
@@ -39,7 +41,7 @@ export function createPrismaAiActionTargetAuthority(client: TargetAuthorityDb): 
       if (!task) {
         return null
       }
-      return toTaskFact(task)
+      return toTaskFact(task, await readDepartureVersion(client, task))
     },
     async findMaterial(materialId) {
       // AI 建团读资料的权威对象是当前 InputBatch 固定的会话来源解析版本（targetKind 沿用 departure_material）。
@@ -133,17 +135,26 @@ export class PrismaAiActionTargetAuthority implements AiActionTargetAuthority {
   }
 }
 
-function toTaskFact(task: {
-  id: string
-  organizationId: string
-  ownerUserId: string
-  departureId: string | null
-  departure: { updatedAt: Date } | null
-  departureCreationTask: { draft: { id: string; version: number } | null } | null
-}): AiActionTaskFact {
-  const departureVersion = task.departure?.updatedAt
-    ? task.departure.updatedAt.getTime()
-    : null
+async function readDepartureVersion(
+  client: TargetAuthorityDb,
+  task: { organizationId: string; departureId: string | null; departure: { id: string } | null },
+): Promise<number | null> {
+  if (!task.departureId || !task.departure) {
+    return null
+  }
+  return departureObjectVersion(client as Prisma.TransactionClient, task.organizationId, task.departureId)
+}
+
+function toTaskFact(
+  task: {
+    id: string
+    organizationId: string
+    ownerUserId: string
+    departureId: string | null
+    departureCreationTask: { draft: { id: string; version: number } | null } | null
+  },
+  departureVersion: number | null,
+): AiActionTaskFact {
   return {
     id: task.id,
     organizationId: task.organizationId,
