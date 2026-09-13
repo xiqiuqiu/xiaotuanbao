@@ -120,6 +120,7 @@ function createTx(options?: {
     },
   )
   const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([{ snapshot: '{}' }]),
     agentTask: {
       findFirst: jest.fn().mockResolvedValue({
         id: 'task-1',
@@ -448,7 +449,7 @@ describe('projectPendingReviewPackage', () => {
       taskId: 'task-collab',
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
-      reviewPackage: { ...reviewPackage, objectVersion: updatedAt.getTime() },
+      reviewPackage: { ...reviewPackage, objectVersion: await departureObjectVersion(tx as never, 'org-1', 'departure-1') },
       sourceActionId: 'action-first',
     })
 
@@ -458,7 +459,7 @@ describe('projectPendingReviewPackage', () => {
         targetKind: 'departure',
         targetId: 'departure-1',
         itemIdentity: 'item:0',
-        baseObjectVersion: updatedAt.getTime(),
+        baseObjectVersion: await departureObjectVersion(tx as never, 'org-1', 'departure-1'),
       }),
     })
   })
@@ -539,6 +540,21 @@ describe('stable pending item revisions', () => {
     expect(tx.aiReviewPackage.create).not.toHaveBeenCalled()
   })
 
+  it('requires a fresh explicit revision to replace a legacy timestamp baseline', async () => {
+    const { tx, pkg, params } = setup()
+    pkg.baseObjectVersion = 1_785_733_521_449
+    params.target.version = 4_000_000_000_001
+    params.reviewPackage.objectVersion = pkg.baseObjectVersion
+    await expect(projectPendingReviewPackage(tx as never, params)).rejects.toThrow('VERSION_CONFLICT')
+    expect(tx.aiReviewPackage.updateMany).not.toHaveBeenCalled()
+    params.reviewPackage.objectVersion = params.target.version
+    await projectPendingReviewPackage(tx as never, params)
+    expect(tx.aiReviewPackage.updateMany.mock.calls[0]![0].data).toMatchObject({
+      baseObjectVersion: params.target.version, version: { increment: 1 }, userCorrections: pkg.userCorrections,
+    })
+    expect(tx.aiReviewRecord.create).toHaveBeenCalled()
+  })
+
   it('retains unresolved conflicts and clears them when the new proposal agrees with the human value', async () => {
     const { tx, pkg, params } = setup()
     pkg.candidates[0]!.proposedValue = 26000
@@ -574,9 +590,13 @@ describe('stable pending item revisions', () => {
 })
 
 describe('departureObjectVersion', () => {
-  it('encodes updatedAt as a millisecond timestamp beyond INT4', () => {
-    const updatedAt = new Date(1_785_733_521_449)
-    expect(departureObjectVersion(updatedAt)).toBe(1_785_733_521_449)
-    expect(departureObjectVersion(updatedAt)).toBeGreaterThan(2_147_483_647)
+  it('returns a stable positive safe integer for the same SQL snapshot', async () => {
+    const { tx } = createTx()
+    const version = await departureObjectVersion(tx as never, 'org-1', 'departure-1')
+    expect(Number.isSafeInteger(version)).toBe(true)
+    expect(version).toBeGreaterThan(0)
+    expect(await departureObjectVersion(tx as never, 'org-1', 'departure-1')).toBe(version)
+    tx.$queryRaw.mockResolvedValue([{ snapshot: '{"resourceAmount":2}' }])
+    expect(await departureObjectVersion(tx as never, 'org-1', 'departure-1')).not.toBe(version)
   })
 })

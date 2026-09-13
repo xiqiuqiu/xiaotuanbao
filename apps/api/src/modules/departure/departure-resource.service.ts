@@ -250,21 +250,28 @@ export class DepartureResourceService {
   }
 
   async remove(organizationId: string, resourceId: string): Promise<void> {
-    const resource = await this.findResourceOrThrow(organizationId, resourceId)
-    this.ensureDepartureEditable(resource.departure)
-
-    const presence = await this.departureFinanceFacade.getResourceFinancePresence(
-      organizationId,
-      {
+    await this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.lockResourceConvention(tx, organizationId, {
         sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-        sourceId: resource.id,
-      },
-    )
-    if (presence.blocksRemoval) {
-      throw new ConflictException('当前资源已提交应付，不能直接删除')
-    }
+        sourceId: resourceId,
+      })
+      const resource = await this.findResourceOrThrow(organizationId, resourceId, tx)
+      this.ensureDepartureEditable(resource.departure)
 
-    await this.prisma.departureResource.delete({ where: { id: resource.id } })
+      const presence = await this.departureFinanceFacade.getResourceFinancePresence(
+        organizationId,
+        {
+          sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+          sourceId: resource.id,
+        },
+        tx,
+      )
+      if (presence.blocksRemoval) {
+        throw new ConflictException('当前资源已提交应付，不能直接删除')
+      }
+
+      await tx.departureResource.delete({ where: { id: resource.id } })
+    })
   }
 
   async generatePayable(

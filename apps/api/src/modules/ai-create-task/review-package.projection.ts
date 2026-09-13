@@ -12,6 +12,9 @@ import {
 import { reviewPackageCreateData, departureReviewProposalHash, reviewProposalHash } from './review-package.envelope'
 import { toReviewPackageView, toStoredCandidates, reviewConfirmValues, type ReviewPackageProposal } from './review-package.mapper'
 
+import { departureObjectVersion } from './departure-object-version'
+export { departureObjectVersion } from './departure-object-version'
+
 const MAX_ITEM_IDENTITY_ALLOCATION_ATTEMPTS = 8
 
 export type ReviewPackageTarget = {
@@ -260,7 +263,7 @@ async function resolveReviewPackageTarget(
     return {
       kind: DEPARTURE_OBJECT_TARGET_KIND,
       id: agentTask.departure.id,
-      version: departureObjectVersion(agentTask.departure.updatedAt),
+      version: await departureObjectVersion(tx, params.organizationId, agentTask.departure.id),
       snapshot: {
         departureId: agentTask.departure.id,
         departureNo: agentTask.departure.departureNo,
@@ -365,12 +368,4 @@ async function allocateNextItemIdentity(
     select: { itemIdentity: true },
   })
   return nextReviewItemIdentity([...rows.map((row) => row.itemIdentity), ...extraIdentities])
-}
-
-export function departureObjectVersion(updatedAt: Date | string): number {
-  const value = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt)
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error('REVIEW_PACKAGE_TASK_MISSING')
-  }
-  return value
 }

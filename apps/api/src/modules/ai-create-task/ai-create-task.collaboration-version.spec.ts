@@ -45,7 +45,7 @@ function collaborationTask() {
     status: AgentTaskStatus.active,
     type: AgentTaskType.departure_collaboration,
     departureId: 'departure-1',
-    departure: { updatedAt: currentUpdatedAt },
+    departure: { id: 'departure-1', updatedAt: currentUpdatedAt },
   }
 }
 
@@ -58,9 +58,10 @@ function expectVersionConflict(error: unknown) {
   )
 }
 
-describe('AiCreateTaskService collaboration objectVersion CAS #446', () => {
+describe('AiCreateTaskService collaboration objectVersion fingerprint #446', () => {
   it('rejects proposeReviewPackageForAgent when the departure version has moved', async () => {
     const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ snapshot: '{}' }]),
       agentTask: {
         findFirst: jest.fn().mockResolvedValue(collaborationTask()),
       },
@@ -88,7 +89,7 @@ describe('AiCreateTaskService collaboration objectVersion CAS #446', () => {
 
   it('rejects submitReviewPackageForAgent when the departure version has moved', async () => {
     const tx = {
-      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1', snapshot: '{}' }]),
       agentTask: {
         findFirst: jest.fn().mockResolvedValue(collaborationTask()),
       },

@@ -83,7 +83,7 @@ describe('legacy guest_collection: sync gate vs aggregation', () => {
       departure: { startDate: new Date('2026-08-01T00:00:00.000Z') },
     } as unknown as SourceOrderWithRelations
 
-    await service.syncSourceOrderConvention('org-1', order)
+    await service.syncSourceOrderConvention('org-1', order, {} as never)
 
     expect(create).not.toHaveBeenCalled()
   })
@@ -127,7 +127,7 @@ describe('legacy guest_collection: sync gate vs aggregation', () => {
       departure: { startDate: new Date('2026-08-01T00:00:00.000Z') },
     } as unknown as SourceOrderWithRelations
 
-    await service.syncSourceOrderConvention('org-1', order)
+    await service.syncSourceOrderConvention('org-1', order, {} as never)
 
     expect(create).not.toHaveBeenCalled()
   })

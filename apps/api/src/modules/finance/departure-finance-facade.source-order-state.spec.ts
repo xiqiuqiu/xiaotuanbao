@@ -59,6 +59,6 @@ describe('DepartureFinanceFacade source-order finance state seam', () => {
       meta,
     })
 
-    await expect(facade.syncSourceOrderSchedules('org-1', order)).resolves.toBe(meta)
+    await expect(facade.syncSourceOrderSchedules('org-1', order, {} as never)).resolves.toBe(meta)
   })
 })

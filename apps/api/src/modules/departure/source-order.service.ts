@@ -481,134 +481,136 @@ export class SourceOrderService {
     sourceOrderId: string,
     dto: UpdateSourceOrderDto,
   ): Promise<SourceOrderSummary> {
-    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureEditable(order.departure)
+    return this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.lockSourceOrderConvention(tx, organizationId, sourceOrderId)
+      const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId, tx)
+      this.ensureDepartureEditable(order.departure)
 
-    const partnerId = dto.partnerId ?? order.partnerId
-    const partner =
-      dto.partnerId !== undefined
-        ? await this.ensureSelectablePartner(organizationId, partnerId)
-        : order.partner
+      const partnerId = dto.partnerId ?? order.partnerId
+      const partner =
+        dto.partnerId !== undefined
+          ? await this.ensureSelectablePartner(organizationId, partnerId, tx)
+          : order.partner
 
-    const existingFareAdjustments = toFareAdjustmentInputs(order.fareAdjustments)
-    const fareAdjustments =
-      dto.fareAdjustments !== undefined
-        ? toFareAdjustmentInputs(dto.fareAdjustments)
-        : existingFareAdjustments
-    const periodInputs = resolveUpdateCollectionPeriodInputs({
-      dtoDepositCents: dto.depositCents,
-      dtoBalanceCents: dto.balanceCents,
-      dtoCollectionMode: dto.collectionMode,
-      stored: {
+      const existingFareAdjustments = toFareAdjustmentInputs(order.fareAdjustments)
+      const fareAdjustments =
+        dto.fareAdjustments !== undefined
+          ? toFareAdjustmentInputs(dto.fareAdjustments)
+          : existingFareAdjustments
+      const periodInputs = resolveUpdateCollectionPeriodInputs({
+        dtoDepositCents: dto.depositCents,
+        dtoBalanceCents: dto.balanceCents,
+        dtoCollectionMode: dto.collectionMode,
+        stored: {
+          collectionMode: order.collectionMode,
+          depositCents: order.depositCents,
+          balanceCents: order.balanceCents,
+          guestCollectCents: order.guestCollectCents,
+          netReceivableCents: order.netReceivableCents,
+        },
+      })
+      const normalized = this.normalizeInput({
+        adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
+        childGuestCount: dto.childGuestCount ?? order.childGuestCount,
+        adultUnitPriceCents:
+          dto.adultUnitPriceCents !== undefined
+            ? dto.adultUnitPriceCents
+            : order.adultUnitPriceCents,
+        childUnitPriceCents:
+          dto.childUnitPriceCents !== undefined
+            ? dto.childUnitPriceCents
+            : order.childUnitPriceCents,
+        discountType: dto.discountType ?? order.discountType,
+        discountCents: dto.discountCents ?? order.discountCents,
+        collectionMode: dto.collectionMode ?? order.collectionMode,
+        depositCents: periodInputs.depositCents,
+        balanceCents: periodInputs.balanceCents,
+        fareAdjustments,
+      })
+
+      validateSourceOrderInput({
+        partnerId: partner.id,
+        ...normalized,
+      })
+
+      const recomputedAmounts = computeSourceOrderAmounts(normalized)
+      const storedAmounts = {
+        adultGuestCount: order.adultGuestCount,
+        childGuestCount: order.childGuestCount,
+        adultUnitPriceCents: order.adultUnitPriceCents,
+        childUnitPriceCents: order.childUnitPriceCents,
+        discountType: order.discountType,
+        discountCents: order.discountCents,
         collectionMode: order.collectionMode,
         depositCents: order.depositCents,
         balanceCents: order.balanceCents,
+        partnerCollectedCents: order.partnerCollectedCents,
         guestCollectCents: order.guestCollectCents,
+        grossReceivableCents: order.grossReceivableCents,
+        fareAdjustmentNetCents: order.fareAdjustmentNetCents,
         netReceivableCents: order.netReceivableCents,
-      },
-    })
-    const normalized = this.normalizeInput({
-      adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
-      childGuestCount: dto.childGuestCount ?? order.childGuestCount,
-      adultUnitPriceCents:
-        dto.adultUnitPriceCents !== undefined
-          ? dto.adultUnitPriceCents
-          : order.adultUnitPriceCents,
-      childUnitPriceCents:
-        dto.childUnitPriceCents !== undefined
-          ? dto.childUnitPriceCents
-          : order.childUnitPriceCents,
-      discountType: dto.discountType ?? order.discountType,
-      discountCents: dto.discountCents ?? order.discountCents,
-      collectionMode: dto.collectionMode ?? order.collectionMode,
-      depositCents: periodInputs.depositCents,
-      balanceCents: periodInputs.balanceCents,
-      fareAdjustments,
-    })
-
-    validateSourceOrderInput({
-      partnerId: partner.id,
-      ...normalized,
-    })
-
-    const recomputedAmounts = computeSourceOrderAmounts(normalized)
-    const storedAmounts = {
-      adultGuestCount: order.adultGuestCount,
-      childGuestCount: order.childGuestCount,
-      adultUnitPriceCents: order.adultUnitPriceCents,
-      childUnitPriceCents: order.childUnitPriceCents,
-      discountType: order.discountType,
-      discountCents: order.discountCents,
-      collectionMode: order.collectionMode,
-      depositCents: order.depositCents,
-      balanceCents: order.balanceCents,
-      partnerCollectedCents: order.partnerCollectedCents,
-      guestCollectCents: order.guestCollectCents,
-      grossReceivableCents: order.grossReceivableCents,
-      fareAdjustmentNetCents: order.fareAdjustmentNetCents,
-      netReceivableCents: order.netReceivableCents,
-      fareAdjustments: existingFareAdjustments,
-    }
-    const nextAmountInputs = {
-      adultGuestCount: normalized.adultGuestCount,
-      childGuestCount: normalized.childGuestCount,
-      adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
-      childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
-      discountType: normalized.discountType,
-      discountCents: normalized.discountCents,
-      collectionMode: normalized.collectionMode,
-      depositCents: normalized.depositCents,
-      balanceCents: normalized.balanceCents,
-      fareAdjustments: normalized.fareAdjustments,
-    }
-    const { amountInputsChanged } = resolveSourceOrderAmountChange(
-      storedAmounts,
-      nextAmountInputs,
-    )
-    // When amount inputs are unchanged, keep stored path amounts — receivable path sync
-    // may have updated gross/net/guestCollect without rewriting unit prices.
-    const amounts = amountInputsChanged
-      ? recomputedAmounts
-      : {
-          grossReceivableCents: order.grossReceivableCents,
-          fareAdjustmentNetCents: order.fareAdjustmentNetCents,
-          discountCents: order.discountCents,
-          netReceivableCents: order.netReceivableCents,
+        fareAdjustments: existingFareAdjustments,
+      }
+      const nextAmountInputs = {
+        adultGuestCount: normalized.adultGuestCount,
+        childGuestCount: normalized.childGuestCount,
+        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
+        discountType: normalized.discountType,
+        discountCents: normalized.discountCents,
+        collectionMode: normalized.collectionMode,
+        depositCents: normalized.depositCents,
+        balanceCents: normalized.balanceCents,
+        fareAdjustments: normalized.fareAdjustments,
+      }
+      const { amountInputsChanged } = resolveSourceOrderAmountChange(
+        storedAmounts,
+        nextAmountInputs,
+      )
+      // When amount inputs are unchanged, keep stored path amounts — receivable path sync
+      // may have updated gross/net/guestCollect without rewriting unit prices.
+      const amounts = amountInputsChanged
+        ? recomputedAmounts
+        : {
+            grossReceivableCents: order.grossReceivableCents,
+            fareAdjustmentNetCents: order.fareAdjustmentNetCents,
+            discountCents: order.discountCents,
+            netReceivableCents: order.netReceivableCents,
+            depositCents: order.depositCents,
+            balanceCents: order.balanceCents,
+            partnerCollectedCents: order.partnerCollectedCents,
+            guestCollectCents: order.guestCollectCents,
+          }
+      const guestCount = normalized.adultGuestCount + normalized.childGuestCount
+      const pathAmountChanged = didSourceAmountPathChange(
+        {
+          guestCollectCents: order.guestCollectCents,
+          partnerCollectedCents: order.partnerCollectedCents,
           depositCents: order.depositCents,
           balanceCents: order.balanceCents,
-          partnerCollectedCents: order.partnerCollectedCents,
-          guestCollectCents: order.guestCollectCents,
-        }
-    const guestCount = normalized.adultGuestCount + normalized.childGuestCount
-    const pathAmountChanged = didSourceAmountPathChange(
-      {
-        guestCollectCents: order.guestCollectCents,
-        partnerCollectedCents: order.partnerCollectedCents,
-        depositCents: order.depositCents,
-        balanceCents: order.balanceCents,
-      },
-      {
-        guestCollectCents: amounts.guestCollectCents,
-        partnerCollectedCents: amounts.partnerCollectedCents,
-        depositCents: amounts.depositCents,
-        balanceCents: amounts.balanceCents,
-      },
-    )
+        },
+        {
+          guestCollectCents: amounts.guestCollectCents,
+          partnerCollectedCents: amounts.partnerCollectedCents,
+          depositCents: amounts.depositCents,
+          balanceCents: amounts.balanceCents,
+        },
+      )
 
-    await this.departureFinanceFacade.assertAmountFieldsEditable(
-      organizationId,
-      order.id,
-      storedAmounts,
-      nextAmountInputs,
-    )
+      await this.departureFinanceFacade.assertAmountFieldsEditable(
+        organizationId,
+        order.id,
+        storedAmounts,
+        nextAmountInputs,
+        tx,
+      )
 
-    const displayName =
-      dto.partnerId !== undefined
-        ? await this.generateDisplayName(order.departure, partner.name, partner.id, order.id)
-        : order.displayName
+      const displayName =
+        dto.partnerId !== undefined
+          ? await this.generateDisplayName(order.departure, partner.name, partner.id, order.id, tx)
+          : order.displayName
 
-    const changeAt = new Date()
-    const updated = await this.prisma.$transaction(async (tx) => {
+      const changeAt = new Date()
       await tx.sourceOrder.update({
         where: { id: order.id },
         data: {
@@ -655,7 +657,7 @@ export class SourceOrderService {
         )
       }
 
-      return tx.sourceOrder.findFirstOrThrow({
+      const updated = await tx.sourceOrder.findFirstOrThrow({
         where: { id: order.id },
         include: {
           partner: true,
@@ -664,13 +666,14 @@ export class SourceOrderService {
           guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
         },
       })
-    })
 
-    const financeMeta = await this.departureFinanceFacade.syncSourceOrderSchedules(
-      organizationId,
-      updated,
-    )
-    return this.toSourceOrderSummary(updated, financeMeta)
+      const financeMeta = await this.departureFinanceFacade.syncSourceOrderSchedules(
+        organizationId,
+        updated,
+        tx,
+      )
+      return this.toSourceOrderSummary(updated, financeMeta)
+    }, { maxWait: 20_000, timeout: 20_000 })
   }
 
   async getGuestCollectionChangeImpact(
@@ -872,8 +875,12 @@ export class SourceOrderService {
     return departure
   }
 
-  private async findSourceOrderOrThrow(organizationId: string, sourceOrderId: string) {
-    const order = await this.prisma.sourceOrder.findFirst({
+  private async findSourceOrderOrThrow(
+    organizationId: string,
+    sourceOrderId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const order = await client.sourceOrder.findFirst({
       where: {
         id: sourceOrderId,
         departure: { organizationId },
