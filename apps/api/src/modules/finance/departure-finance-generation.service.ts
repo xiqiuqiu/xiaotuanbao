@@ -22,6 +22,7 @@ import {
   PaymentScheduleDirection,
   type DepartureResource,
   type Partner,
+  type Prisma,
   type PaymentSchedule,
   type SegmentResource,
   type Supplier,
@@ -575,33 +576,37 @@ export class DepartureFinanceGenerationService {
   async syncSegmentResourceConvention(
     organizationId: string,
     resource: SegmentResourceWithRelations,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
     const schedule = await this.findActivePayableSchedule(
       organizationId,
       resource.id,
       PaymentScheduleSourceType.SEGMENT_RESOURCE,
+      tx,
     )
     if (!schedule) {
       return
     }
     const spec = this.buildPayableSpec(resource)
-    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec)
+    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec, tx)
   }
 
   async syncDepartureResourceConvention(
     organizationId: string,
     resource: DepartureResourceWithRelations,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
     const schedule = await this.findActivePayableSchedule(
       organizationId,
       resource.id,
       PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+      tx,
     )
     if (!schedule) {
       return
     }
     const spec = this.buildPayableSpec(resource)
-    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec)
+    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec, tx)
   }
 
   private buildReceivablePaths(order: SourceOrderWithRelations) {
@@ -632,10 +637,11 @@ export class DepartureFinanceGenerationService {
     organizationId: string,
     schedule: PaymentSchedule,
     spec: PayableSpec,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
     const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
+      this.verificationService.getSettledAmountCents(schedule.id, tx),
+      this.verificationService.hasVerificationHistory(schedule.id, tx),
     ])
     const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
     if (touched) {
@@ -666,6 +672,7 @@ export class DepartureFinanceGenerationService {
         PaymentScheduleDirection.payable,
         schedule.id,
         updates,
+        tx,
       )
     }
   }
@@ -719,8 +726,9 @@ export class DepartureFinanceGenerationService {
     organizationId: string,
     resourceId: string,
     sourceType: string,
+    tx: Prisma.TransactionClient,
   ): Promise<PaymentSchedule | null> {
-    return this.prisma.paymentSchedule.findFirst({
+    return tx.paymentSchedule.findFirst({
       where: {
         organizationId,
         sourceId: resourceId,

@@ -50,6 +50,7 @@ import {
 } from '../departure/source-order.utils'
 import { DepartureFinanceActualCollectionService } from './departure-finance-actual-collection.service'
 import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
+import { lockResourceConvention } from './resource-convention-lock'
 import type {
   SourceOrderFinanceMeta,
   SourceOrderWithRelations,
@@ -365,17 +366,31 @@ export class DepartureFinanceFacade {
     }
   }
 
+  async lockResourceConvention(
+    tx: TxClient,
+    organizationId: string,
+    source: ResourcePresenceKey,
+  ): Promise<void> {
+    await lockResourceConvention(tx, organizationId, source)
+  }
+
   async assertResourceAmountEditable(
     organizationId: string,
     resourceId: string,
     currentAmountCents: number,
     nextAmountCents: number,
+    tx?: TxClient,
   ): Promise<void> {
     if (currentAmountCents === nextAmountCents) {
       return
     }
 
-    const meta = await this.getSegmentResourceFinanceState(organizationId, resourceId)
+    const meta = await this.getSegmentResourceFinanceState(
+      organizationId,
+      resourceId,
+      { amountCents: currentAmountCents },
+      tx,
+    )
     if (meta.amountFieldsLocked) {
       throw new BadRequestException('当前资源已发生付款，不允许修改金额')
     }
@@ -386,12 +401,18 @@ export class DepartureFinanceFacade {
     resourceId: string,
     currentAmountCents: number,
     nextAmountCents: number,
+    tx?: TxClient,
   ): Promise<void> {
     if (currentAmountCents === nextAmountCents) {
       return
     }
 
-    const meta = await this.getDepartureResourceFinanceState(organizationId, resourceId)
+    const meta = await this.getDepartureResourceFinanceState(
+      organizationId,
+      resourceId,
+      { amountCents: currentAmountCents },
+      tx,
+    )
     if (meta.amountFieldsLocked) {
       throw new BadRequestException('当前资源已发生付款，不允许修改金额')
     }
@@ -445,9 +466,10 @@ export class DepartureFinanceFacade {
         departure: { id: string; organizationId: string; status: string; endDate: Date }
       }
     },
+    tx: TxClient,
   ): Promise<SegmentResourceFinanceState> {
-    await this.generation.syncSegmentResourceConvention(organizationId, resource)
-    return this.getSegmentResourceFinanceState(organizationId, resource.id, resource)
+    await this.generation.syncSegmentResourceConvention(organizationId, resource, tx)
+    return this.getSegmentResourceFinanceState(organizationId, resource.id, resource, tx)
   }
 
   async syncDepartureResourceSchedule(
@@ -457,9 +479,10 @@ export class DepartureFinanceFacade {
       supplier: Supplier | null
       departure: { id: string; organizationId: string; status: string; endDate: Date }
     },
+    tx: TxClient,
   ): Promise<SegmentResourceFinanceState> {
-    await this.generation.syncDepartureResourceConvention(organizationId, resource)
-    return this.getDepartureResourceFinanceState(organizationId, resource.id, resource)
+    await this.generation.syncDepartureResourceConvention(organizationId, resource, tx)
+    return this.getDepartureResourceFinanceState(organizationId, resource.id, resource, tx)
   }
 
   /**
@@ -1198,6 +1221,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     resourceIds: string[],
     agreedAmountByResourceId?: Map<string, number>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, SegmentResourceFinanceState>> {
     const uniqueIds = [...new Set(resourceIds)]
     const result = new Map<string, SegmentResourceFinanceState>()
@@ -1205,9 +1229,9 @@ export class DepartureFinanceFacade {
       return result
     }
 
-    const amountMap = agreedAmountByResourceId ?? (await this.loadAgreedAmounts(uniqueIds))
+    const amountMap = agreedAmountByResourceId ?? (await this.loadAgreedAmounts(uniqueIds, client))
 
-    const schedules = await this.prisma.paymentSchedule.findMany({
+    const schedules = await client.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: { in: uniqueIds },
@@ -1244,8 +1268,8 @@ export class DepartureFinanceFacade {
 
     const scheduleIds = [...scheduleByResourceId.values()].map((schedule) => schedule.id)
     const [settledMap, historyMap] = await Promise.all([
-      this.batchGetSettledAmounts(scheduleIds),
-      this.batchHasVerificationHistory(scheduleIds),
+      this.batchGetSettledAmounts(scheduleIds, client),
+      this.batchHasVerificationHistory(scheduleIds, client),
     ])
 
     for (const resourceId of uniqueIds) {
@@ -1269,6 +1293,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     resourceId: string,
     resource?: Pick<SegmentResource, 'amountCents'>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<SegmentResourceFinanceState> {
     const agreedAmountByResourceId = resource
       ? new Map([[resourceId, resource.amountCents]])
@@ -1277,6 +1302,7 @@ export class DepartureFinanceFacade {
       organizationId,
       [resourceId],
       agreedAmountByResourceId,
+      client,
     )
     return (
       map.get(resourceId) ??
@@ -1288,6 +1314,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     resourceIds: string[],
     agreedAmountByResourceId?: Map<string, number>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, SegmentResourceFinanceState>> {
     const uniqueIds = [...new Set(resourceIds)]
     const result = new Map<string, SegmentResourceFinanceState>()
@@ -1296,9 +1323,9 @@ export class DepartureFinanceFacade {
     }
 
     const amountMap =
-      agreedAmountByResourceId ?? (await this.loadDepartureAgreedAmounts(uniqueIds))
+      agreedAmountByResourceId ?? (await this.loadDepartureAgreedAmounts(uniqueIds, client))
 
-    const schedules = await this.prisma.paymentSchedule.findMany({
+    const schedules = await client.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: { in: uniqueIds },
@@ -1335,8 +1362,8 @@ export class DepartureFinanceFacade {
 
     const scheduleIds = [...scheduleByResourceId.values()].map((schedule) => schedule.id)
     const [settledMap, historyMap] = await Promise.all([
-      this.batchGetSettledAmounts(scheduleIds),
-      this.batchHasVerificationHistory(scheduleIds),
+      this.batchGetSettledAmounts(scheduleIds, client),
+      this.batchHasVerificationHistory(scheduleIds, client),
     ])
 
     for (const resourceId of uniqueIds) {
@@ -1360,6 +1387,7 @@ export class DepartureFinanceFacade {
     organizationId: string,
     resourceId: string,
     resource?: Pick<{ amountCents: number }, 'amountCents'>,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<SegmentResourceFinanceState> {
     const agreedAmountByResourceId = resource
       ? new Map([[resourceId, resource.amountCents]])
@@ -1368,6 +1396,7 @@ export class DepartureFinanceFacade {
       organizationId,
       [resourceId],
       agreedAmountByResourceId,
+      client,
     )
     return (
       map.get(resourceId) ??
@@ -1731,16 +1760,20 @@ export class DepartureFinanceFacade {
 
   private async loadDepartureAgreedAmounts(
     resourceIds: string[],
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, number>> {
-    const resources = await this.prisma.departureResource.findMany({
+    const resources = await client.departureResource.findMany({
       where: { id: { in: resourceIds } },
       select: { id: true, amountCents: true },
     })
     return new Map(resources.map((resource) => [resource.id, resource.amountCents]))
   }
 
-  private async loadAgreedAmounts(resourceIds: string[]): Promise<Map<string, number>> {
-    const rows = await this.prisma.segmentResource.findMany({
+  private async loadAgreedAmounts(
+    resourceIds: string[],
+    client: TxClient | PrismaService = this.prisma,
+  ): Promise<Map<string, number>> {
+    const rows = await client.segmentResource.findMany({
       where: { id: { in: resourceIds } },
       select: { id: true, amountCents: true },
     })
@@ -1941,13 +1974,16 @@ export class DepartureFinanceFacade {
     }
   }
 
-  private async batchGetSettledAmounts(scheduleIds: string[]): Promise<Map<string, number>> {
+  private async batchGetSettledAmounts(
+    scheduleIds: string[],
+    client: TxClient | PrismaService = this.prisma,
+  ): Promise<Map<string, number>> {
     const map = new Map<string, number>()
     if (scheduleIds.length === 0) {
       return map
     }
 
-    const rows = await this.prisma.financeVerification.groupBy({
+    const rows = await client.financeVerification.groupBy({
       by: ['paymentScheduleId'],
       where: {
         paymentScheduleId: { in: scheduleIds },
@@ -1987,6 +2023,7 @@ export class DepartureFinanceFacade {
 
   private async batchHasVerificationHistory(
     scheduleIds: string[],
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, boolean>> {
     const map = new Map<string, boolean>()
     for (const scheduleId of scheduleIds) {
@@ -1996,7 +2033,7 @@ export class DepartureFinanceFacade {
       return map
     }
 
-    const rows = await this.prisma.financeVerification.groupBy({
+    const rows = await client.financeVerification.groupBy({
       by: ['paymentScheduleId'],
       where: { paymentScheduleId: { in: scheduleIds } },
       _count: { _all: true },

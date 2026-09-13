@@ -109,4 +109,58 @@ describe('resource convention transactions', () => {
       expect((await prisma.departure.findUniqueOrThrow({ where: { id: departure.id } })).endDate).toEqual(departure.endDate)
     },
   )
+
+  it.each(['segment_resource', 'departure_resource'] as const)(
+    'rolls back both %s and its payable if synchronization fails after the schedule write', async (sourceType) => {
+      const { resource, source } = await fixture(sourceType)
+      const generated = await finance.generateResourcePayable(organizationId, source)
+      const schedules = module.get(PaymentScheduleService)
+      const update = schedules.update.bind(schedules)
+      jest.spyOn(schedules, 'update').mockImplementationOnce(async (...args) => {
+        await update(...args)
+        throw new Error('injected sync failure after write')
+      })
+      const resources = sourceType === 'segment_resource'
+        ? module.get(SegmentResourceService) : module.get(DepartureResourceService)
+      await expect(resources.update(organizationId, resource.id, { amountCents: 20000 }))
+        .rejects.toThrow('injected sync failure')
+      const stored = sourceType === 'segment_resource'
+        ? await prisma.segmentResource.findUniqueOrThrow({ where: { id: resource.id } })
+        : await prisma.departureResource.findUniqueOrThrow({ where: { id: resource.id } })
+      const schedule = await prisma.paymentSchedule.findUniqueOrThrow({ where: { id: generated.schedule.id } })
+      expect({ resource: stored.amountCents, payable: schedule.amountCents }).toEqual({ resource: 10000, payable: 10000 })
+    },
+  )
+  it.each(['segment_resource', 'departure_resource'] as const)(
+    'commits %s and its payable together, and rejects edits during or after payment', async (sourceType) => {
+      const { departure, resource, source } = await fixture(sourceType)
+      const generated = await finance.generateResourcePayable(organizationId, source)
+      const resources = sourceType === 'segment_resource'
+        ? module.get(SegmentResourceService) : module.get(DepartureResourceService)
+      const updated = await resources.update(organizationId, resource.id, { amountCents: 20000 })
+      expect(updated.amountCents).toBe(20000)
+      expect((await prisma.paymentSchedule.findUniqueOrThrow({ where: { id: generated.schedule.id } })).amountCents).toBe(20000)
+      const transaction = await prisma.financeTransaction.create({ data: {
+        organizationId, departureId: departure.id, transactionNo: randomUUID(), direction: 'outflow',
+        amountCents: 1000, transactionDate: new Date('2026-09-10'),
+        counterpartyType: 'supplier', counterpartyId: supplierId,
+      } })
+      await prisma.$transaction(async (rival) => {
+        await rival.$queryRaw`SELECT id FROM payment_schedules WHERE id = ${generated.schedule.id} FOR UPDATE`
+        await expect(resources.update(organizationId, resource.id, { amountCents: 30000 }))
+          .rejects.toThrow('资源约定正在修改或结算')
+        await module.get(VerificationService).create(organizationId, {
+          paymentScheduleId: generated.schedule.id, transactionId: transaction.id, amountCents: 1000,
+          verificationDate: '2026-09-10',
+        }, { createdBy: ownerId }, rival)
+      })
+      await expect(resources.update(organizationId, resource.id, { amountCents: 30000 }))
+        .rejects.toThrow('当前资源已发生付款')
+      const stored = sourceType === 'segment_resource'
+        ? await prisma.segmentResource.findUniqueOrThrow({ where: { id: resource.id } })
+        : await prisma.departureResource.findUniqueOrThrow({ where: { id: resource.id } })
+      expect(stored.amountCents).toBe(20000)
+    },
+  )
+
 })
