@@ -878,12 +878,13 @@ export class ReviewCollaborationService {
     for (const pkg of packages) {
       const record = latestByPackage.get(pkg.id)
       if (!record || covered.has(pkg.id)) continue
-      const succeeded = record.writeResult === AiReviewWriteResult.success
-      const resultRef = succeeded ? parseStoredResultRef(record.afterSnapshot) : null
+      const status = confirmationStatusFromPersistedRecord(record)
+      const resultRef =
+        status === 'succeeded' ? parseStoredResultRef(record.afterSnapshot) : null
       restoredItems.push({
         packageId: pkg.id,
         itemIdentity: pkg.itemIdentity,
-        status: succeeded ? 'succeeded' : 'failed',
+        status,
         resultRef: resultRef ?? undefined,
         submittedValues: frozenSubmittedValues(record.submittedValues),
       })
@@ -1755,5 +1756,20 @@ function payableHistoryStatusFromCandidates(raw: unknown): string | null {
 function frozenSubmittedValues(raw: unknown): Record<string, unknown> | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   return Object.keys(raw).length > 0 ? (raw as Record<string, unknown>) : undefined
+}
+
+function confirmationStatusFromPersistedRecord(record: {
+  action: AiReviewRecordAction
+  writeResult: AiReviewWriteResult
+}): ReviewConfirmationItemResult['status'] {
+  if (
+    record.action === AiReviewRecordAction.reject &&
+    record.writeResult === AiReviewWriteResult.rejected
+  ) {
+    return 'rejected'
+  }
+  if (record.writeResult === AiReviewWriteResult.success) return 'succeeded'
+  if (record.writeResult === AiReviewWriteResult.conflict) return 'conflict'
+  return 'failed'
 }
 

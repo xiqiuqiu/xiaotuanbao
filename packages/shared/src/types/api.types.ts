@@ -1189,6 +1189,7 @@ export type ReviewConfirmationItemStatus =
   | 'failed'
   | 'conflict'
   | 'skipped'
+  | 'rejected'
 
 export interface ReviewConfirmationItemInput {
   packageId: string

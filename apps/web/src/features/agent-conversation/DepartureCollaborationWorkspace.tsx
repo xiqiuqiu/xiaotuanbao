@@ -553,6 +553,7 @@ function WorkspaceReviewItem({
       (item) =>
         item.packageId === selected.id && (item.status === 'failed' || item.status === 'conflict'),
     )
+  const writeFailed = Boolean(failure) && selected.status !== 'rejected'
   return (
     <>
       <Space className={styles.context}>
@@ -572,8 +573,11 @@ function WorkspaceReviewItem({
           <Button size="small" onClick={onAsk}>针对此项提问</Button>
         ) : null}
       </Space>
-      {failure ? (
-        <Alert type="error" showIcon title={failure.reason ?? '此项未完成，请核对后重试'} />
+      {writeFailed ? (
+        <Alert type="error" showIcon title={failure?.reason ?? '此项未完成，请核对后重试'} />
+      ) : null}
+      {selected.status === 'rejected' ? (
+        <Alert type="info" showIcon title="此项已拒绝，草稿未写入" />
       ) : null}
       <ReviewRevisionHistory pkg={selected} focused={focused} />
       <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
@@ -672,7 +676,7 @@ function WorkspaceReviewItem({
           onPrepared={onPreparedPayableReviews}
         />
       ) : null}
-      {selected.status === 'confirmed' &&
+      {(selected.status === 'confirmed' || selected.status === 'rejected') &&
       !isReceivableReviewSchema(selected.payloadSchema) &&
       !isPayableReviewSchema(selected.payloadSchema) ? (
         <ConfirmedReceiptCompare
@@ -752,10 +756,14 @@ function ConfirmedReceiptCompare({
   const submitted = confirmation?.submittedValues
   const current = confirmation?.currentFormalValues
   const keys = receiptFieldKeys(selected, submitted, current)
+  const rejected = selected.status === 'rejected'
   return (
-    <section className={styles.snapshot} aria-label="审核时的确认内容">
+    <section
+      className={styles.snapshot}
+      aria-label={rejected ? '审核时的拒绝内容' : '审核时的确认内容'}
+    >
       <Descriptions
-        title="审核时确认"
+        title={rejected ? '审核时拒绝' : '审核时确认'}
         bordered
         size="small"
         column={1}
@@ -797,7 +805,9 @@ function ConfirmedReceiptCompare({
         />
       ) : (
         <Typography.Paragraph type="secondary">
-          以上为本次审核快照，正式业务记录可能已更新。
+          {rejected
+            ? '以上为拒绝时的候选内容，未写入正式业务记录。'
+            : '以上为本次审核快照，正式业务记录可能已更新。'}
         </Typography.Paragraph>
       )}
     </section>

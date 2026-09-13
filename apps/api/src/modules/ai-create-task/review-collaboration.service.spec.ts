@@ -979,7 +979,7 @@ describe('ReviewCollaborationService #447', () => {
     )
   })
 
-  it('restores a failed disposition from persisted records without inventing submitted values', async () => {
+  it('restores a user reject as rejected, not as a write failure', async () => {
     const { service, prisma } = createService()
     prisma.conversationDepartureLink.findMany.mockResolvedValue([
       {
@@ -994,7 +994,7 @@ describe('ReviewCollaborationService #447', () => {
     prisma.aiReviewPackage.findMany.mockResolvedValue([
       {
         ...pendingPackage,
-        id: 'pkg-failed',
+        id: 'pkg-rejected',
         status: AiReviewPackageStatus.rejected,
         payloadSchema: 'departure.segment_resource@v1',
         confirmationUnit: 'segment_resource',
@@ -1006,7 +1006,7 @@ describe('ReviewCollaborationService #447', () => {
     ])
     prisma.aiReviewRecord.findMany.mockResolvedValue([
       {
-        packageId: 'pkg-failed',
+        packageId: 'pkg-rejected',
         action: 'reject',
         writeResult: 'rejected',
         submittedValues: {},
@@ -1016,12 +1016,14 @@ describe('ReviewCollaborationService #447', () => {
     ])
 
     const view = await service.listDepartureCollaboration(organizationId, userId, 'departure-1')
+    const restored = view.confirmations[0]?.items[0]
 
-    expect(view.confirmations[0]?.items[0]).toMatchObject({
-      packageId: 'pkg-failed',
-      status: 'failed',
+    expect(restored).toMatchObject({
+      packageId: 'pkg-rejected',
+      status: 'rejected',
     })
-    expect(view.confirmations[0]?.items[0]?.submittedValues).toBeUndefined()
+    expect(restored?.status).not.toBe('failed')
+    expect(restored?.submittedValues).toBeUndefined()
   })
 
   it('omits a creation conversation that only inherited this departure page locator', async () => {

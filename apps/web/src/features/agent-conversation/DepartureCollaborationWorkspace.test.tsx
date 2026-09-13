@@ -328,6 +328,33 @@ it('offers payable follow-up only for successful resources without a payable rev
   expect(within(panel).queryByText(/4月2日住宿/)).not.toBeInTheDocument()
 })
 
+it('does not treat a user reject as a write failure, and still shows the rejected snapshot', async () => {
+  getCollaboration.mockImplementation(async () => ({
+    conversations: [{ id: 'conv-1', title: '协作一' }],
+    items: [
+      {
+        ...item('resource-1', resource, 'rejected'),
+        confirmationUnit: 'segment_resource',
+        candidates: [{ fieldKey: 'title', proposedValue: '希尔顿', evidence: [] }],
+      },
+    ],
+    confirmations: [
+      {
+        decisionCommandId: 'receipt:resource-1',
+        accepted: true,
+        items: [{ packageId: 'resource-1', status: 'rejected' }],
+      },
+    ],
+  }))
+  render(<QueryClientProvider client={new QueryClient()}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('tab', { name: '希尔顿 已拒绝' }))
+  const panel = screen.getByRole('tabpanel')
+  expect(within(panel).getByText('此项已拒绝，草稿未写入')).toBeVisible()
+  expect(within(panel).queryByText('此项未完成，请核对后重试')).not.toBeInTheDocument()
+  expect(within(panel).getByRole('region', { name: '审核时的拒绝内容' })).toBeVisible()
+  expect(within(panel).getByText('审核时拒绝')).toBeVisible()
+})
+
 it('distinguishes confirmed receipt values from later formal edits and opens the record', async () => {
   getCollaboration.mockImplementation(async () => ({
     conversations: [{ id: 'conv-1', title: '协作一' }],
