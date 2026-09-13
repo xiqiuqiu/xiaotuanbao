@@ -335,6 +335,55 @@ describe('SegmentResourceReviewPanel #449', () => {
     )
   })
 
+  it('waits for an in-flight save and rejects its latest version even before refetch catches up', async () => {
+    let finishSave!: () => void
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    patchAiReviewPackage.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishSave = resolve
+      })
+      return { pendingReviews: [packageView({ version: 2 })] }
+    })
+    rejectAiReviewPackage.mockResolvedValue({})
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), {
+      target: { value: '修订住宿' },
+    })
+    await waitFor(() => expect(patchAiReviewPackage).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: '拒绝建议' }))
+    await waitFor(() => expect(screen.getByLabelText('资源名称候选')).toBeDisabled())
+    expect(rejectAiReviewPackage).not.toHaveBeenCalled()
+    finishSave()
+    await waitFor(() =>
+      expect(rejectAiReviewPackage).toHaveBeenCalledWith('', 'pkg-1', {
+        expectedPackageVersion: 2,
+      }),
+    )
+  })
+
+  it('does not reject when saving corrections fails and retries the retained corrections', async () => {
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    patchAiReviewPackage.mockRejectedValueOnce(new Error('保存失败')).mockResolvedValue({
+      pendingReviews: [packageView({ version: 2 })],
+    })
+    rejectAiReviewPackage.mockResolvedValue({})
+    renderPanel()
+    fireEvent.change(await screen.findByLabelText('资源名称候选'), {
+      target: { value: '修订住宿' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '拒绝建议' }))
+    await screen.findAllByText('保存失败')
+    expect(rejectAiReviewPackage).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '拒绝建议' }))
+    await waitFor(() =>
+      expect(rejectAiReviewPackage).toHaveBeenCalledWith('', 'pkg-1', {
+        expectedPackageVersion: 2,
+      }),
+    )
+    expect(patchAiReviewPackage).toHaveBeenCalledTimes(2)
+    expect(patchAiReviewPackage.mock.calls[1][2].corrections).toEqual({ title: '修订住宿' })
+  })
+
   it.each(['amountCents', 'notes'])(
     'preserves an explicit null correction for %s',
     async (fieldKey) => {

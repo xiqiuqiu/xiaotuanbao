@@ -294,10 +294,10 @@ function SegmentResourceReviewItem({
   })
 
   const rejectMutation = useMutation({
-    mutationFn: () =>
-      rejectAiReviewPackage('', pkg.id, {
-        expectedPackageVersion: pkg.version,
-      }),
+    mutationFn: async () => {
+      const expectedPackageVersion = await flushCorrections()
+      return rejectAiReviewPackage('', pkg.id, { expectedPackageVersion })
+    },
     onSuccess: async () => {
       message.success('已拒绝本次建议，未写入资源')
       await queryClient.invalidateQueries({
