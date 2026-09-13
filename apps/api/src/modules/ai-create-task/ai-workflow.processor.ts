@@ -36,6 +36,7 @@ import {
   DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  reviewItemIdentity,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AgentTaskStatus,
@@ -2035,8 +2036,16 @@ export class AiWorkflowProcessor {
 
       const reviewPackageIds: string[] = []
       if (result.kind === 'awaiting_review' && job.taskId) {
-        for (const proposal of result.reviewPackages ?? [result.reviewPackage]) {
-          reviewPackageIds.push(await this.projectReviewPackageViaGateway(tx, job, attemptId, proposal))
+        for (const [ordinal, proposal] of (result.reviewPackages ?? [result.reviewPackage]).entries()) {
+          reviewPackageIds.push(
+            await this.projectReviewPackageViaGateway(
+              tx,
+              job,
+              attemptId,
+              proposal,
+              reviewItemIdentity(ordinal),
+            ),
+          )
         }
       }
       const reviewPackageId = reviewPackageIds[0] ?? null
@@ -2795,6 +2804,7 @@ export class AiWorkflowProcessor {
     job: ClaimedJob,
     attemptId: string,
     reviewPackage: ReviewPackageProposal,
+    itemIdentity?: string,
   ): Promise<string> {
     if (!job.taskId) {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
@@ -2872,6 +2882,7 @@ export class AiWorkflowProcessor {
           attemptId,
           reviewPackage: { ...validated.reviewPackage, objectVersion: target.version },
           sourceActionId: action.id,
+          itemIdentity,
         })
       },
     })
