@@ -299,6 +299,35 @@ describe('computeSourceOrderAmounts', () => {
       guestCollectCents: 0,
     })
   })
+
+  it('reproduces the #456 quote sample: 8×6800 + 2×4200 +600 −400 −2000 = 61000', () => {
+    expect(
+      computeSourceOrderAmounts({
+        adultGuestCount: 8,
+        childGuestCount: 2,
+        adultUnitPriceCents: 680_000,
+        childUnitPriceCents: 420_000,
+        discountType: 'lump_sum',
+        discountCents: 200_000,
+        collectionMode: 'split',
+        depositCents: 2_000_000,
+        balanceCents: 4_100_000,
+        fareAdjustments: [
+          { kind: 'single_room_topup', direction: 'increase', amountCents: 60_000 },
+          { kind: 'lodging_deduction', direction: 'decrease', amountCents: 40_000 },
+        ],
+      }),
+    ).toEqual({
+      grossReceivableCents: 6_280_000,
+      fareAdjustmentNetCents: 20_000,
+      discountCents: 200_000,
+      netReceivableCents: 6_100_000,
+      depositCents: 2_000_000,
+      balanceCents: 4_100_000,
+      partnerCollectedCents: 2_000_000,
+      guestCollectCents: 4_100_000,
+    })
+  })
 })
 
 describe('computeCollectionSettlementPreview', () => {
@@ -320,6 +349,21 @@ describe('computeCollectionSettlementPreview', () => {
   it('allows P greater than S without changing top-up/rebate', () => {
     expect(computeCollectionSettlementPreview(500000, 100000)).toEqual({
       estimatedCustomerTopUpCents: 400000,
+      estimatedRebateCents: 0,
+    })
+  })
+
+  it('reproduces the #456 collection previews for S=61000', () => {
+    expect(computeCollectionSettlementPreview(6_100_000, 4_100_000)).toEqual({
+      estimatedCustomerTopUpCents: 2_000_000,
+      estimatedRebateCents: 0,
+    })
+    expect(computeCollectionSettlementPreview(6_100_000, 6_500_000)).toEqual({
+      estimatedCustomerTopUpCents: 0,
+      estimatedRebateCents: 400_000,
+    })
+    expect(computeCollectionSettlementPreview(6_100_000, 1_000_000)).toEqual({
+      estimatedCustomerTopUpCents: 5_100_000,
       estimatedRebateCents: 0,
     })
   })

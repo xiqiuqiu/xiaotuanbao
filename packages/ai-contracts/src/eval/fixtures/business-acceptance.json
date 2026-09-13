@@ -1,0 +1,27 @@
+{
+  "catalogVersion": 1,
+  "layers": ["hard", "deterministic", "golden", "model"],
+  "fieldAssertions": ["unknown", "zero", "human_revision", "evidence"],
+  "materials": [
+    "material.explicit-total-price",
+    "material.ambiguous-attribution",
+    "material.same-name-suppliers",
+    "material.discount-adjustment",
+    "material.incomplete-guest-list",
+    "material.ocr-conflict"
+  ],
+  "hardGates": [
+    "hard.unauthorized-access",
+    "hard.cross-organization",
+    "hard.unreviewed-write",
+    "hard.duplicate-business-effect",
+    "hard.evidence-forgery"
+  ],
+  "amountSamples": [
+    "amount.quote-with-adjustments-and-discount",
+    "amount.split-balanced-collection",
+    "amount.split-overcollect-rebate",
+    "amount.guest-only-deposit-and-topup",
+    "amount.zero-settlement-no-receivable"
+  ]
+}

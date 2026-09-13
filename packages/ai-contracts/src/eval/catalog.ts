@@ -10,6 +10,7 @@ export const HARD_ASSERTION_KINDS = [
   'idempotency',
   'object_version',
   'business_effect',
+  'evidence_authenticity',
 ] as const
 export type HardAssertionKind = (typeof HARD_ASSERTION_KINDS)[number]
 
