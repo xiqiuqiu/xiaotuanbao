@@ -1436,8 +1436,9 @@ export class DepartureFinanceFacade {
   async getResourceFinancePresence(
     organizationId: string,
     key: ResourcePresenceKey,
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<FinanceSourcePresence> {
-    const map = await this.getResourceFinancePresences(organizationId, [key])
+    const map = await this.getResourceFinancePresences(organizationId, [key], client)
     return (
       map.get(resourcePresenceMapKey(key.sourceType, key.sourceId)) ?? {
         ...EMPTY_FINANCE_SOURCE_PRESENCE,
@@ -1448,8 +1449,9 @@ export class DepartureFinanceFacade {
   async getResourceFinancePresences(
     organizationId: string,
     keys: ResourcePresenceKey[],
+    client: TxClient | PrismaService = this.prisma,
   ): Promise<Map<string, FinanceSourcePresence>> {
-    return loadResourceFinancePresences(this.prisma, organizationId, keys)
+    return loadResourceFinancePresences(client, organizationId, keys)
   }
 
   /**

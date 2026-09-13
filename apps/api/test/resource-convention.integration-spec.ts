@@ -163,4 +163,29 @@ describe('resource convention transactions', () => {
     },
   )
 
+  it.each(['segment_resource', 'departure_resource'] as const)(
+    'serializes deleting %s with payable generation', async (sourceType) => {
+      const { resource, source } = await fixture(sourceType)
+      const resources = sourceType === 'segment_resource'
+        ? module.get(SegmentResourceService) : module.get(DepartureResourceService)
+      const presence = finance.getResourceFinancePresence.bind(finance)
+      let rivalError: unknown
+      jest.spyOn(finance, 'getResourceFinancePresence').mockImplementationOnce(async (...args) => {
+        const result = await presence(...args)
+        try {
+          await prisma.$transaction(async (rival) => {
+            await rival.$executeRaw`SET LOCAL lock_timeout = '200ms'`
+            await generation.generateResourcePayable(organizationId, source,
+              (departure, action) => finance.assertAllowsNewObligation(departure, action), { client: rival })
+          })
+        } catch (error) { rivalError = error }
+        return result
+      })
+      await resources.remove(organizationId, resource.id)
+      expect(await prisma.paymentSchedule.count({ where: { organizationId, sourceId: resource.id } })).toBe(0)
+      expect(rivalError).toBeDefined()
+      await expect(finance.generateResourcePayable(organizationId, source)).rejects.toThrow('资源不存在')
+    },
+  )
+
 })
