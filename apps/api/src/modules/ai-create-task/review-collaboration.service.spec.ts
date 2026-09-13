@@ -58,7 +58,7 @@ describe('ReviewCollaborationService #447', () => {
     }
     const tx = {
       aiInputBatch: { findFirst: jest.fn().mockResolvedValue(null) },
-      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ departureId: 'departure-1' }]),
       aiReviewPackage: {
         findMany: jest.fn().mockImplementation(() => Promise.resolve(packages.map((pkg) => ({ ...pkg })))),
         findFirst: jest.fn().mockImplementation(

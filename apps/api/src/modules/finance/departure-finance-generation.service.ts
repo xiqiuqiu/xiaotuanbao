@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { lockResourceConvention } from './resource-convention-lock'
 import {
   isFinanceTouched,
   PaymentScheduleSourceType,
@@ -479,21 +480,7 @@ export class DepartureFinanceGenerationService {
       existingScheduleIds?: string[]
     }
   > {
-    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
-      await tx.$queryRaw`
-        SELECT id
-        FROM segment_resources
-        WHERE id = ${params.sourceId}
-        FOR UPDATE
-      `
-    } else {
-      await tx.$queryRaw`
-        SELECT id
-        FROM departure_resources
-        WHERE id = ${params.sourceId}
-        FOR UPDATE
-      `
-    }
+    await lockResourceConvention(tx, organizationId, params)
 
     const loaded = await this.loadPayableResourceOrThrow(organizationId, params, tx)
     const departure =

@@ -45,6 +45,7 @@ import { SourceOrderService } from '../departure/source-order.service'
 import { AuthService } from '../auth/auth.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import { DepartureFinanceGenerationService } from '../finance/departure-finance-generation.service'
+import { lockResourceConvention } from '../finance/resource-convention-lock'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -1407,21 +1408,7 @@ export class ReviewCollaborationService {
     if (!source) {
       throw new BadRequestException('应付审核缺少正式资源')
     }
-    if (source.sourceType === 'segment_resource') {
-      await tx.$queryRaw`
-        SELECT id
-        FROM segment_resources
-        WHERE id = ${source.sourceId}
-        FOR UPDATE
-      `
-    } else {
-      await tx.$queryRaw`
-        SELECT id
-        FROM departure_resources
-        WHERE id = ${source.sourceId}
-        FOR UPDATE
-      `
-    }
+    await lockResourceConvention(tx, organizationId, source)
     const preview = await this.generation.previewInitialPayable(
       organizationId,
       { sourceType: source.sourceType, sourceId: source.sourceId },
