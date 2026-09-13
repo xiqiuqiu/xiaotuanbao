@@ -7,4 +7,7 @@ module.exports = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
+  moduleNameMapper: {
+    '^@xiaotuanbao/shared$': '<rootDir>/../../shared/src/index.ts',
+  },
 }

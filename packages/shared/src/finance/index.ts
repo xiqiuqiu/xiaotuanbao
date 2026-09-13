@@ -20,6 +20,14 @@ export {
   type SourceAmountChangeMarkEligibilityInput,
 } from './source-amount-change'
 export {
+  computeCollectionSettlementPreview,
+  computeFareAdjustmentNetCents,
+  computeSourceOrderSettlementCents,
+  type SourceOrderSettlementAdjustmentInput,
+  type SourceOrderSettlementCents,
+  type SourceOrderSettlementInput,
+} from './compute-source-order-settlement'
+export {
   buildSourceOrderReceivablePaths,
   countSourceOrderReceivablePaths,
   type SourceOrderReceivablePathInput,

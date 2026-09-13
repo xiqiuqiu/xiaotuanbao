@@ -496,6 +496,7 @@ export {
   type BusinessAcceptanceScenarioId,
 } from './eval/business-acceptance-catalog'
 export {
+  allBusinessAcceptanceMaterials,
   businessAcceptanceFieldMaterials,
   businessAcceptanceMaterials,
 } from './eval/business-acceptance-fixtures'

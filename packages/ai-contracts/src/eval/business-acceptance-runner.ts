@@ -1,3 +1,8 @@
+import {
+  computeCollectionSettlementPreview,
+  computeSourceOrderSettlementCents,
+  SourceOrderDiscountType,
+} from '@xiaotuanbao/shared'
 import type { EvalScenario } from './catalog'
 import type { EvalFailure, HardAssertionResult, ModelScore } from './runner'
 import {
@@ -6,7 +11,12 @@ import {
   businessAcceptanceEvalCatalog,
   type BusinessAcceptanceScenarioId,
 } from './business-acceptance-catalog'
-import { businessAcceptanceMaterials } from './business-acceptance-fixtures'
+import {
+  allBusinessAcceptanceMaterials,
+  findBusinessAcceptanceMaterial,
+  materialContainsAnchors,
+  type BusinessAcceptanceMaterial,
+} from './business-acceptance-fixtures'
 
 export interface BusinessAcceptanceFieldObservation {
   fieldKey: string
@@ -64,6 +74,7 @@ export interface BusinessAcceptanceEvalInput {
   observations: Record<BusinessAcceptanceScenarioId, BusinessAcceptanceObservation>
   hardAssertions: readonly HardAssertionResult[]
   modelScore: ModelScore
+  materials?: readonly BusinessAcceptanceMaterial[]
 }
 
 export interface BusinessAcceptanceFieldAssertionReport {
@@ -86,46 +97,10 @@ export interface BusinessAcceptanceEvalReport {
   failures: EvalFailure[]
 }
 
-export function computeAcceptanceSettlement(input: {
-  adultGuestCount: number
-  childGuestCount: number
-  adultUnitPriceCents: number
-  childUnitPriceCents: number
-  fareAdjustments: readonly { direction: 'increase' | 'decrease'; amountCents: number }[]
-  discountCents: number
-}): {
-  grossReceivableCents: number
-  fareAdjustmentNetCents: number
-  discountCents: number
-  netReceivableCents: number
-} {
-  const grossReceivableCents =
-    input.adultGuestCount * input.adultUnitPriceCents +
-    input.childGuestCount * input.childUnitPriceCents
-  const fareAdjustmentNetCents = input.fareAdjustments.reduce((net, item) => {
-    return item.direction === 'increase' ? net + item.amountCents : net - item.amountCents
-  }, 0)
-  return {
-    grossReceivableCents,
-    fareAdjustmentNetCents,
-    discountCents: input.discountCents,
-    netReceivableCents: grossReceivableCents + fareAdjustmentNetCents - input.discountCents,
-  }
-}
-
-export function computeAcceptanceCollectionPreview(
-  netReceivableCents: number,
-  guestCollectCents: number,
-): { estimatedCustomerTopUpCents: number; estimatedRebateCents: number } {
-  return {
-    estimatedCustomerTopUpCents: Math.max(0, netReceivableCents - guestCollectCents),
-    estimatedRebateCents: Math.max(0, guestCollectCents - netReceivableCents),
-  }
-}
-
 export function runBusinessAcceptanceEval(
   input: BusinessAcceptanceEvalInput,
 ): BusinessAcceptanceEvalReport {
+  const materials = input.materials ?? allBusinessAcceptanceMaterials()
   const failures: EvalFailure[] = []
 
   for (const assertion of input.hardAssertions) {
@@ -137,7 +112,7 @@ export function runBusinessAcceptanceEval(
   for (const scenario of input.catalog) {
     if (scenario.layer === 'model') continue
     const observation = input.observations[scenario.id as BusinessAcceptanceScenarioId]
-    if (!observation || !scenarioMatches(scenario, observation)) {
+    if (!observation || !scenarioMatches(scenario, observation, materials)) {
       failures.push({ id: scenario.id, layer: scenario.layer })
     }
   }
@@ -181,6 +156,7 @@ export function runBusinessAcceptanceEval(
 export const BUSINESS_ACCEPTANCE_BASELINE_INPUT: BusinessAcceptanceEvalInput = {
   catalog: businessAcceptanceEvalCatalog,
   observations: baselineObservations(),
+  materials: allBusinessAcceptanceMaterials(),
   hardAssertions: BUSINESS_ACCEPTANCE_HARD_GATE_IDS.map((id) => ({
     id,
     passed: true,
@@ -207,7 +183,11 @@ function fieldAssertionReport(
 function scenarioMatches(
   scenario: EvalScenario,
   observation: BusinessAcceptanceObservation,
+  materials: readonly BusinessAcceptanceMaterial[],
 ): boolean {
+  if (!materialGroundsScenario(scenario.id, materials)) {
+    return false
+  }
   const expected = scenario.expect
   switch (scenario.id) {
     case 'material.explicit-total-price':
@@ -267,7 +247,7 @@ function scenarioMatches(
         observation.conflictingAmountsCents?.[0] === expected.beforeCents
       )
     case 'field.evidence-authentic':
-      return evidenceMatchesMaterial(observation, expected)
+      return evidenceMatchesMaterial(observation, expected, materials)
     case 'hard.unauthorized-access':
     case 'hard.cross-organization':
     case 'hard.unreviewed-write':
@@ -354,9 +334,19 @@ function arraysEqual(left: readonly number[], right: readonly number[]): boolean
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
+function materialGroundsScenario(
+  scenarioId: string,
+  materials: readonly BusinessAcceptanceMaterial[],
+): boolean {
+  const material = findBusinessAcceptanceMaterial(scenarioId, materials)
+  if (!material) return true
+  return materialContainsAnchors(material)
+}
+
 function evidenceMatchesMaterial(
   observation: BusinessAcceptanceObservation,
   expected: Record<string, unknown>,
+  materials: readonly BusinessAcceptanceMaterial[],
 ): boolean {
   const excerpt = observation.evidenceExcerpt
   const materialId = observation.evidenceMaterialId
@@ -367,7 +357,7 @@ function evidenceMatchesMaterial(
   ) {
     return false
   }
-  const material = businessAcceptanceMaterials.find((item) => item.id === materialId)
+  const material = findBusinessAcceptanceMaterial(String(materialId), materials)
   return Boolean(excerpt && material?.body.includes(excerpt))
 }
 
@@ -483,16 +473,17 @@ function baselineObservations(): Record<BusinessAcceptanceScenarioId, BusinessAc
       hard: { blocked: true, wroteBusiness: false, authentic: false },
     },
     'amount.quote-with-adjustments-and-discount': {
-      amounts: computeAcceptanceSettlement({
+      amounts: computeSourceOrderSettlementCents({
         adultGuestCount: 8,
         childGuestCount: 2,
         adultUnitPriceCents: 680_000,
         childUnitPriceCents: 420_000,
+        discountType: SourceOrderDiscountType.LUMP_SUM,
+        discountCents: 200_000,
         fareAdjustments: [
           { direction: 'increase', amountCents: 60_000 },
           { direction: 'decrease', amountCents: 40_000 },
         ],
-        discountCents: 200_000,
       }),
     },
     'amount.split-balanced-collection': {
@@ -500,7 +491,7 @@ function baselineObservations(): Record<BusinessAcceptanceScenarioId, BusinessAc
         netReceivableCents: 6_100_000,
         partnerCollectedCents: 2_000_000,
         guestCollectCents: 4_100_000,
-        ...computeAcceptanceCollectionPreview(6_100_000, 4_100_000),
+        ...computeCollectionSettlementPreview(6_100_000, 4_100_000),
         receivablePaths: [
           { sourceType: 'source_order_guest_balance_collection', amountCents: 4_100_000 },
           { sourceType: 'source_order_customer_settlement', amountCents: 2_000_000 },
@@ -513,7 +504,7 @@ function baselineObservations(): Record<BusinessAcceptanceScenarioId, BusinessAc
         netReceivableCents: 6_100_000,
         partnerCollectedCents: 8_000_000,
         guestCollectCents: 6_500_000,
-        ...computeAcceptanceCollectionPreview(6_100_000, 6_500_000),
+        ...computeCollectionSettlementPreview(6_100_000, 6_500_000),
         receivablePaths: [
           { sourceType: 'source_order_guest_balance_collection', amountCents: 6_500_000 },
         ],
@@ -523,7 +514,7 @@ function baselineObservations(): Record<BusinessAcceptanceScenarioId, BusinessAc
       amounts: {
         netReceivableCents: 6_100_000,
         guestCollectCents: 1_000_000,
-        ...computeAcceptanceCollectionPreview(6_100_000, 1_000_000),
+        ...computeCollectionSettlementPreview(6_100_000, 1_000_000),
         receivablePaths: [
           { sourceType: 'source_order_guest_deposit_collection', amountCents: 1_000_000 },
           { sourceType: 'source_order_customer_settlement', amountCents: 5_100_000 },

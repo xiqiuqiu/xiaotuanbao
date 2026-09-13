@@ -1,4 +1,9 @@
 import type { SourceOrderCollectionMode, SourceOrderDiscountType } from '@prisma/client'
+import {
+  computeCollectionSettlementPreview as computeSharedCollectionPreview,
+  computeFareAdjustmentNetCents as computeSharedFareAdjustmentNet,
+  computeSourceOrderSettlementCents,
+} from '@xiaotuanbao/shared'
 
 export interface SourceOrderFareAdjustmentInput {
   kind: string
@@ -106,43 +111,23 @@ export function fareAdjustmentsEqual(
 export function computeFareAdjustmentNetCents(
   fareAdjustments: SourceOrderFareAdjustmentInput[] | undefined,
 ): number {
-  let net = 0
-  for (const item of fareAdjustments ?? []) {
-    const amount = Math.max(item.amountCents, 0)
-    if (item.direction === 'increase') {
-      net += amount
-    } else {
-      net -= amount
-    }
-  }
-  return net
+  return computeSharedFareAdjustmentNet(fareAdjustments)
 }
 
 export function computeCollectionSettlementPreview(
   netReceivableCents: number,
   guestCollectCents: number,
 ): CollectionSettlementPreview {
-  return {
-    estimatedCustomerTopUpCents: Math.max(0, netReceivableCents - guestCollectCents),
-    estimatedRebateCents: Math.max(0, guestCollectCents - netReceivableCents),
-  }
+  return computeSharedCollectionPreview(netReceivableCents, guestCollectCents)
 }
 
 export function computeSourceOrderAmounts(input: SourceOrderAmountInput): SourceOrderAmounts {
-  const adultUnitPriceCents = effectiveUnitPriceCents(
-    input.adultGuestCount,
-    input.adultUnitPriceCents,
-  )
-  const childUnitPriceCents = effectiveUnitPriceCents(
-    input.childGuestCount,
-    input.childUnitPriceCents,
-  )
-  const grossReceivableCents =
-    adultUnitPriceCents * input.adultGuestCount + childUnitPriceCents * input.childGuestCount
-  const fareAdjustmentNetCents = computeFareAdjustmentNetCents(input.fareAdjustments)
-  const discountCents =
-    input.discountType === 'lump_sum' ? Math.max(input.discountCents, 0) : 0
-  const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
+  const {
+    grossReceivableCents,
+    fareAdjustmentNetCents,
+    discountCents,
+    netReceivableCents,
+  } = computeSourceOrderSettlementCents(input)
 
   const depositCents = Math.max(input.depositCents, 0)
   const balanceCents = Math.max(input.balanceCents, 0)

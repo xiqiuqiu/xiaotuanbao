@@ -5,14 +5,18 @@ import {
   businessAcceptanceEvalCatalog,
 } from './business-acceptance-catalog'
 import {
+  computeCollectionSettlementPreview,
+  computeSourceOrderSettlementCents,
+  SourceOrderDiscountType,
+} from '@xiaotuanbao/shared'
+import {
   BUSINESS_ACCEPTANCE_BASELINE_INPUT,
   compareBusinessAcceptanceReports,
-  computeAcceptanceCollectionPreview,
-  computeAcceptanceSettlement,
   runBusinessAcceptanceEval,
   runBusinessAcceptanceEvalBaseline,
 } from './business-acceptance-runner'
 import {
+  allBusinessAcceptanceMaterials,
   businessAcceptanceFieldMaterials,
   businessAcceptanceMaterials,
 } from './business-acceptance-fixtures'
@@ -74,7 +78,7 @@ describe('客源与资源业务验收样例 #456', () => {
       'material.incomplete-guest-list',
       'material.ocr-conflict',
     ])
-    for (const material of [...businessAcceptanceMaterials, ...businessAcceptanceFieldMaterials]) {
+    for (const material of allBusinessAcceptanceMaterials()) {
       expect(material.body.trim().length).toBeGreaterThan(20)
       expect(material.body).not.toMatch(/\d{11}/)
       expect(material.body).not.toMatch(/\d{17}[\dXx]/)
@@ -155,18 +159,19 @@ describe('客源与资源业务验收样例 #456', () => {
     expect(report.failures).toEqual([])
   })
 
-  it('reproduces the spec quote and collection-path amounts from worked examples', () => {
+  it('reproduces the spec quote and collection-path amounts from the domain settlement function', () => {
     expect(
-      computeAcceptanceSettlement({
+      computeSourceOrderSettlementCents({
         adultGuestCount: 8,
         childGuestCount: 2,
         adultUnitPriceCents: 680_000,
         childUnitPriceCents: 420_000,
+        discountType: SourceOrderDiscountType.LUMP_SUM,
+        discountCents: 200_000,
         fareAdjustments: [
           { direction: 'increase', amountCents: 60_000 },
           { direction: 'decrease', amountCents: 40_000 },
         ],
-        discountCents: 200_000,
       }),
     ).toEqual({
       grossReceivableCents: 6_280_000,
@@ -174,18 +179,48 @@ describe('客源与资源业务验收样例 #456', () => {
       discountCents: 200_000,
       netReceivableCents: 6_100_000,
     })
-    expect(computeAcceptanceCollectionPreview(6_100_000, 4_100_000)).toEqual({
+    expect(computeCollectionSettlementPreview(6_100_000, 4_100_000)).toEqual({
       estimatedCustomerTopUpCents: 2_000_000,
       estimatedRebateCents: 0,
     })
-    expect(computeAcceptanceCollectionPreview(6_100_000, 6_500_000)).toEqual({
+    expect(computeCollectionSettlementPreview(6_100_000, 6_500_000)).toEqual({
       estimatedCustomerTopUpCents: 0,
       estimatedRebateCents: 400_000,
     })
-    expect(computeAcceptanceCollectionPreview(6_100_000, 1_000_000)).toEqual({
+    expect(computeCollectionSettlementPreview(6_100_000, 1_000_000)).toEqual({
       estimatedCustomerTopUpCents: 5_100_000,
       estimatedRebateCents: 0,
     })
+  })
+
+  it('fails when a material no longer contains its quoted facts', () => {
+    const tampered = allBusinessAcceptanceMaterials().map((item) =>
+      item.id === 'material.explicit-total-price'
+        ? { ...item, body: item.body.replaceAll('8800', '1') }
+        : item,
+    )
+    const report = runBusinessAcceptanceEval({
+      ...BUSINESS_ACCEPTANCE_BASELINE_INPUT,
+      materials: tampered,
+    })
+    expect(report.verdict).toBe('fail')
+    expect(report.failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'material.explicit-total-price' }),
+      ]),
+    )
+  })
+
+  it('fails when an unreviewed write observation claims a business effect', () => {
+    const report = runBusinessAcceptanceEval({
+      ...BUSINESS_ACCEPTANCE_BASELINE_INPUT,
+      observations: {
+        ...BUSINESS_ACCEPTANCE_BASELINE_INPUT.observations,
+        'hard.unreviewed-write': { hard: { blocked: false, wroteBusiness: true } },
+      },
+    })
+    expect(report.verdict).toBe('fail')
+    expect(report.layers.hard.passed).toBe(false)
   })
 
   it('repeats the baseline to a comparable layered report', () => {
