@@ -150,14 +150,6 @@ afterEach(async () => {
   }
   queryClients.length = 0
   cleanup()
-  // Drain React 19's setImmediate scheduler while jsdom is still alive.
-  // Otherwise performWorkUntilDeadline can run after environment teardown
-  // and throw `window is not defined` as an unhandled Vitest error.
-  await act(async () => {
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve)
-    })
-  })
 })
 it('binds questions to a package ID while retaining the draft, and clears only after sending', async () => {
   const client = createQueryClient()
