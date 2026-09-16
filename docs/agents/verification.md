@@ -152,7 +152,9 @@ Currently runs the **permission-matrix guard (R2)** — the recurring `main`-red
 
 ## Optional local browser E2E (not C1)
 
-Manual Playwright smoke + thin create-departure flow. **Not** a required CI check; does not block merge.
+Manual Playwright smoke + thin create-departure / Agent UI flows. **Not** a required CI check; does not block merge.
+
+Agents must **not** verify UI via browser MCP / computer-use / clicking demo pages. New UI features and bugfixes add Playwright under `apps/web-e2e` and run `pnpm test:e2e:web` (or a scoped file). Prefer `getByRole` / `getByTestId`. On failure, stabilize the script then fix product until green. **Web Vitest stays a gate** — Playwright does not replace it. Amounts, permissions, and closed/archived finance gates stay on API Jest e2e; do not re-assert them in browser scripts. See root `AGENTS.md`.
 
 ```bash
 # Prerequisites: db up, seed, pnpm dev:api, pnpm dev:web

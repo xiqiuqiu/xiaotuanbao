@@ -28,6 +28,21 @@ Layered gates — details: `docs/agents/verification.md`.
 - **Do not** run full API e2e locally by default; CI owns it (`typecheck` + `api-e2e` required on `main`).
 - **Merge to `main`:** PR only (no direct push); required checks must be green. Local `--no-verify` does not bypass GitHub.
 
+### UI verification (Playwright — not browser MCP)
+
+**Do not** verify UI by driving a browser yourself via browser MCP, computer-use, or manually clicking demo / preview pages. That is not a substitute for automated coverage.
+
+For new UI features or bugfixes:
+
+1. Add Playwright coverage under `apps/web-e2e` (reuse existing `support/` helpers, fixtures, and patterns).
+2. Prefer `getByRole` / `getByTestId` over brittle CSS/text chains.
+3. Verify with `pnpm test:e2e:web` (or a scoped file, e.g. `pnpm test:e2e:web -- tests/foo.spec.ts`).
+4. On failure: stabilize the script first (add logs, split steps), then fix product code until green.
+
+**Web Vitest unit tests remain a gate** — this rule does **not** ban or replace `apps/web` Vitest. Keep adding/updating unit tests where they already belong.
+
+Amounts, permissions, closed/archived gates, and finance conservation stay primarily on **API Jest e2e**. Browser e2e may stay out of CI (existing design — see `docs/agents/verification.md` and `apps/web-e2e/README.md`); do not duplicate those assertions into Playwright.
+
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
