@@ -22,10 +22,13 @@ import {
 import '@copilotkit/react-core/v2/styles.css'
 import { env } from '@/config/env'
 import {
+  abandonAgentConversationBatch,
   getAgentConversation,
   listAgentConversationEvents,
   cancelAgentConversationInteraction,
+  removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationMaterials,
   sendAgentConversationText,
   stopAgentConversationBatch,
 } from '@/services/agent-conversation.service'
@@ -93,6 +96,20 @@ const QueuedMessagesContext = createContext<QueuedMessagesContextValue>({
   messages: [],
   onEdit: () => undefined,
   stoppable: false,
+})
+
+type BatchRepairContextValue = {
+  pending: boolean
+  onRetry: (batchId: string) => void
+  onRemove: (batchId: string, materialId: string) => void
+  onAbandon: (batchId: string) => void
+}
+
+const BatchRepairContext = createContext<BatchRepairContextValue>({
+  pending: false,
+  onRetry: () => undefined,
+  onRemove: () => undefined,
+  onAbandon: () => undefined,
 })
 
 function QueueAwareChatInputView(props: CopilotChatInputProps) {
@@ -165,6 +182,61 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
 
 const QueueAwareChatInput = Object.assign(QueueAwareChatInputView, CopilotChatInput)
 
+function BatchStatusNotice({ content }: { content: BatchStatusActivityContent }) {
+  const { pending, onRetry, onRemove, onAbandon } = useContext(BatchRepairContext)
+  return (
+    <div className={chatStyles.noticeBlock}>
+      <p className={chatStyles.notice} role="status">
+        {content.label}
+      </p>
+      {content.failedMaterials?.map((item) => (
+        <div key={item.materialId} className={chatStyles.failedMaterial}>
+          <p className={chatStyles.failedMaterialName}>
+            {item.originalFilename}
+            {item.errorMessage ? `：${item.errorMessage}` : ''}
+          </p>
+          {content.showMaterialActions && content.batchId ? (
+            <Space size={4}>
+              <Button
+                type="link"
+                size="small"
+                aria-label="移除"
+                loading={pending}
+                disabled={pending}
+                onClick={() => onRemove(content.batchId!, item.materialId)}
+              >
+                移除
+              </Button>
+            </Space>
+          ) : null}
+        </div>
+      ))}
+      {content.showMaterialActions && content.batchId ? (
+        <Space size={8} className={chatStyles.failedActions}>
+          <Button
+            type="primary"
+            size="small"
+            aria-label="重试失败资料"
+            loading={pending}
+            onClick={() => onRetry(content.batchId!)}
+          >
+            重试失败资料
+          </Button>
+          <Button
+            danger
+            size="small"
+            aria-label="放弃本批"
+            loading={pending}
+            onClick={() => onAbandon(content.batchId!)}
+          >
+            放弃本批
+          </Button>
+        </Space>
+      ) : null}
+    </div>
+  )
+}
+
 function createBatchStatusActivityRenderer(): ReactActivityMessageRenderer<BatchStatusActivityContent> {
   return {
     activityType: BATCH_STATUS_ACTIVITY_TYPE,
@@ -184,13 +256,7 @@ function createBatchStatusActivityRenderer(): ReactActivityMessageRenderer<Batch
         },
       },
     },
-    render: ({ content }) => (
-      <div className={chatStyles.noticeBlock}>
-        <p className={chatStyles.notice} role="status">
-          {content.label}
-        </p>
-      </div>
-    ),
+    render: ({ content }) => <BatchStatusNotice content={content} />,
   }
 }
 
@@ -553,7 +619,9 @@ function useAgentConversationChatController(
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
   const [editingQueueBatchId, setEditingQueueBatchId] = useState<string | null>(null)
   const [pendingInteractionId, setPendingInteractionId] = useState<string | null>(null)
+  const [batchCommandPending, setBatchCommandPending] = useState(false)
   const commandPendingRef = useRef(false)
+  const batchCommandPendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
   const { applyServerDraft, updateDraft, conversationIdRef, draftEpochRef, draftRevisionRef } =
     useAgentConversationDraft(conversationId)
@@ -923,6 +991,70 @@ function useAgentConversationChatController(
     [runInteractionCommand],
   )
 
+  const runBatchRepairCommand = useCallback(
+    async (
+      command: (conversationId: string) => ReturnType<typeof retryFailedAgentConversationMaterials>,
+    ) => {
+      const currentConversationId = conversationIdRef.current
+      if (!currentConversationId || batchCommandPendingRef.current) {
+        return
+      }
+      setErrorText(null)
+      batchCommandPendingRef.current = true
+      setBatchCommandPending(true)
+      try {
+        const result = await command(currentConversationId)
+        useAgentConversationRuntimeStore.getState().hydrate({
+          conversationId: currentConversationId,
+          events: mergeEvents(useAgentConversationRuntimeStore.getState().events, result.events),
+        })
+      } catch (error) {
+        setErrorText(getAssistErrorText(error))
+      } finally {
+        batchCommandPendingRef.current = false
+        setBatchCommandPending(false)
+      }
+    },
+    [conversationIdRef],
+  )
+
+  const retryFailedMaterials = useCallback(
+    (batchId: string) => {
+      void runBatchRepairCommand((currentConversationId) =>
+        retryFailedAgentConversationMaterials(
+          currentConversationId,
+          batchId,
+          undefined,
+          crypto.randomUUID(),
+        ),
+      )
+    },
+    [runBatchRepairCommand],
+  )
+
+  const removeFailedMaterial = useCallback(
+    (batchId: string, materialId: string) => {
+      void runBatchRepairCommand((currentConversationId) =>
+        removeAgentConversationMaterials(
+          currentConversationId,
+          batchId,
+          [materialId],
+          crypto.randomUUID(),
+        ),
+      )
+    },
+    [runBatchRepairCommand],
+  )
+
+  const abandonFailedBatch = useCallback(
+    (batchId: string) => {
+      void runBatchRepairCommand((currentConversationId) =>
+        abandonAgentConversationBatch(currentConversationId, batchId, crypto.randomUUID()),
+      )
+    },
+    [runBatchRepairCommand],
+  )
+
   const pendingInteractionIdRef = useRef(pendingInteractionId)
   const replyToInteractionRef = useRef(replyToInteraction)
   const cancelInteractionRef = useRef(cancelInteraction)
@@ -1059,6 +1191,10 @@ function useAgentConversationChatController(
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
+    batchCommandPending,
+    retryFailedMaterials,
+    removeFailedMaterial,
+    abandonFailedBatch,
   }
 }
 
@@ -1186,6 +1322,10 @@ export function AgentConversationChat({
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
+    batchCommandPending,
+    retryFailedMaterials,
+    removeFailedMaterial,
+    abandonFailedBatch,
   } = useAgentConversationChatController(onReviewRequested, reviewPackageId, onReviewMessageSent, onReviewMessageRestored)
   const queuedMessagesContextValue = useMemo(
     () => ({
@@ -1200,6 +1340,15 @@ export function AgentConversationChat({
         : undefined,
     }),
     [editQueuedMessage, editingQueueBatchId, queuedMessages, stop, stoppableBatchId],
+  )
+  const batchRepairContextValue = useMemo(
+    () => ({
+      pending: batchCommandPending,
+      onRetry: retryFailedMaterials,
+      onRemove: removeFailedMaterial,
+      onAbandon: abandonFailedBatch,
+    }),
+    [abandonFailedBatch, batchCommandPending, removeFailedMaterial, retryFailedMaterials],
   )
 
   return (
@@ -1236,6 +1385,7 @@ export function AgentConversationChat({
       {loading ? (
         <Typography.Text type="secondary">正在加载会话</Typography.Text>
       ) : (
+        <BatchRepairContext.Provider value={batchRepairContextValue}>
         <CopilotKit
           runtimeUrl="/copilotkit"
           useSingleEndpoint={false}
@@ -1271,6 +1421,7 @@ export function AgentConversationChat({
             />
           </CopilotChatConfigurationProvider>
         </CopilotKit>
+        </BatchRepairContext.Provider>
       )}
     </div>
   )

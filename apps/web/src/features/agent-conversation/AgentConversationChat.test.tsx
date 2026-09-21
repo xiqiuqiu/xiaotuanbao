@@ -1,6 +1,6 @@
 import { getAiCreateTask } from '@/services/ai-create-task.service'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,9 +8,12 @@ import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import {
+  abandonAgentConversationBatch,
   cancelAgentConversationInteraction,
   listAgentConversationEvents,
+  removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationMaterials,
   saveAgentConversationDraft,
   sendAgentConversationText,
   stopAgentConversationBatch,
@@ -150,6 +153,9 @@ vi.mock('@/services/agent-conversation.service', () => ({
   sendAgentConversationText: vi.fn(),
   retractQueuedAgentConversationBatch: vi.fn(),
   stopAgentConversationBatch: vi.fn(),
+  retryFailedAgentConversationMaterials: vi.fn(),
+  removeAgentConversationMaterials: vi.fn(),
+  abandonAgentConversationBatch: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -1641,5 +1647,113 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     renderChat()
     await screen.findByRole('textbox', { name: '询问小团宝业务' })
     expect(capturedChatConfig.agentId).toBe('ai-create-readonly-assist')
+  })
+})
+
+describe('AgentConversationChat 资料修复 #481', () => {
+  beforeEach(() => {
+    lastEventSource = null
+    vi.mocked(retryFailedAgentConversationMaterials).mockReset()
+    vi.mocked(removeAgentConversationMaterials).mockReset()
+    vi.mocked(abandonAgentConversationBatch).mockReset()
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationStore.getState().reset()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-1',
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '请看附件' },
+          createdAt: '2026-09-21T00:00:00.000Z',
+        },
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'waiting_for_materials',
+            batchId: 'batch-fail-materials',
+            readyCount: 0,
+            totalCount: 1,
+            failedCount: 1,
+            failedMaterials: [
+              {
+                materialId: 'mat-failed',
+                originalFilename: '报价单.pdf',
+                errorMessage: '无法解析',
+              },
+            ],
+          },
+          createdAt: '2026-09-21T00:00:01.000Z',
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('shows failed materials and sends conversation batch commands without a task identity', async () => {
+    const user = userEvent.setup()
+    vi.mocked(retryFailedAgentConversationMaterials).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 2,
+    } as never)
+    vi.mocked(removeAgentConversationMaterials).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 2,
+    } as never)
+    vi.mocked(abandonAgentConversationBatch).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 2,
+    } as never)
+
+    renderChat()
+
+    expect(
+      screen.getByText('有 1 个资料解析失败，请重试、移除后继续或放弃本批'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('报价单.pdf：无法解析')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '重试失败资料' }))
+    expect(retryFailedAgentConversationMaterials).toHaveBeenCalledWith(
+      'c-1',
+      'batch-fail-materials',
+      undefined,
+      expect.any(String),
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '移除' })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: '移除' }))
+    expect(removeAgentConversationMaterials).toHaveBeenCalledWith(
+      'c-1',
+      'batch-fail-materials',
+      ['mat-failed'],
+      expect.any(String),
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '放弃本批' })).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: '放弃本批' }))
+    expect(abandonAgentConversationBatch).toHaveBeenCalledWith(
+      'c-1',
+      'batch-fail-materials',
+      expect.any(String),
+    )
   })
 })

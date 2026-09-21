@@ -177,3 +177,50 @@ export async function retractQueuedAgentConversationBatch(
     },
   )
 }
+
+export async function retryFailedAgentConversationMaterials(
+  conversationId: string,
+  batchId: string,
+  materialIds: string[] | undefined,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/retry-failed-materials`,
+    materialIds ? { materialIds } : {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function removeAgentConversationMaterials(
+  conversationId: string,
+  batchId: string,
+  materialIds: string[],
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/remove-materials`,
+    { materialIds },
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function abandonAgentConversationBatch(
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/abandon`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}

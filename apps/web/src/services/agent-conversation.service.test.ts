@@ -15,8 +15,11 @@ vi.mock('@/lib/request', () => ({
 }))
 
 import {
+  abandonAgentConversationBatch,
   listAgentConversations,
+  removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationMaterials,
   saveAgentConversationDraft,
   sendAgentConversationText,
   stopAgentConversationBatch,
@@ -146,6 +149,51 @@ describe('agent conversation service', () => {
       '/agent/conversations/c-1/batches/batch-2/retract',
       {},
       { silentError: true, headers: { 'Idempotency-Key': 'key-retract' } },
+    )
+  })
+
+  it('retries failed materials on the conversation HTTP path without a task identity', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 4 })
+    await retryFailedAgentConversationMaterials('c-1', 'batch-3', undefined, 'key-retry-materials')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-3/retry-failed-materials',
+      {},
+      { silentError: true, headers: { 'Idempotency-Key': 'key-retry-materials' } },
+    )
+  })
+
+  it('retries selected failed materials without a task identity', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 4 })
+    await retryFailedAgentConversationMaterials(
+      'c-1',
+      'batch-3',
+      ['mat-failed'],
+      'key-retry-one',
+    )
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-3/retry-failed-materials',
+      { materialIds: ['mat-failed'] },
+      { silentError: true, headers: { 'Idempotency-Key': 'key-retry-one' } },
+    )
+  })
+
+  it('removes failed material dependencies on the conversation HTTP path', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 5 })
+    await removeAgentConversationMaterials('c-1', 'batch-3', ['mat-failed'], 'key-remove')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-3/remove-materials',
+      { materialIds: ['mat-failed'] },
+      { silentError: true, headers: { 'Idempotency-Key': 'key-remove' } },
+    )
+  })
+
+  it('abandons the current batch on the conversation HTTP path', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 6 })
+    await abandonAgentConversationBatch('c-1', 'batch-3', 'key-abandon')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-3/abandon',
+      {},
+      { silentError: true, headers: { 'Idempotency-Key': 'key-abandon' } },
     )
   })
 })

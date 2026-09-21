@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   batchStatusLabel,
@@ -1498,6 +1500,71 @@ it('keeps collaboration identity and marks only the disposed review card as conf
   ]))
 })
 
+
+it('projects failed materials and repair flags without importing conversation commands', () => {
+  const source = readFileSync(join(__dirname, 'ai-create-copilot-messages.ts'), 'utf8')
+  expect(source).not.toMatch(/agent-conversation\.service|ai-create-task\.service/)
+  expect(source).not.toMatch(
+    /retryFailedAgentConversationMaterials|removeAgentConversationMaterials|abandonAgentConversationBatch/,
+  )
+
+  const messages = toCopilotChatMessages(
+    [
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { text: '请看附件' },
+        createdAt: '2026-09-21T00:00:00.000Z',
+      },
+      {
+        sequence: 2,
+        kind: 'batch_status',
+        payload: {
+          status: 'waiting_for_materials',
+          batchId: 'batch-fail-materials',
+          readyCount: 0,
+          totalCount: 1,
+          failedCount: 1,
+          failedMaterials: [
+            {
+              materialId: 'mat-failed',
+              originalFilename: '报价单.pdf',
+              errorMessage: '无法解析',
+            },
+          ],
+        },
+        createdAt: '2026-09-21T00:00:01.000Z',
+      },
+    ],
+    null,
+    null,
+  )
+
+  const statuses = messages
+    .filter((message) => message.activityType === 'ai-create-batch-status')
+    .map(
+      (message) =>
+        message.content as {
+          label?: string
+          batchId?: string
+          showMaterialActions?: boolean
+          failedMaterials?: Array<{ materialId: string; originalFilename: string }>
+        },
+    )
+  expect(statuses).toEqual([
+    expect.objectContaining({
+      label: '有 1 个资料解析失败，请重试、移除后继续或放弃本批',
+      batchId: 'batch-fail-materials',
+      showMaterialActions: true,
+      failedMaterials: [
+        expect.objectContaining({
+          materialId: 'mat-failed',
+          originalFilename: '报价单.pdf',
+        }),
+      ],
+    }),
+  ])
+})
 
 it('clears stale streaming output when its batch enters review', () => {
   const events = [{ sequence: 4, kind: 'batch_status' as const, payload: { status: 'awaiting_review', batchId: 'batch-review', attemptId: 'attempt-review' }, createdAt: '2026-09-07T00:00:00Z' }]
