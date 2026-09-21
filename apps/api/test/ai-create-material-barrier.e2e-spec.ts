@@ -104,6 +104,16 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     }
   }
 
+  async function waitUntil(predicate: () => boolean, timeoutMs = 2_000) {
+    const startedAt = Date.now()
+    while (!predicate()) {
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new Error('timed out waiting for condition')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+
   it('holds the Agent until attachments are archived, parsed, and pinned', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
@@ -146,13 +156,16 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(agentJobs).toHaveLength(0)
 
     const beforeParse = agent.callCount()
+    const beforeOcr = ocr.callCount()
     const processing = processor.processDueJobs(1)
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(agent.callCount()).toBe(beforeParse)
-    expect(ocr.callCount()).toBe(1)
-
-    ocr.release()
-    await processing
+    try {
+      await waitUntil(() => ocr.callCount() > beforeOcr)
+      expect(agent.callCount()).toBe(beforeParse)
+      ocr.release()
+      await processing
+    } finally {
+      ocr.release()
+    }
 
     const afterParseJobs = await prisma.aiWorkflowJob.findMany({
       where: { taskId, type: 'agent_batch' },
@@ -165,7 +178,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(agent.callCount()).toBe(beforeParse)
 
     await processor.processDueJobs(1)
-    expect(agent.callCount()).toBe(beforeParse + 1)
+    await waitUntil(() => agent.callCount() === beforeParse + 1)
 
     const context = agent.lastTaskContext() as {
       data?: {
