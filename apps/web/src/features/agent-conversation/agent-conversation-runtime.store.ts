@@ -4,7 +4,7 @@ import {
   pruneSessionReasoning,
   shouldProjectLiveAssistant,
   type LiveAssistantSnapshot,
-} from '@/features/ai-assist/ai-create-copilot-messages'
+} from './agent-conversation-projection'
 
 export type AgentConversationRuntime = {
   conversationId: string | null

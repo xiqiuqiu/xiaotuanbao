@@ -37,16 +37,13 @@ import {
   AGENT_TASK_ACTIVITY_TYPE,
   INTERACTION_ACTIVITY_TYPE,
   REVIEW_PACKAGE_ACTIVITY_TYPE,
-  currentStoppableBatchId,
-  isCopilotChatRunning,
-  projectConversationFrame,
-  projectQueuedConversationMessages,
+  projectAgentInteraction,
   type AgentTaskActivityContent,
   type BatchStatusActivityContent,
   type InteractionActivityContent,
   type QueuedConversationMessage,
   type ReviewPackageActivityContent,
-} from '@/features/ai-assist/ai-create-copilot-messages'
+} from './agent-conversation-projection'
 import { AgentReasoningMessage } from './agent-reasoning-message'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
@@ -54,7 +51,7 @@ import {
   CONVERSATION_IDLE_CATCH_UP_MS,
 } from '@/features/ai-assist/ai-create-assist-polling'
 import { ASSIST_ERROR_TEXT, getAssistErrorText } from '@/features/ai-assist/assist-error-text'
-import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
+import chatStyles from './AgentConversationChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { clearPendingConversationDraft, readPendingConversationDraft, useAgentConversationDraft } from './use-agent-conversation-draft'
@@ -408,7 +405,7 @@ function createReviewPackageActivityRenderer(
               content.fieldKeys,
               content.payloadSchema ?? '',
               content.confirmationUnit ?? '',
-            ) || '发团基础信息'}
+            ) || '待审核事项'}
           </Typography.Paragraph>
           <div className={chatStyles.activityActions}>
             {content.taskId ? (
@@ -427,7 +424,7 @@ function createReviewPackageActivityRenderer(
                 查看审核内容
               </Button>
             ) : (
-              <Typography.Text type="secondary">请在对应业务表单中审核。</Typography.Text>
+              <Typography.Text type="secondary">请在右侧事项中审核。</Typography.Text>
             )}
           </div>
         </Card>
@@ -611,7 +608,6 @@ function useAgentConversationChatController(
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
   const liveAssistant = useAgentConversationRuntimeStore((state) => state.liveAssistant)
-  const sessionReasoning = useAgentConversationRuntimeStore((state) => state.sessionReasoning)
   const draft = useAgentConversationRuntimeStore((state) => state.draft)
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
@@ -781,7 +777,14 @@ function useAgentConversationChatController(
     document.addEventListener('visibilitychange', onVisible)
     const idleCatchUp = window.setInterval(() => {
       const current = useAgentConversationRuntimeStore.getState()
-      if (currentStoppableBatchId(current.events) || projectQueuedConversationMessages(current.events).messages.length > 0 ||
+      const projection = projectAgentInteraction({
+        events: current.events,
+        live: current.liveAssistant,
+        pendingSend: current.pendingText
+          ? { text: current.pendingText, uploadCount: 0 }
+          : null,
+      })
+      if (projection.stoppable || projection.queued.length > 0 ||
         Date.now() - lastCatchUpAt >= CONVERSATION_IDLE_CATCH_UP_MS) {
         void catchUp()
       }
@@ -867,10 +870,10 @@ function useAgentConversationChatController(
   const stop = useCallback(async () => {
     const currentConversationId = conversationIdRef.current
     const currentRuntime = useAgentConversationRuntimeStore.getState()
-    const batchId = currentStoppableBatchId(
-      projectQueuedConversationMessages(currentRuntime.events, currentRuntime.liveAssistant)
-        .visibleEvents,
-    )
+    const batchId = projectAgentInteraction({
+      events: currentRuntime.events,
+      live: currentRuntime.liveAssistant,
+    }).stoppable
     if (!currentConversationId || !batchId || commandPendingRef.current) {
       return
     }
@@ -1069,24 +1072,21 @@ function useAgentConversationChatController(
   replyToInteractionRef.current = replyToInteraction
   cancelInteractionRef.current = cancelInteraction
 
-  const queueProjection = useMemo(
-    () => projectQueuedConversationMessages(events, liveAssistant),
-    [events, liveAssistant],
-  )
-  const visibleEvents = queueProjection.visibleEvents
-  const messages = useMemo(
+  const interaction = useMemo(
     () =>
-      projectConversationFrame({
-        events: visibleEvents,
-        pendingText,
-        liveAssistant,
-        sessionReasoning,
-        pendingUploadCount,
+      projectAgentInteraction({
+        events,
+        live: liveAssistant,
+        pendingSend: pendingText
+          ? { text: pendingText, uploadCount: pendingUploadCount }
+          : null,
       }),
-    [liveAssistant, pendingText, pendingUploadCount, sessionReasoning, visibleEvents],
+    [events, liveAssistant, pendingText, pendingUploadCount],
   )
-  const isRunning = isCopilotChatRunning(visibleEvents, null, pendingText, liveAssistant)
-  const stoppableBatchId = currentStoppableBatchId(visibleEvents)
+  const messages = interaction.messages
+  const isRunning = interaction.isRunning
+  const stoppableBatchId = interaction.stoppable
+  const queuedMessages = interaction.queued
   const messageView = useMemo(() => ({ reasoningMessage: AgentReasoningMessage, userMessage: ConversationUserMessage }), [])
   const openAgentTask = useCallback(
     (
@@ -1182,7 +1182,7 @@ function useAgentConversationChatController(
     messages,
     messageView,
     pendingText,
-    queuedMessages: queueProjection.messages,
+    queuedMessages,
     editingQueueBatchId,
     editQueuedMessage,
     send,
@@ -1211,7 +1211,7 @@ function AgentConversationComposer({
 }: {
   draft: string
   isRunning: boolean
-  messages: ReturnType<typeof projectConversationFrame>
+  messages: ReturnType<typeof projectAgentInteraction>['messages']
   messageView: { reasoningMessage: typeof AgentReasoningMessage }
   pendingText: string | null
   queuedMessagesContextValue: QueuedMessagesContextValue

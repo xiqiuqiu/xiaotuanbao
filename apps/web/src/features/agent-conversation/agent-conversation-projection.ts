@@ -7,10 +7,9 @@ import type {
   AssistantSnapshotFrame,
 } from '@xiaotuanbao/shared'
 
-export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
-export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
-export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'ai-create-review-package'
-export const SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE = 'ai-create-search-route-templates'
+export const BATCH_STATUS_ACTIVITY_TYPE = 'agent-batch-status'
+export const INTERACTION_ACTIVITY_TYPE = 'agent-interaction'
+export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'agent-review-package'
 export const AGENT_TASK_ACTIVITY_TYPE = 'agent-task'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
@@ -199,16 +198,6 @@ export type AgentTaskActivityContent = {
   taskType?: string
 }
 
-export type SearchRouteTemplatesActivityContent = {
-  items: Array<{
-    id: string
-    name: string
-    defaultDayCount: number
-    usageCount: number
-    matchReasons: Array<Record<string, unknown>>
-  }>
-}
-
 type MaterialProgress = {
   ready?: number
   total?: number
@@ -239,7 +228,7 @@ export function batchStatusLabel(
   if (status === 'preparing_context') return '正在整理会话上下文'
   if (status === 'agent_running') return 'AI 处理中'
   if (status === 'awaiting_user_input') return '等待回答'
-  if (status === 'awaiting_review') return '等待表单审核'
+  if (status === 'awaiting_review') return '等待审核'
   if (status === 'completed') {
     if (extra?.disposition === 'rejected') return '已拒绝本次建议'
     return '已完成'
@@ -393,44 +382,6 @@ function reviewPackageFromPayload(
     ...(taskType ? { taskType } : {}),
     ...(departureId ? { departureId } : {}),
   }
-}
-
-function searchRouteTemplatesFromPayload(
-  payload: Record<string, unknown>,
-): SearchRouteTemplatesActivityContent | null {
-  const raw = payload.searchRouteTemplates
-  if (!raw || typeof raw !== 'object' || !('items' in raw) || !Array.isArray(raw.items)) {
-    return null
-  }
-  const items = raw.items.flatMap((item) => {
-    if (!item || typeof item !== 'object') {
-      return []
-    }
-    const record = item as Record<string, unknown>
-    if (
-      typeof record.id !== 'string' ||
-      typeof record.name !== 'string' ||
-      typeof record.defaultDayCount !== 'number' ||
-      typeof record.usageCount !== 'number'
-    ) {
-      return []
-    }
-    return [
-      {
-        id: record.id,
-        name: record.name,
-        defaultDayCount: record.defaultDayCount,
-        usageCount: record.usageCount,
-        matchReasons: Array.isArray(record.matchReasons)
-          ? record.matchReasons.filter(
-              (reason): reason is Record<string, unknown> =>
-                Boolean(reason) && typeof reason === 'object',
-            )
-          : [],
-      },
-    ]
-  })
-  return { items }
 }
 
 function progressFromPayload(payload: Record<string, unknown>): MaterialProgress | null {
@@ -661,15 +612,6 @@ export function toCopilotChatMessages(
           role: 'activity',
           activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
           content: reviewNotice,
-        })
-      }
-      const searchNotice = searchRouteTemplatesFromPayload(event.payload)
-      if (searchNotice) {
-        messages.push({
-          id: `search-${event.sequence}`,
-          role: 'activity',
-          activityType: SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE,
-          content: searchNotice,
         })
       }
       continue
@@ -948,4 +890,37 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
     liveParts.unshift(workingIndicatorMessage(indicatorAttemptId))
   }
   return [...messages, ...liveParts]
+}
+
+export type AgentInteractionProjectionInput = {
+  events: AiConversationEventView[]
+  live?: LiveAssistantSnapshot | null
+  pendingSend?: { text: string; uploadCount?: number } | null
+}
+
+export type AgentInteractionProjection = {
+  messages: ChatMessage[]
+  isRunning: boolean
+  stoppable: string | null
+  queued: QueuedConversationMessage[]
+}
+
+export function projectAgentInteraction(
+  input: AgentInteractionProjectionInput,
+): AgentInteractionProjection {
+  const pendingText = input.pendingSend?.text ?? null
+  const pendingUploadCount = input.pendingSend?.uploadCount ?? 0
+  const queue = projectQueuedConversationMessages(input.events, input.live)
+  const messages = projectConversationFrame({
+    events: queue.visibleEvents,
+    pendingText,
+    pendingUploadCount,
+    liveAssistant: input.live,
+  })
+  return {
+    messages,
+    isRunning: isCopilotChatRunning(queue.visibleEvents, null, pendingText, input.live),
+    stoppable: currentStoppableBatchId(queue.visibleEvents),
+    queued: queue.messages,
+  }
 }

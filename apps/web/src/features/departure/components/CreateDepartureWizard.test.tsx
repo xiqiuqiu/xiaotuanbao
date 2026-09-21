@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider, Modal } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { StrictMode, type ComponentType, type ReactNode } from 'react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { evaluateReviewConfirmMerge } from '@xiaotuanbao/ai-contracts'
 import { DepartureType } from '@xiaotuanbao/shared'
@@ -30,6 +30,12 @@ vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
   ConversationHistoryTrigger: () => <button type="button">打开会话历史</button>,
 }))
 
+vi.mock('@/features/agent-conversation/conversation-materials', () => ({
+  ConversationMaterialsTrigger: () => <button type="button">会话资料</button>,
+}))
+
+vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
+
 const mockNavigate = vi.fn()
 let mockSearch: { copyFrom?: string; taskId?: string } = {}
 const navigationGuard = vi.hoisted(() => ({
@@ -38,20 +44,6 @@ const navigationGuard = vi.hoisted(() => ({
     next: { pathname: string }
   }) => boolean | Promise<boolean>),
 }))
-const hitlRegistration = vi.hoisted(() => ({
-  current: null as null | {
-    render: ComponentType<{
-      name: string
-      description: string
-      toolCallId: string
-      args: { reviewPackageId: string }
-      status: 'executing'
-      result: undefined
-      respond: (result: unknown) => Promise<void>
-    }>
-  },
-}))
-
 const mockUser = {
   id: 'user-1',
   username: 'wangjie',
@@ -105,9 +97,7 @@ vi.mock('@/services/ai-create-task.service', () => ({
   cancelAiReviewPackage: vi.fn(),
   getAiCreateAssistAvailability: vi.fn(),
   getAiCreateAssistTaskState: vi.fn(),
-  startAiCreateAssistSession: vi.fn(),
-  sendAiConversationMessage: vi.fn(),
-  listAiConversationEvents: vi.fn(),
+
   listDepartureMaterials: vi.fn().mockResolvedValue([]),
   previewDepartureMaterial: vi.fn(),
   patchAiReviewPackage: vi.fn().mockResolvedValue({
@@ -138,78 +128,6 @@ vi.mock('@/services/route-template.service', () => ({
   getRouteTemplate: vi.fn(),
   deleteRouteTemplate: vi.fn(),
 }))
-
-vi.mock('@copilotkit/react-core/v2', () => ({
-  CopilotKit: ({
-    children,
-    headers,
-  }: {
-    children: ReactNode
-    headers?: Record<string, string>
-  }) => (
-    <div
-      data-testid="copilot-kit"
-      data-authorization={headers?.Authorization}
-      data-run-id={headers?.['X-Ai-Run-Id']}
-    >
-      {children}
-    </div>
-  ),
-  CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
-  CopilotChatView: ({
-    welcomeScreen,
-    inputValue,
-    onInputChange,
-    onSubmitMessage,
-  }: {
-    welcomeScreen?: false | ((props: { input?: ReactNode }) => ReactNode)
-    inputValue?: string
-    onInputChange?: (value: string) => void
-    onSubmitMessage?: (value: string) => void
-  }) => {
-    const input = (
-      <textarea
-        aria-label="询问当前发团草稿"
-        placeholder="询问当前发团草稿…"
-        value={inputValue ?? ''}
-        onChange={(event) => onInputChange?.(event.target.value)}
-      />
-    )
-    const welcome = typeof welcomeScreen === 'function' ? welcomeScreen({ input }) : null
-    return (
-      <div data-testid="copilot-chat-view">
-        {welcome}
-        {welcome ? null : input}
-        <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
-          发送
-        </button>
-      </div>
-    )
-  },
-  useAgentContext: vi.fn(),
-  useAttachments: () => ({
-    attachments: [],
-    enabled: true,
-    dragOver: false,
-    fileInputRef: { current: null },
-    containerRef: { current: null },
-    processFiles: async () => {},
-    handleFileUpload: async () => {},
-    handleDragOver: () => {},
-    handleDragLeave: () => {},
-    handleDrop: async () => {},
-    removeAttachment: () => {},
-    consumeAttachments: () => [],
-  }),
-  useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
-  useCopilotKit: () => ({ copilotkit: { runAgent: vi.fn() } }),
-  useRenderTool: vi.fn(),
-  useHumanInTheLoop: (config: NonNullable<typeof hitlRegistration.current>) => {
-    hitlRegistration.current = config
-  },
-}))
-
-vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
 
 vi.stubGlobal(
   'EventSource',
@@ -245,9 +163,6 @@ import {
   patchAiReviewPackage,
   rejectAiReviewPackage,
   saveDepartureCreationDraft,
-  startAiCreateAssistSession,
-  sendAiConversationMessage,
-  listAiConversationEvents,
 } from '@/services/ai-create-task.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSegments } from '@/services/segment.service'
@@ -428,7 +343,6 @@ describe('CreateDepartureWizard', () => {
     useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.getState().reset()
     useAgentConversationRuntimeStore.getState().clear()
-    hitlRegistration.current = null
     navigationGuard.shouldBlockFn = null
   })
 
@@ -460,12 +374,6 @@ describe('CreateDepartureWizard', () => {
       pendingReview: null,
     }))
     vi.mocked(confirmAiCreateTask).mockResolvedValue(mockDeparture)
-    vi.mocked(listAiConversationEvents).mockResolvedValue({
-      conversationId: 'conv-1',
-      events: [],
-      lastSequence: 0,
-      activeBatch: null,
-    })
     vi.mocked(getAiCreateTask).mockResolvedValue({
       id: 'task-1',
       status: 'in_progress',
@@ -1457,7 +1365,6 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
   it('shows persisted background work at the task entry without opening the assist pane', async () => {
@@ -1472,7 +1379,6 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByText('AI 辅助 · AI 处理中')).toBeInTheDocument()
     expect(useUiStore.getState().assistPaneCollapsed).toBe(true)
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
   it('uses the unified Agent pane when expanded without clicking AI 辅助', async () => {
@@ -1483,7 +1389,6 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await screen.findByRole('button', { name: /AI 辅助/ })
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
 
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
@@ -1491,7 +1396,6 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByText('通用会话')).toBeInTheDocument()
     expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
     expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
   })
@@ -1521,7 +1425,6 @@ describe('CreateDepartureWizard', () => {
     })
 
     expect(await screen.findByText('通用会话')).toBeInTheDocument()
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
   it('opens the unified Agent pane without losing the form edit buffer', async () => {
@@ -1557,7 +1460,6 @@ describe('CreateDepartureWizard', () => {
     await screen.findByLabelText('团名')
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
     expect(await screen.findByText('通用会话')).toBeInTheDocument()
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
@@ -1582,7 +1484,6 @@ describe('CreateDepartureWizard', () => {
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
     expect(await screen.findByText('通用会话')).toBeInTheDocument()
-    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
     expect(screen.queryByText('发团创建草稿已保存')).not.toBeInTheDocument()
   })
 

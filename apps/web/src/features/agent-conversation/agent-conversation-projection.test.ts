@@ -5,10 +5,154 @@ import {
   batchStatusLabel,
   currentStoppableBatchId,
   isCopilotChatRunning,
+  projectAgentInteraction,
   projectConversationFrame,
   projectQueuedConversationMessages,
   toCopilotChatMessages,
-} from './ai-create-copilot-messages'
+} from './agent-conversation-projection'
+
+describe('projectAgentInteraction #482', () => {
+  it('projects messages, isRunning, stoppable and queued from events, live and pendingSend', () => {
+    const projection = projectAgentInteraction({
+      events: [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '先处理' },
+          createdAt: '2026-09-21T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'agent_running', batchId: 'batch-1' },
+          createdAt: '2026-09-21T00:00:01.000Z',
+        },
+        {
+          sequence: 3,
+          kind: 'user_message',
+          payload: { text: '排队追问' },
+          createdAt: '2026-09-21T00:00:02.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+          createdAt: '2026-09-21T00:00:02.000Z',
+        },
+      ],
+      live: {
+        attemptId: 'attempt-1',
+        batchId: 'batch-1',
+        generation: 1,
+        text: '正在整理',
+      },
+      pendingSend: null,
+    })
+
+    expect(projection.isRunning).toBe(true)
+    expect(projection.stoppable).toBe('batch-1')
+    expect(projection.queued).toEqual([
+      { batchId: 'batch-2', text: '排队追问', userEventSequence: 3 },
+    ])
+    expect(projection.messages.some((message) => message.content === '排队追问')).toBe(false)
+    expect(projection.messages.some((message) => message.content === '正在整理')).toBe(true)
+    expect(projection.messages.some((message) => message.activityType === 'agent-batch-status')).toBe(
+      true,
+    )
+    expect(
+      projection.messages.some((message) => message.activityType === 'ai-create-batch-status'),
+    ).toBe(false)
+  })
+
+  it('uses platform activity names for batch, follow-up and review prompts', () => {
+    const projection = projectAgentInteraction({
+      events: [
+        {
+          id: 'event-q',
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '出团日期是哪一天？',
+            interaction: {
+              interactionId: 'int-1',
+              type: 'free_text',
+              prompt: '出团日期是哪一天？',
+              status: 'pending',
+              version: 1,
+            },
+            reviewPackageId: 'pkg-1',
+            fieldKeys: ['name'],
+          },
+          createdAt: '2026-09-21T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'awaiting_review', batchId: 'batch-1' },
+          createdAt: '2026-09-21T00:00:01.000Z',
+        },
+      ],
+    })
+
+    expect(projection.messages.map((message) => message.activityType).filter(Boolean).sort()).toEqual(
+      ['agent-batch-status', 'agent-interaction', 'agent-review-package'].sort(),
+    )
+    expect(projection.events).toBeUndefined()
+    expect(projection.isRunning).toBe(false)
+    expect(projection.stoppable).toBeNull()
+  })
+
+  it('does not project common route search results as a core activity card', () => {
+    const projection = projectAgentInteraction({
+      events: [
+        {
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '组织内有这些常用路线。',
+            searchRouteTemplates: {
+              items: [
+                {
+                  id: 'tpl-1',
+                  name: '川西稻城线',
+                  defaultDayCount: 8,
+                  usageCount: 4,
+                  matchReasons: [],
+                },
+              ],
+            },
+          },
+          createdAt: '2026-09-21T00:00:00.000Z',
+        },
+      ],
+    })
+
+    expect(projection.messages.some((message) => message.content === '组织内有这些常用路线。')).toBe(
+      true,
+    )
+    expect(
+      projection.messages.some((message) => String(message.activityType ?? '').includes('search')),
+    ).toBe(false)
+  })
+
+  it('marks pendingSend as running without inventing a stoppable batch', () => {
+    const projection = projectAgentInteraction({
+      events: [],
+      pendingSend: { text: '正在发出', uploadCount: 2 },
+    })
+
+    expect(projection.isRunning).toBe(true)
+    expect(projection.stoppable).toBeNull()
+    expect(projection.queued).toEqual([])
+    expect(projection.messages).toEqual([
+      expect.objectContaining({
+        activityType: 'agent-batch-status',
+        content: expect.objectContaining({ label: '上传 2 个附件' }),
+      }),
+    ])
+  })
+})
+
 
 describe('AI create chat status projection', () => {
   it('still shows AI 处理中 when agent_running carries Attempt and generation', () => {
@@ -37,7 +181,7 @@ describe('AI create chat status projection', () => {
     )
 
     const labels = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => (message.content as { label?: string }).label)
     expect(labels).toEqual(['AI 处理中'])
     expect(messages.some((message) => message.role === 'assistant')).toBe(false)
@@ -48,7 +192,7 @@ describe('AI create chat status projection', () => {
     expect(batchStatusLabel('preparing_context')).toBe('正在整理会话上下文')
     expect(batchStatusLabel('ready_for_agent', null, { queued: true })).toBe('已排队')
     expect(batchStatusLabel('awaiting_user_input')).toBe('等待回答')
-    expect(batchStatusLabel('awaiting_review')).toBe('等待表单审核')
+    expect(batchStatusLabel('awaiting_review')).toBe('等待审核')
     expect(batchStatusLabel('completed', null, { disposition: 'rejected' })).toBe(
       '已拒绝本次建议',
     )
@@ -86,7 +230,7 @@ describe('AI create chat status projection', () => {
     )
 
     const statuses = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => message.content as { label?: string; showBatchRetryAction?: boolean })
     expect(statuses.map((item) => item.label)).toEqual(['当前权限不足，无法完成这次处理'])
     expect(statuses.some((item) => item.showBatchRetryAction)).toBe(true)
@@ -134,7 +278,7 @@ describe('AI create chat status projection', () => {
     )
 
     const statuses = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => message.content as { label?: string })
     expect(statuses.map((item) => item.label)).toEqual(['上下文超出容量上限，请拆分或精简后再试'])
   })
@@ -192,7 +336,7 @@ describe('AI create chat status projection', () => {
     const messages = toCopilotChatMessages(queued.visibleEvents, null, null)
 
     const labels = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => (message.content as { label?: string }).label)
     expect(queued.messages).toEqual([
       { batchId: 'batch-2', text: '第二批排队', userEventSequence: 3 },
@@ -296,7 +440,7 @@ describe('AI create chat status projection', () => {
     expect(messages.some((message) => message.content === '第二批回复')).toBe(true)
     expect(
       messages
-        .filter((message) => message.activityType === 'ai-create-batch-status')
+        .filter((message) => message.activityType === 'agent-batch-status')
         .map((message) => (message.content as { label?: string }).label),
     ).not.toContain('已排队')
   })
@@ -435,9 +579,9 @@ describe('AI create chat status projection', () => {
     )
 
     const statuses = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => message.content as { label?: string; showStopAction?: boolean })
-    expect(statuses.map((item) => item.label)).toEqual(['等待表单审核'])
+    expect(statuses.map((item) => item.label)).toEqual(['等待审核'])
     expect(statuses.some((item) => item.showStopAction)).toBe(false)
   })
 
@@ -461,7 +605,7 @@ describe('AI create chat status projection', () => {
       null,
     )
     const labels = messages
-      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .filter((message) => message.activityType === 'agent-batch-status')
       .map((message) => (message.content as { label?: string }).label)
     expect(labels).toEqual(['已完成', '已拒绝本次建议'])
   })
@@ -495,7 +639,7 @@ describe('AI create chat status projection', () => {
         expect.objectContaining({ role: 'assistant', content: '出团日期是哪一天？' }),
         expect.objectContaining({
           role: 'activity',
-          activityType: 'ai-create-interaction',
+          activityType: 'agent-interaction',
           content: expect.objectContaining({
             interactionId: 'int-1',
             eventId: 'event-q',
@@ -506,7 +650,7 @@ describe('AI create chat status projection', () => {
     )
   })
 
-  it('projects review and search tool notices from persisted agent events', () => {
+  it('projects review notices from persisted agent events without a route-search card', () => {
     const messages = toCopilotChatMessages(
       [
         {
@@ -545,16 +689,14 @@ describe('AI create chat status projection', () => {
       null,
     )
 
+    expect(messages.some((message) => message.content === '组织内有这些常用路线。')).toBe(true)
+    expect(
+      messages.some((message) => String(message.activityType ?? '').includes('search')),
+    ).toBe(false)
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          activityType: 'ai-create-search-route-templates',
-          content: expect.objectContaining({
-            items: [expect.objectContaining({ name: '川西稻城线' })],
-          }),
-        }),
-        expect.objectContaining({
-          activityType: 'ai-create-review-package',
+          activityType: 'agent-review-package',
           content: {
             reviewPackageId: 'pkg-1',
             fieldKeys: ['name', 'routeName'],
@@ -630,7 +772,7 @@ describe('AI create chat status projection', () => {
         }),
         expect.objectContaining({
           role: 'activity',
-          activityType: 'ai-create-review-package',
+          activityType: 'agent-review-package',
           content: expect.objectContaining({
             reviewPackageId: 'pkg-1',
             taskId: 'task-1',
@@ -743,7 +885,7 @@ describe('projectConversationFrame live assistant #415', () => {
     expect(
       messages.some(
         (message) =>
-          message.activityType === 'ai-create-batch-status' &&
+          message.activityType === 'agent-batch-status' &&
           (message.content as { label?: string }).label === 'AI 处理中',
       ),
     ).toBe(true)
@@ -1102,7 +1244,7 @@ describe('projectConversationFrame live reasoning #416', () => {
         text: '',
       },
     })
-    expect(messages.some((message) => message.activityType === 'ai-create-review-package')).toBe(
+    expect(messages.some((message) => message.activityType === 'agent-review-package')).toBe(
       false,
     )
     expect(JSON.stringify(messages)).not.toContain('tool.call')
@@ -1214,7 +1356,7 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
         },
       ]
       const statusContent = toCopilotChatMessages(events, null, null)
-        .filter((message) => message.activityType === 'ai-create-batch-status')
+        .filter((message) => message.activityType === 'agent-batch-status')
         .map((message) => message.content as { showStopAction?: boolean; batchId?: string })
       expect(statusContent).toEqual([expect.objectContaining({ batchId: 'batch-1' })])
       expect(statusContent.some((item) => item.showStopAction)).toBe(false)
@@ -1244,7 +1386,7 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
     })
     expect(
       messages
-        .filter((message) => message.activityType === 'ai-create-batch-status')
+        .filter((message) => message.activityType === 'agent-batch-status')
         .map((message) => (message.content as { label?: string }).label),
     ).toEqual(['已停止当前处理'])
     expect(messages.some((message) => message.role === 'reasoning')).toBe(false)
@@ -1280,7 +1422,7 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
     expect(isCopilotChatRunning(stopped, null, null, { ...livePartial, revision: 99 })).toBe(false)
   })
 
-  it('resolves the latest in-flight batch for composer stop and ignores cancelled or HITL wait', () => {
+  it('resolves the latest in-flight batch for composer stop and ignores cancelled or awaiting-user wait', () => {
     expect(currentStoppableBatchId(runningEvents)).toBe('batch-1')
     expect(
       currentStoppableBatchId([
@@ -1495,14 +1637,14 @@ it('keeps collaboration identity and marks only the disposed review card as conf
     } },
   ], null, null)
   expect(messages).toEqual(expect.arrayContaining([
-    expect.objectContaining({ activityType: 'ai-create-review-package', content: expect.objectContaining({ disposition: 'confirmed' }) }),
+    expect.objectContaining({ activityType: 'agent-review-package', content: expect.objectContaining({ disposition: 'confirmed' }) }),
     expect.objectContaining({ activityType: 'agent-task', content: expect.objectContaining({ taskType: 'departure_collaboration', title: '发团协作' }) }),
   ]))
 })
 
 
 it('projects failed materials and repair flags without importing conversation commands', () => {
-  const source = readFileSync(join(__dirname, 'ai-create-copilot-messages.ts'), 'utf8')
+  const source = readFileSync(join(__dirname, 'agent-conversation-projection.ts'), 'utf8')
   expect(source).not.toMatch(/agent-conversation\.service|ai-create-task\.service/)
   expect(source).not.toMatch(
     /retryFailedAgentConversationMaterials|removeAgentConversationMaterials|abandonAgentConversationBatch/,
@@ -1541,7 +1683,7 @@ it('projects failed materials and repair flags without importing conversation co
   )
 
   const statuses = messages
-    .filter((message) => message.activityType === 'ai-create-batch-status')
+    .filter((message) => message.activityType === 'agent-batch-status')
     .map(
       (message) =>
         message.content as {

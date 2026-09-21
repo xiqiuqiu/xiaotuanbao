@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { getAiCreateTask } from '@/services/ai-create-task.service'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
@@ -1647,6 +1649,15 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     renderChat()
     await screen.findByRole('textbox', { name: '询问小团宝业务' })
     expect(capturedChatConfig.agentId).toBe('ai-create-readonly-assist')
+  })
+
+  it('does not treat CopilotKit as a second execution entry', async () => {
+    const source = readFileSync(join(__dirname, 'AgentConversationChat.tsx'), 'utf8')
+    expect(source).not.toMatch(/runAgent|useHumanInTheLoop|useAiCreateAssistBootstrap/)
+    expect(source).not.toMatch(/sendAiConversationMessage|primaryTaskId:\s*taskId/)
+    expect(source).toMatch(/projectAgentInteraction/)
+    renderChat()
+    await screen.findByRole('textbox', { name: '询问小团宝业务' })
   })
 })
 

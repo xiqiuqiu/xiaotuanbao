@@ -48,12 +48,12 @@ test.describe('AI create basic_info smoke', () => {
     await expect(page.getByRole('heading', { name: '新建发团' })).toBeVisible()
 
     await page.getByRole('button', { name: /AI 辅助/ }).click()
-    await expect(page.getByLabel('询问当前发团草稿')).toBeVisible()
+    await expect(page.getByLabel('询问小团宝业务')).toBeVisible()
 
-    await page.getByLabel('询问当前发团草稿').fill(`e2e-ai-smoke ${stamp} 请按这个团名建团`)
+    await page.getByLabel('询问小团宝业务').fill(`e2e-ai-smoke ${stamp} 请按这个团名建团`)
     await page.getByRole('button', { name: '发送' }).click()
 
-    await expect(page.getByText('等待表单审核')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByText('等待审核')).toBeVisible({ timeout: 45_000 })
     await expect(page.getByRole('button', { name: '确认写入草稿' })).toBeVisible()
     await page.getByRole('button', { name: '确认写入草稿' }).click()
 
@@ -61,6 +61,6 @@ test.describe('AI create basic_info smoke', () => {
 
     await page.reload()
     await expect(page.getByLabel('团名')).toHaveValue(expectedName)
-    await expect(page.getByText('等待表单审核')).not.toBeVisible()
+    await expect(page.getByText('等待审核')).not.toBeVisible()
   })
 })
