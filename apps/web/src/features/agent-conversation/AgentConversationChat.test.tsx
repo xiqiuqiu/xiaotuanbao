@@ -15,6 +15,7 @@ import {
   listAgentConversationEvents,
   removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationBatch,
   retryFailedAgentConversationMaterials,
   saveAgentConversationDraft,
   sendAgentConversationText,
@@ -156,6 +157,7 @@ vi.mock('@/services/agent-conversation.service', () => ({
   retractQueuedAgentConversationBatch: vi.fn(),
   stopAgentConversationBatch: vi.fn(),
   retryFailedAgentConversationMaterials: vi.fn(),
+  retryFailedAgentConversationBatch: vi.fn(),
   removeAgentConversationMaterials: vi.fn(),
   abandonAgentConversationBatch: vi.fn(),
 }))
@@ -1764,6 +1766,72 @@ describe('AgentConversationChat 资料修复 #481', () => {
     expect(abandonAgentConversationBatch).toHaveBeenCalledWith(
       'c-1',
       'batch-fail-materials',
+      expect.any(String),
+    )
+  })
+})
+
+describe('AgentConversationChat 失败批次重试 #482', () => {
+  beforeEach(() => {
+    lastEventSource = null
+    vi.mocked(retryFailedAgentConversationBatch).mockReset()
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationStore.getState().reset()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-1',
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '这次会失败' },
+          createdAt: '2026-08-20T00:00:00.000Z',
+        },
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'error',
+          payload: { batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'failed', batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('shows a 重试 action for a failed Agent batch and retries without a task identity', async () => {
+    const user = userEvent.setup()
+    vi.mocked(retryFailedAgentConversationBatch).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 3,
+    } as never)
+    renderChat()
+
+    expect(screen.getByText('当前权限不足，无法完成这次处理')).toBeInTheDocument()
+    expect(screen.queryByText('本批处理失败，可修改后重试')).not.toBeInTheDocument()
+    const retry = screen.getByRole('button', { name: '重试' })
+    expect(retry).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重试失败资料' })).not.toBeInTheDocument()
+
+    await user.click(retry)
+    expect(retryFailedAgentConversationBatch).toHaveBeenCalledWith(
+      'c-1',
+      'batch-fail',
       expect.any(String),
     )
   })

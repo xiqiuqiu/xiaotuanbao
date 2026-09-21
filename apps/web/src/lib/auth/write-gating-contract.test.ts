@@ -70,6 +70,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   confirmAiCreateTask: { gating: 'departureWrite', endpointKey: 'departure:write' },
   cancelAgentConversationInteraction: { gating: 'public', endpointKey: null },
   retryFailedAgentConversationMaterials: { gating: 'public', endpointKey: null },
+  retryFailedAgentConversationBatch: { gating: 'public', endpointKey: null },
   removeAgentConversationMaterials: { gating: 'public', endpointKey: null },
   abandonAgentConversationBatch: { gating: 'public', endpointKey: null },
   retractQueuedAgentConversationBatch: { gating: 'public', endpointKey: null },

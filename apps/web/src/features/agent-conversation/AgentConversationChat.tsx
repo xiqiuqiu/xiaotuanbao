@@ -28,6 +28,7 @@ import {
   cancelAgentConversationInteraction,
   removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationBatch,
   retryFailedAgentConversationMaterials,
   sendAgentConversationText,
   stopAgentConversationBatch,
@@ -98,6 +99,7 @@ const QueuedMessagesContext = createContext<QueuedMessagesContextValue>({
 type BatchRepairContextValue = {
   pending: boolean
   onRetry: (batchId: string) => void
+  onRetryBatch: (batchId: string) => void
   onRemove: (batchId: string, materialId: string) => void
   onAbandon: (batchId: string) => void
 }
@@ -105,6 +107,7 @@ type BatchRepairContextValue = {
 const BatchRepairContext = createContext<BatchRepairContextValue>({
   pending: false,
   onRetry: () => undefined,
+  onRetryBatch: () => undefined,
   onRemove: () => undefined,
   onAbandon: () => undefined,
 })
@@ -180,7 +183,7 @@ function QueueAwareChatInputView(props: CopilotChatInputProps) {
 const QueueAwareChatInput = Object.assign(QueueAwareChatInputView, CopilotChatInput)
 
 function BatchStatusNotice({ content }: { content: BatchStatusActivityContent }) {
-  const { pending, onRetry, onRemove, onAbandon } = useContext(BatchRepairContext)
+  const { pending, onRetry, onRetryBatch, onRemove, onAbandon } = useContext(BatchRepairContext)
   return (
     <div className={chatStyles.noticeBlock}>
       <p className={chatStyles.notice} role="status">
@@ -227,6 +230,20 @@ function BatchStatusNotice({ content }: { content: BatchStatusActivityContent })
             onClick={() => onAbandon(content.batchId!)}
           >
             放弃本批
+          </Button>
+        </Space>
+      ) : null}
+      {content.showBatchRetryAction && content.batchId ? (
+        <Space size={8} className={chatStyles.failedActions}>
+          <Button
+            type="primary"
+            size="small"
+            autoInsertSpace={false}
+            aria-label="重试"
+            loading={pending}
+            onClick={() => onRetryBatch(content.batchId!)}
+          >
+            重试
           </Button>
         </Space>
       ) : null}
@@ -996,7 +1013,14 @@ function useAgentConversationChatController(
 
   const runBatchRepairCommand = useCallback(
     async (
-      command: (conversationId: string) => ReturnType<typeof retryFailedAgentConversationMaterials>,
+      command: (
+        conversationId: string,
+      ) => ReturnType<
+        | typeof retryFailedAgentConversationMaterials
+        | typeof retryFailedAgentConversationBatch
+        | typeof removeAgentConversationMaterials
+        | typeof abandonAgentConversationBatch
+      >,
     ) => {
       const currentConversationId = conversationIdRef.current
       if (!currentConversationId || batchCommandPendingRef.current) {
@@ -1030,6 +1054,15 @@ function useAgentConversationChatController(
           undefined,
           crypto.randomUUID(),
         ),
+      )
+    },
+    [runBatchRepairCommand],
+  )
+
+  const retryFailedBatch = useCallback(
+    (batchId: string) => {
+      void runBatchRepairCommand((currentConversationId) =>
+        retryFailedAgentConversationBatch(currentConversationId, batchId, crypto.randomUUID()),
       )
     },
     [runBatchRepairCommand],
@@ -1193,6 +1226,7 @@ function useAgentConversationChatController(
     focusedReviewPackageId,
     batchCommandPending,
     retryFailedMaterials,
+    retryFailedBatch,
     removeFailedMaterial,
     abandonFailedBatch,
   }
@@ -1324,6 +1358,7 @@ export function AgentConversationChat({
     focusedReviewPackageId,
     batchCommandPending,
     retryFailedMaterials,
+    retryFailedBatch,
     removeFailedMaterial,
     abandonFailedBatch,
   } = useAgentConversationChatController(onReviewRequested, reviewPackageId, onReviewMessageSent, onReviewMessageRestored)
@@ -1345,10 +1380,17 @@ export function AgentConversationChat({
     () => ({
       pending: batchCommandPending,
       onRetry: retryFailedMaterials,
+      onRetryBatch: retryFailedBatch,
       onRemove: removeFailedMaterial,
       onAbandon: abandonFailedBatch,
     }),
-    [abandonFailedBatch, batchCommandPending, removeFailedMaterial, retryFailedMaterials],
+    [
+      abandonFailedBatch,
+      batchCommandPending,
+      removeFailedMaterial,
+      retryFailedBatch,
+      retryFailedMaterials,
+    ],
   )
 
   return (
