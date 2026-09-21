@@ -627,6 +627,114 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     expect(batchId).toBe(job.inputBatchId)
   })
 
+  it('keeps two same-content resources as independent items through confirm', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-同内容`)
+    const supplier = await createSupplier('同内容供应商', [ResourceKind.hotel])
+    const version = await objectVersion(departureId)
+    const text = `${testPrefix} 两家同价酒店`
+    const same = segmentResourceCandidates(segmentId, supplier.id, '同价酒店', 50_000, text, 1)
+    agent.setOutcome(
+      reviewOutcome(version, [
+        { confirmationUnit: 'segment_resource', candidates: same },
+        { confirmationUnit: 'segment_resource', candidates: same },
+      ]),
+    )
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-same`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 2)
+
+    const listed = await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    const items = listed.body.data.items as Array<{
+      id: string
+      version: number
+      itemIdentity?: string
+      proposalHash?: string
+    }>
+    expect(items).toHaveLength(2)
+    expect(new Set(items.map((item) => item.id)).size).toBe(2)
+    expect(new Set(items.map((item) => item.itemIdentity)).size).toBe(2)
+    expect(items[0]?.proposalHash).toBeTruthy()
+    expect(items[0]?.proposalHash).toBe(items[1]?.proposalHash)
+
+    const key = `${testPrefix}-same-confirm`
+    await accept(
+      coordinatorToken,
+      key,
+      items.map((item) => ({ packageId: item.id, expectedPackageVersion: item.version })),
+    ).expect(200)
+    await processJobs(conversationId)
+    await waitFor(async () => {
+      const live = await getConfirmation(coordinatorToken, key).expect(200)
+      expect(live.body.data.items.every((item: { status: string }) => item.status === 'succeeded')).toBe(true)
+    })
+    expect(await prisma.segmentResource.count({ where: { segmentId } })).toBe(2)
+    const written = await prisma.segmentResource.findMany({ where: { segmentId } })
+    expect(written.every((row) => row.title === '同价酒店' && row.amountCents === 50_000)).toBe(true)
+    expect(new Set(written.map((row) => row.id)).size).toBe(2)
+  })
+
+  it('rejects a concurrent stale revision from a second device without merging titles', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-双设备`)
+    const supplier = await createSupplier('双设备供应商', [ResourceKind.hotel])
+    const version = await objectVersion(departureId)
+    const text = `${testPrefix} 双设备修订酒店`
+    agent.setOutcome(
+      reviewOutcome(version, [
+        {
+          confirmationUnit: 'segment_resource',
+          candidates: segmentResourceCandidates(segmentId, supplier.id, '原酒店名', 80_000, text, 1),
+        },
+      ]),
+    )
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-devices`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 1)
+    const listed = await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    const pkg = listed.body.data.items[0] as { id: string; version: number }
+
+    const [first, second] = await Promise.all([
+      authRequest(app, coordinatorToken)
+        .patch(`/api/agent/review-packages/${pkg.id}`)
+        .send({ expectedPackageVersion: pkg.version, corrections: { title: '设备甲标题' } }),
+      authRequest(app, coordinatorToken)
+        .patch(`/api/agent/review-packages/${pkg.id}`)
+        .send({ expectedPackageVersion: pkg.version, corrections: { title: '设备乙标题' } }),
+    ])
+    const statuses = [first.status, second.status].sort()
+    expect(statuses).toEqual([200, 409])
+    const conflict = first.status === 409 ? first : second
+    const winner = first.status === 200 ? first : second
+    expect(conflict.body.message).toContain('审核包版本已变化')
+    const winnerTitle = (winner.body.data.pendingReviews as Array<{
+      id: string
+      version: number
+      candidates: Array<{ fieldKey: string; userCorrectedValue?: unknown; proposedValue?: unknown }>
+    }>)
+      .find((item) => item.id === pkg.id)
+      ?.candidates.find((candidate) => candidate.fieldKey === 'title')?.userCorrectedValue
+    expect(['设备甲标题', '设备乙标题']).toContain(winnerTitle)
+    const loserTitle = winnerTitle === '设备甲标题' ? '设备乙标题' : '设备甲标题'
+
+    const refreshed = await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    const live = (refreshed.body.data.items as Array<{
+      id: string
+      version: number
+      candidates: Array<{ fieldKey: string; userCorrectedValue?: unknown; proposedValue?: unknown }>
+    }>).find((item) => item.id === pkg.id)!
+    expect(live.version).toBe(pkg.version + 1)
+    const liveTitle = live.candidates.find((candidate) => candidate.fieldKey === 'title')
+    expect(liveTitle?.userCorrectedValue).toBe(winnerTitle)
+    expect(liveTitle?.userCorrectedValue).not.toBe(loserTitle)
+    expect(liveTitle?.proposedValue).toBe('原酒店名')
+
+    const revisions = await authRequest(app, coordinatorToken)
+      .get(`/api/agent/review-packages/${pkg.id}/revisions`)
+      .expect(200)
+    expect(revisions.body.data).toHaveLength(1)
+    expect(revisions.body.data[0].afterSnapshot).toEqual(expect.objectContaining({ title: winnerTitle }))
+    expect(JSON.stringify(revisions.body.data[0])).not.toContain(loserTitle)
+  })
+
   it('writes one resource and leaves the failed sibling pending after refresh, without duplicating the success', async () => {
     const { departureId, segmentId } = await createDeparture(`${testPrefix}-部分`)
     const okSupplier = await createSupplier('成功供应商', [ResourceKind.hotel])
