@@ -167,6 +167,87 @@ describe('Agent execution goal and completion basis', () => {
     })
   })
 
+  it('keeps an answered outcome when an earlier tool failure was retried successfully', () => {
+    const result = validateHeadlessOutcomeAgainstGoal({
+      executionGoal: 'answer',
+      outcome: {
+        kind: 'answered',
+        message: '已读取资料。',
+        completionBasis: { kind: 'final_answer' },
+        diagnostic: {
+          usageSource: 'missing',
+          toolSteps: [
+            {
+              stepId: 'tool-1',
+              toolCallId: 'call-1',
+              toolName: 'getMaterialParseResult',
+              status: 'failed',
+            },
+            {
+              stepId: 'tool-2',
+              toolCallId: 'call-2',
+              toolName: 'getMaterialParseResult',
+              status: 'succeeded',
+            },
+          ],
+          modelSteps: [],
+        },
+      },
+    })
+    expect(result).toMatchObject({
+      kind: 'answered',
+      message: '已读取资料。',
+      completionBasis: { kind: 'final_answer' },
+    })
+  })
+
+  it('keeps an awaiting review when the same tool failed and then succeeded without call ids', () => {
+    expect(
+      validateHeadlessOutcomeAgainstGoal({
+        executionGoal: 'propose_change',
+        outcome: {
+          kind: 'awaiting_review',
+          reviewPackage,
+          completionBasis: { kind: 'accepted_review_package' },
+          diagnostic: {
+            usageSource: 'missing',
+            toolSteps: [
+              { stepId: 'tool-1', toolName: 'getTaskContext', status: 'schema_rejected' },
+              { stepId: 'tool-2', toolName: 'getTaskContext', status: 'succeeded' },
+            ],
+            modelSteps: [],
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: 'awaiting_review',
+      completionBasis: { kind: 'accepted_review_package' },
+    })
+  })
+
+  it('still rejects a tool whose own last attempt failed even if another tool succeeded', () => {
+    const result = validateHeadlessOutcomeAgainstGoal({
+      executionGoal: 'answer',
+      outcome: {
+        kind: 'answered',
+        message: '已读取资料。',
+        completionBasis: { kind: 'final_answer' },
+        diagnostic: {
+          usageSource: 'missing',
+          toolSteps: [
+            { stepId: 'tool-1', toolCallId: 'parse-1', toolName: 'getMaterialParseResult', status: 'failed' },
+            { stepId: 'tool-2', toolCallId: 'context-1', toolName: 'getTaskContext', status: 'succeeded' },
+          ],
+          modelSteps: [],
+        },
+      },
+    })
+    expect(result).toMatchObject({
+      kind: 'failed',
+      error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+    })
+  })
+
   it('rejects propose_change that only returned display text', () => {
     const result = validateHeadlessOutcomeAgainstGoal({
       executionGoal: 'propose_change',

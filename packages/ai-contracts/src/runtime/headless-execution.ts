@@ -49,6 +49,7 @@ export const usageCountsSchema = z
 export const toolStepDiagnosticSchema = z
   .object({
     stepId: z.string().min(1),
+    toolCallId: z.string().min(1).optional(),
     toolName: z.string().min(1),
     capabilityKey: z.string().min(1).optional(),
     capabilityVersion: z.number().int().positive().optional(),
@@ -406,12 +407,35 @@ function incompleteOutcome(diagnostic?: HeadlessDiagnostic): HeadlessFailedResul
   }
 }
 
+function toolAttemptKey(step: ToolStepDiagnostic, index: number): string {
+  if (step.toolCallId) {
+    return `call:${step.toolCallId}`
+  }
+  return `tool:${step.toolName}:${index}`
+}
+
 function hasUnresolvedStructuredWork(outcome: HeadlessExecutionResult): boolean {
   if (outcome.kind === 'failed') {
     return false
   }
   const toolSteps = outcome.diagnostic?.toolSteps ?? []
-  return toolSteps.some((step) => UNRESOLVED_TOOL_STATUSES.has(step.status))
+  const latestByAttempt = new Map<string, ToolStepDiagnostic>()
+  const latestByToolName = new Map<string, ToolStepDiagnostic>()
+  toolSteps.forEach((step, index) => {
+    latestByAttempt.set(toolAttemptKey(step, index), step)
+    latestByToolName.set(step.toolName, step)
+  })
+  for (const step of latestByAttempt.values()) {
+    if (!UNRESOLVED_TOOL_STATUSES.has(step.status)) {
+      continue
+    }
+    const laterAttempt = latestByToolName.get(step.toolName)
+    if (laterAttempt && laterAttempt !== step && !UNRESOLVED_TOOL_STATUSES.has(laterAttempt.status)) {
+      continue
+    }
+    return true
+  }
+  return false
 }
 
 function requiredBasisForGoal(goal: AgentExecutionGoal): CompletionBasisKind {

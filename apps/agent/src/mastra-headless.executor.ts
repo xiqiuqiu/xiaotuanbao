@@ -419,6 +419,7 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
     return [
       {
         stepId: `tool-${index + 1}`,
+        ...(callPayload.toolCallId ? { toolCallId: callPayload.toolCallId } : {}),
         toolName,
         ...(capability
           ? { capabilityKey: capability.key, capabilityVersion: capability.version }

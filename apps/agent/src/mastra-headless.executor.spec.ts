@@ -91,6 +91,7 @@ describe('createMastraHeadlessExecutor', () => {
     })
     const { result } = await collectHeadlessRun(executor(IDENTITY))
     expect(result.diagnostic?.toolSteps.map((step) => step.status)).toEqual(['failed', 'succeeded'])
+    expect(result.kind).toBe('answered')
   })
 
   it('preserves source-order candidates from accepted tools through headless execution', async () => {
