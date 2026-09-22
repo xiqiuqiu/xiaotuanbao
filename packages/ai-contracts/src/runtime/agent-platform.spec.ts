@@ -51,6 +51,7 @@ const requestContext = requestContextSchema.parse({
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  executionGoal: 'propose_change',
   agentDefinition: { key: 'departure.create', version: 1 },
   objectScopes: [{ organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' }],
 })

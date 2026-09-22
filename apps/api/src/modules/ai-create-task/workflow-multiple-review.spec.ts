@@ -34,9 +34,19 @@ describe('collaboration review projection', () => {
     })
     const first = { objectVersion: 1, confirmationUnit: SEGMENT_RESOURCE_CONFIRMATION_UNIT, candidates: [{ fieldKey: 'title', proposedValue: 'A' }] }
     const second = { ...first, candidates: [{ fieldKey: 'title', proposedValue: 'B' }] }
-    await processor.persistOutcome({ id: 'job', taskId: 'task', conversationId: 'chat', inputBatchId: 'batch' }, {}, {}, 'attempt', {
-      kind: 'awaiting_review', reviewPackage: first, reviewPackages: [first, second],
-    })
+    await processor.persistOutcome(
+      { id: 'job', taskId: 'task', conversationId: 'chat', inputBatchId: 'batch' },
+      { kind: 'execution_definition', source: 'task', agentDefinition: { key: 'departure.create', version: 1 }, taskId: 'task' },
+      {},
+      'attempt',
+      {
+        kind: 'awaiting_review',
+        completionBasis: { kind: 'accepted_review_package' },
+        reviewPackage: first,
+        reviewPackages: [first, second],
+      },
+      'propose_change',
+    )
     expect(projectReviewPackageViaGateway.mock.calls.map((call) => call[3])).toEqual([first, second])
     expect(appendEvent).toHaveBeenCalledWith(tx, expect.objectContaining({
       kind: 'agent_message', payload: expect.objectContaining({ reviewPackageIds: ['package-a', 'package-b'] }),

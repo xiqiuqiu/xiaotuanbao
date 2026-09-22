@@ -66,7 +66,7 @@ function scriptedDeltas(
     text,
   }))
   const messages = (
-    options?.messageDeltas ?? (scripted.kind === 'completed' ? [scripted.message] : [])
+    options?.messageDeltas ?? (scripted.kind === 'answered' ? [scripted.message] : [])
   ).map((text) => ({ type: 'message.delta' as const, text }))
   return [...reasoning, ...messages]
 }
@@ -264,6 +264,7 @@ function boundIdentitiesFromDelegation(
     inputBatchId: stringClaim(payload.inputBatchId),
     attemptId: stringClaim(payload.attemptId),
     contextManifestId: stringClaim(payload.contextManifestId),
+    executionGoal: payload.executionGoal,
     agentDefinition: payload.agentDefinition,
     grantedCapabilities: payload.grantedCapabilities,
     entitlementStatus: payload.entitlementStatus,

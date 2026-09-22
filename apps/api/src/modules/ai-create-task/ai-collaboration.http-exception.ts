@@ -15,6 +15,7 @@ const STATUS_BY_CODE: Record<AiCollaborationErrorCode, HttpStatus> = {
   VERSION_CONFLICT: HttpStatus.CONFLICT,
   REVIEW_PENDING: HttpStatus.CONFLICT,
   CONTEXT_CAPACITY_EXCEEDED: HttpStatus.UNPROCESSABLE_ENTITY,
+  AGENT_OUTCOME_INCOMPLETE: HttpStatus.UNPROCESSABLE_ENTITY,
 }
 
 export class AiCollaborationHttpException extends HttpException {

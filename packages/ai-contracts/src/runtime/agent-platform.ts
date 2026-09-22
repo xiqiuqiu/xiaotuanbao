@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { agentExecutionGoalSchema } from './execution-goal'
 
 const stableDefinitionKeySchema = z
   .string()
@@ -27,6 +28,7 @@ export const requestContextSchema = z
     inputBatchId: z.string().min(1),
     attemptId: z.string().min(1),
     contextManifestId: z.string().min(1),
+    executionGoal: agentExecutionGoalSchema,
     agentDefinition: versionedDefinitionRefSchema,
     grantedCapabilities: z.array(versionedDefinitionRefSchema).default([]),
     entitlementStatus: z.enum(['available', 'unavailable']).default('unavailable'),

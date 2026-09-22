@@ -14,6 +14,7 @@ const requestContext = requestContextSchema.parse({
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  executionGoal: 'propose_change',
   agentDefinition: { key: 'departure.collaboration', version: 1 },
   objectScopes: [
     { organizationId: 'org-1', kind: 'agent_task', id: 'task-1' },

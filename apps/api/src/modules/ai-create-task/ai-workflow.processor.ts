@@ -25,6 +25,8 @@ import {
   type AiCreateDraftSnapshot,
   type HeadlessRegisteredIntentResult,
   type RequestContext,
+  type AgentExecutionGoal,
+  validateHeadlessOutcomeAgainstGoal,
   type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
   type SubmitReviewPackageModelInput,
@@ -105,6 +107,7 @@ import {
   type AgentExecutionRoutingInput,
   type FrozenAgentAssociation,
 } from './agent-execution-router'
+import { executionGoalForRoute } from './agent-execution-goal'
 import { lockAiCreateTask, lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
@@ -614,6 +617,7 @@ export class AiWorkflowProcessor {
             routing.input,
             prepared.attemptId,
             outcome,
+            prepared.request.executionGoal,
           )
           return outcome
         }, abort)
@@ -938,6 +942,7 @@ export class AiWorkflowProcessor {
       contextManifestId: string
       userText: string
       userTextSha256: string
+      executionGoal: AgentExecutionGoal
     }
     attemptId: string
     delegationToken: string
@@ -1205,6 +1210,10 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
+        executionGoal: executionGoalForRoute({
+          route,
+          executionGoal: confirmedReviewContinuation ? 'answer' : undefined,
+        }),
         agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
@@ -1266,6 +1275,7 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
       entitlementStatus: prepared.requestContext.entitlementStatus,
@@ -1286,6 +1296,7 @@ export class AiWorkflowProcessor {
         contextManifestId: prepared.contextManifestId,
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
+        executionGoal: prepared.requestContext.executionGoal,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1307,6 +1318,7 @@ export class AiWorkflowProcessor {
       contextManifestId: string
       userText: string
       userTextSha256: string
+      executionGoal: AgentExecutionGoal
     }
     attemptId: string
     delegationToken: string
@@ -1566,6 +1578,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
+        executionGoal: executionGoalForRoute({ route }),
         agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
@@ -1623,6 +1636,7 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
       entitlementStatus: prepared.requestContext.entitlementStatus,
@@ -1643,6 +1657,7 @@ export class AiWorkflowProcessor {
         contextManifestId: prepared.contextManifestId,
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
+        executionGoal: prepared.requestContext.executionGoal,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1661,6 +1676,7 @@ export class AiWorkflowProcessor {
       contextManifestId: string
       userText: string
       userTextSha256: string
+      executionGoal: AgentExecutionGoal
     }
     attemptId: string
     delegationToken: string
@@ -1846,6 +1862,13 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
+        executionGoal: executionGoalForRoute({
+          route: {
+            kind: 'execution_definition',
+            source: 'default',
+            agentDefinition: CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+          },
+        }),
         agentDefinition: CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
         entitlementStatus: 'unavailable',
         objectScopes: [
@@ -1901,6 +1924,7 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
       entitlementStatus: prepared.requestContext.entitlementStatus,
@@ -1919,6 +1943,7 @@ export class AiWorkflowProcessor {
         contextManifestId: prepared.contextManifestId,
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
+        executionGoal: prepared.requestContext.executionGoal,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1932,7 +1957,12 @@ export class AiWorkflowProcessor {
     routingInput: AgentExecutionRoutingInput,
     attemptId: string,
     result: HeadlessExecutionResult,
+    executionGoal?: AgentExecutionGoal,
   ): Promise<void> {
+    result = validateHeadlessOutcomeAgainstGoal({
+      executionGoal: executionGoalForRoute({ route, executionGoal }),
+      outcome: result,
+    })
     if (result.kind === 'failed') {
       const errorCode = result.error.code
       if (isImmediateWorkflowFailure(errorCode) || result.error.retryable === false) {
@@ -1960,8 +1990,9 @@ export class AiWorkflowProcessor {
         return
       }
       result = {
-        kind: 'completed',
+        kind: 'answered',
         message: result.message,
+        completionBasis: { kind: 'final_answer' },
         ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
       }
     }
@@ -2008,7 +2039,7 @@ export class AiWorkflowProcessor {
       }
       const batchStatus = batchStatusForResult(result)
       const message =
-        result.kind === 'completed'
+        result.kind === 'answered'
           ? result.message
           : result.kind === 'awaiting_user_input'
             ? result.interaction.prompt
@@ -2940,8 +2971,12 @@ function isoDateOnly(value: Date | string | null | undefined): string | null {
 
 function collaborationErrorCodeForWorkflowFailure(
   errorCode: string,
-): 'PERMISSION_DENIED' | 'CONTEXT_CAPACITY_EXCEEDED' | 'AGENT_UNAVAILABLE' {
-  if (errorCode === 'PERMISSION_DENIED' || errorCode === 'CONTEXT_CAPACITY_EXCEEDED') {
+): 'PERMISSION_DENIED' | 'CONTEXT_CAPACITY_EXCEEDED' | 'AGENT_OUTCOME_INCOMPLETE' | 'AGENT_UNAVAILABLE' {
+  if (
+    errorCode === 'PERMISSION_DENIED' ||
+    errorCode === 'CONTEXT_CAPACITY_EXCEEDED' ||
+    errorCode === 'AGENT_OUTCOME_INCOMPLETE'
+  ) {
     return errorCode
   }
   return 'AGENT_UNAVAILABLE'

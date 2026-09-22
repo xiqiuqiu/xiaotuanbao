@@ -26,6 +26,7 @@ export function selectPublicReply(input: {
   streamedPublicText: string
   streamedReasoning?: string | readonly string[]
   fullOutputText: string
+  fallback?: string
 }): string {
   const streamed = visiblePublicText(input.streamedPublicText)
   if (streamed.length > 0) {
@@ -42,7 +43,7 @@ export function selectPublicReply(input: {
     next = next.split(reason).join('')
   }
   next = next.trim()
-  return next || PUBLIC_REPLY_FALLBACK
+  return next || (input.fallback ?? PUBLIC_REPLY_FALLBACK)
 }
 
 function suffixTagHoldback(text: string, tags: readonly string[]): number {

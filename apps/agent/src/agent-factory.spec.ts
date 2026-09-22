@@ -45,6 +45,7 @@ const context = requestContextSchema.parse({
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  executionGoal: 'propose_change',
   agentDefinition: { key: 'departure.create', version: 1 },
   grantedCapabilities: [
     { key: 'departure.task-context.read', version: 2 },

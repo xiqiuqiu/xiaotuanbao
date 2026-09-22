@@ -44,7 +44,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -68,7 +68,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
   })
 
   afterEach(async () => {
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     agent.release()
     ocr.release()
     await prisma.user.update({
@@ -185,6 +185,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
   function reviewOutcome(objectVersion: number, excerpt: string) {
     return {
       kind: 'awaiting_review' as const,
+      completionBasis: { kind: 'accepted_review_package' as const },
       reviewPackage: {
         objectVersion,
         confirmationUnit: 'basic_info_draft' as const,
@@ -226,7 +227,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
       ),
     ).toBe(true)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     const retried = await retryBatch(taskId, conversationId, batchId, `e2e-retry-${taskId}`).expect(200)
     expect(retried.body.data.batch).toMatchObject({ id: batchId, status: 'ready_for_agent' })
     expect(retried.body.data.events.map((event: { kind: string }) => event.kind)).toEqual([
@@ -246,7 +247,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     expect(recovered.events.some((event) => event.payload.text === COMPLETED_MESSAGE)).toBe(true)
     expect(
       recovered.events.some(
-        (event) => event.kind === 'batch_status' && event.payload.status === 'completed',
+        (event) => event.kind === 'batch_status' && event.payload.status === 'awaiting_user_input',
       ),
     ).toBe(true)
   })

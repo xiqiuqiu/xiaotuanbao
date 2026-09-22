@@ -81,6 +81,7 @@ const REQUEST = {
   ...IDENTITY,
   userText: USER_TEXT,
   userTextSha256: createHash('sha256').update(USER_TEXT, 'utf8').digest('hex'),
+  executionGoal: 'answer' as const,
 }
 
 const REVIEW_PACKAGE = {
@@ -110,6 +111,7 @@ function delegationToken(claims: Record<string, unknown> = {}): string {
       inputBatchId: IDENTITY.inputBatchId,
       attemptId: IDENTITY.attemptId,
       contextManifestId: IDENTITY.contextManifestId,
+      executionGoal: 'answer',
       agentDefinition: { key: 'departure.create', version: 1 },
       grantedCapabilities: [
         { key: 'departure.task-context.read', version: 2 },
@@ -146,8 +148,9 @@ async function listen() {
     serviceSecret: 'secret',
     allowedOrigins: ['http://localhost:5173'],
     headlessExecutor: createDeterministicAgentAdapter({
-      kind: 'completed',
+      kind: 'answered',
       message: '已根据当前资料整理出团基础信息。',
+      completionBasis: { kind: 'final_answer' },
     }),
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -268,8 +271,9 @@ describe('headless Agent runtime contract', () => {
         text: '已根据当前资料整理出团基础信息。',
       })
       expect(await readHeadlessOutcome(response)).toEqual({
-        kind: 'completed',
+        kind: 'answered',
         message: '已根据当前资料整理出团基础信息。',
+        completionBasis: { kind: 'final_answer' },
       })
       expect(mockFetchTaskContext).toHaveBeenCalledWith(
         {
@@ -302,7 +306,7 @@ describe('headless Agent runtime contract', () => {
       serviceSecret: 'secret',
       allowedOrigins: ['http://localhost:5173'],
       headlessExecutor: createDeterministicAgentAdapter(
-        { kind: 'completed', message: '已记下路线。' },
+        { kind: 'answered', message: '已记下路线。', completionBasis: { kind: 'final_answer' } },
         { reasoningDeltas: ['先核对出团日期'], messageDeltas: ['已记下路线。'] },
       ),
     })
@@ -426,7 +430,7 @@ describe('headless Agent runtime contract', () => {
       allowedOrigins: ['http://localhost:5173'],
       headlessExecutor: async () => {
         seen = getAssistRequestContext()
-        return { kind: 'completed', message: '已根据当前资料整理出团基础信息。' }
+        return { kind: 'answered', message: '已根据当前资料整理出团基础信息。', completionBasis: { kind: 'final_answer' } }
       },
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -501,7 +505,7 @@ describe('headless Agent runtime contract', () => {
         })}`,
       })
       expect(response.status).toBe(200)
-      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'completed' })
+      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'answered' })
       expect(mockFetchTaskContext).not.toHaveBeenCalled()
     } finally {
       await runtime.close()
@@ -528,11 +532,12 @@ describe('headless Agent runtime contract', () => {
           contextManifestId: IDENTITY.contextManifestId,
           userText: USER_TEXT,
           userTextSha256: REQUEST.userTextSha256,
+          executionGoal: 'answer',
         },
       })
       expect(response.status).toBe(200)
       expect(await readHeadlessOutcome(response)).toMatchObject({
-        kind: 'completed',
+        kind: 'answered',
       })
       expect(mockFetchTaskContext).not.toHaveBeenCalled()
     } finally {
@@ -582,11 +587,13 @@ describe('headless Agent runtime contract', () => {
         outcome: {
           kind: 'awaiting_user_input' as const,
           interaction: { type: 'free_text' as const, prompt: '出团日期是哪一天？' },
+          completionBasis: { kind: 'persistent_clarification' as const },
         },
       },
       {
         outcome: {
           kind: 'awaiting_review' as const,
+          completionBasis: { kind: 'accepted_review_package' as const },
           reviewPackage: REVIEW_PACKAGE,
         },
       },
@@ -665,7 +672,7 @@ describe('headless Agent runtime contract', () => {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
       expect(await readHeadlessOutcome(response)).toMatchObject({
-        kind: 'completed',
+        kind: 'answered',
         message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
         diagnostic: {
           processorVersion: 'mastra-token-limiter-contiguous/v1',
@@ -709,7 +716,7 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'completed' })
+      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'answered' })
       expect(mockFetchParseResult).not.toHaveBeenCalled()
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
     } finally {

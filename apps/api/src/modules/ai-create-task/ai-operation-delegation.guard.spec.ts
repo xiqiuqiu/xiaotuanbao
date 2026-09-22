@@ -32,6 +32,7 @@ describe('AiOperationDelegationGuard', () => {
     inputBatchId: 'batch-1',
     attemptId: 'attempt-1',
     contextManifestId: 'manifest-1',
+    executionGoal: 'propose_change' as 'answer' | 'propose_change' | 'clarify' | 'governed_action',
     agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
     grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
     entitlementStatus: 'unavailable' as const,
@@ -49,6 +50,7 @@ describe('AiOperationDelegationGuard', () => {
       inputBatchId?: string
       attemptId?: string
       contextManifestId?: string
+      executionGoal?: typeof payload.executionGoal
       agentDefinition?: { key: string; version: number }
       grantedCapabilities?: Array<{ key: string; version: number }>
       entitlementStatus?: typeof payload.entitlementStatus
@@ -197,6 +199,7 @@ describe('AiOperationDelegationGuard', () => {
       payload: {
         taskId: undefined,
         runId: undefined,
+        executionGoal: 'answer',
         agentDefinition: { key: 'conversation.general', version: 1 },
         grantedCapabilities: [],
         objectScopes: [{ organizationId: 'org-1', kind: 'agent_conversation', id: 'conv-1' }],

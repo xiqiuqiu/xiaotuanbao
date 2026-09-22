@@ -9,8 +9,43 @@ describe('new departure from an existing collaboration', () => {
     })
     await processor.persistOutcome({}, { kind: 'execution_definition', taskId: 'old' }, {
       associations: { taskRefs: [{ taskId: 'old', role: 'primary', taskType: 'departure_collaboration' }] },
-    }, 'attempt', { kind: 'registered_intent', intent: { key: 'task.departure-creation.requested', goal: '创建新团' } })
+    }, 'attempt', { kind: 'registered_intent', intent: { key: 'task.departure-creation.requested', goal: '创建新团' }, message: '正在准备建团任务。', completionBasis: { kind: 'governed_action_result' } }, 'answer')
     expect(persistTaskCreationProposal).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'attempt', expect.anything(), expect.objectContaining({ kind: 'task_creation_proposal', taskType: 'departure_creation' }))
+  })
+
+  it('rejects a registered intent before persistence when it does not satisfy the execution goal', async () => {
+    const persistTaskCreationProposal = jest.fn()
+    const persistFailure = jest.fn()
+    const processor = Object.assign(Object.create(AiWorkflowProcessor.prototype), {
+      executionRouter: new AgentExecutionRouter(),
+      persistTaskCreationProposal,
+      persistFailure,
+      workflowLog: jest.fn(),
+    })
+    await processor.persistOutcome(
+      {},
+      { kind: 'execution_definition', taskId: 'old' },
+      {
+        associations: {
+          taskRefs: [{ taskId: 'old', role: 'primary', taskType: 'departure_collaboration' }],
+        },
+      },
+      'attempt',
+      {
+        kind: 'registered_intent',
+        intent: { key: 'task.departure-creation.requested', goal: '创建新团' },
+        message: '正在准备建团任务。',
+        completionBasis: { kind: 'governed_action_result' },
+      },
+      'propose_change',
+    )
+    expect(persistTaskCreationProposal).not.toHaveBeenCalled()
+    expect(persistFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      'AGENT_OUTCOME_INCOMPLETE',
+      expect.objectContaining({ kind: 'failed' }),
+      'attempt',
+    )
   })
 
   it('continues the created task even when the input batch still links to its old primary task', async () => {

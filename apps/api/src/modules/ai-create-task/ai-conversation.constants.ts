@@ -56,6 +56,7 @@ export const WORKFLOW_IMMEDIATE_FAILURE_CODES = new Set([
   'INVALID_FORMAT',
   'CONTEXT_CAPACITY_EXCEEDED',
   'CONTEXT_PROFILE_MISSING',
+  'AGENT_OUTCOME_INCOMPLETE',
 ])
 
 export function workflowBackoffMs(attemptCount: number): number {

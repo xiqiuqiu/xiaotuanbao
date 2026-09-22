@@ -1568,6 +1568,74 @@ describe('projectConversationFrame retry and stale generation #418', () => {
     expect(isCopilotChatRunning(runningEvents, null, null, live)).toBe(true)
   })
 
+  it('does not treat live Agent text or a closed stream as success without a persisted terminal status #474', () => {
+    const live = {
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 4,
+      reasoningText: '先核对出团日期',
+      text: '我将继续处理团名修改。',
+    }
+    const running = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: live,
+    })
+    expect(running.some((message) => message.content === '我将继续处理团名修改。')).toBe(true)
+    expect(isCopilotChatRunning(runningEvents, null, null, live)).toBe(true)
+    expect(
+      running.some(
+        (message) =>
+          message.activityType === 'agent-batch-status' &&
+          (message.content as { label?: string }).label === '已完成',
+      ),
+    ).toBe(false)
+
+    const failedEvents = [
+      ...runningEvents,
+      {
+        sequence: 3,
+        kind: 'error',
+        payload: { batchId: 'batch-1', errorCode: 'AGENT_OUTCOME_INCOMPLETE', attemptId: 'attempt-9' },
+        createdAt: '2026-08-26T00:00:02.000Z',
+      },
+      {
+        sequence: 4,
+        kind: 'batch_status',
+        payload: {
+          status: 'failed',
+          batchId: 'batch-1',
+          attemptId: 'attempt-9',
+          errorCode: 'AGENT_OUTCOME_INCOMPLETE',
+        },
+        createdAt: '2026-08-26T00:00:02.000Z',
+      },
+    ]
+    const failed = projectConversationFrame({
+      events: failedEvents,
+      pendingText: null,
+      liveAssistant: live,
+    })
+    expect(failed.some((message) => message.content === '我将继续处理团名修改。')).toBe(false)
+    expect(failed.some((message) => message.role === 'assistant')).toBe(false)
+    expect(isCopilotChatRunning(failedEvents, null, null, live)).toBe(false)
+    expect(batchStatusLabel('failed', null, { errorCode: 'AGENT_OUTCOME_INCOMPLETE' })).toBe(
+      '这次处理没有形成可确认的结果，请重试或换一种说法',
+    )
+    const statuses = failed
+      .filter((message) => message.activityType === 'agent-batch-status')
+      .map((message) => message.content as { label?: string; showBatchRetryAction?: boolean })
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: '这次处理没有形成可确认的结果，请重试或换一种说法',
+          showBatchRetryAction: true,
+        }),
+      ]),
+    )
+  })
+
   it('does not keep live text after a failed batch even when the failure event omits attemptId', () => {
     const messages = projectConversationFrame({
       events: [

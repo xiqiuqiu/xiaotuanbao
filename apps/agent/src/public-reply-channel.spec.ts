@@ -14,6 +14,7 @@ const IDENTITY = {
   contextManifestId: 'manifest-1',
   userText: '帮我建一个喀纳斯3日团',
   userTextSha256: 'a'.repeat(64),
+  executionGoal: 'answer' as const,
 }
 
 /** Self-talk the hide-reasoning UI never sees if it stays on the reasoning channel. */
@@ -37,7 +38,8 @@ function publicChannels(
     liveReasoning: frames
       .filter((frame) => frame.type === 'reasoning.delta')
       .map((frame) => frame.text),
-    persisted: result.kind === 'completed' ? result.message : '',
+    persisted:
+      result.kind === 'answered' || result.kind === 'registered_intent' ? result.message : '',
   }
 }
 
@@ -183,7 +185,7 @@ describe('public reply channel vs hidden reasoning', () => {
     expect(channels.livePublic).not.toContain(SOLILOQUY)
   })
 
-  it('does not fall back to aggregated full output when the final public step is empty', async () => {
+  it('fails instead of completing from a display fallback when the final public step is empty', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => IDENTITY.userText,
       stream: async () => ({
@@ -212,10 +214,10 @@ describe('public reply channel vs hidden reasoning', () => {
     const channels = publicChannels(frames, result)
     expect(channels.livePublic).not.toContain(SOLILOQUY)
     expect(channels.persisted).not.toContain(SOLILOQUY)
-    expect(result.kind).toBe('completed')
-    if (result.kind === 'completed') {
-      expect(result.message).toBe('已处理当前说明。')
-    }
+    expect(result).toMatchObject({
+      kind: 'failed',
+      error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+    })
   })
 
   it('does not leak buffered tool-step soliloquy when the run ends as awaiting_review', async () => {
@@ -257,7 +259,9 @@ describe('public reply channel vs hidden reasoning', () => {
       }),
     })
 
-    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    const { frames, result } = await collectHeadlessRun(
+      executor({ ...IDENTITY, executionGoal: 'propose_change' }),
+    )
     expect(result.kind).toBe('awaiting_review')
     expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([])
     expect(JSON.stringify(frames)).not.toContain(SOLILOQUY)

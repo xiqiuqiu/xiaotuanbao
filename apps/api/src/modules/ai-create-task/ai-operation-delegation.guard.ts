@@ -83,6 +83,7 @@ export class AiOperationDelegationGuard implements CanActivate {
       inputBatchId: payload.inputBatchId,
       attemptId: payload.attemptId,
       contextManifestId: payload.contextManifestId,
+      executionGoal: payload.executionGoal,
       agentDefinition: payload.agentDefinition,
       grantedCapabilities: payload.grantedCapabilities,
       entitlementStatus: payload.entitlementStatus,

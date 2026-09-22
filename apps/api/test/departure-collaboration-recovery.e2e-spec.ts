@@ -52,7 +52,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: '已记下。' },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -74,7 +74,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
   })
 
   afterEach(() => {
-    agent.setOutcome({ kind: 'completed', message: '已记下。' })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } })
     agent.release()
     jest.restoreAllMocks()
   })
@@ -261,6 +261,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     }))
     return {
       kind: 'awaiting_review',
+      completionBasis: { kind: 'accepted_review_package' },
       reviewPackage: mapped[0]!,
       reviewPackages: mapped,
     } as HeadlessExecutionResult

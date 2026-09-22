@@ -35,7 +35,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -214,7 +214,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     )
     const agentMessage = restored.conversation.events.find((event) => event.kind === 'agent_message')
     expect(agentMessage?.payload).toMatchObject({ text: COMPLETED_MESSAGE })
-    expect(restored.conversation.activeBatch).toBeNull()
+    expect(restored.conversation.activeBatch).toMatchObject({ status: 'awaiting_user_input' })
 
     const catchUp = await listEvents(taskId, conversationId, sent.body.data.lastSequence as number)
     expect(catchUp.events.some((event) => event.kind === 'agent_message')).toBe(true)
@@ -343,7 +343,10 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       where: { taskLinks: { some: { taskId } } },
       orderBy: { createdAt: 'asc' },
     })
-    expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
+    expect(batches.map((batch) => batch.status)).toEqual([
+      'awaiting_user_input',
+      'awaiting_user_input',
+    ])
     const jobs = await prisma.aiWorkflowJob.findMany({
       where: { taskId },
       orderBy: { createdAt: 'asc' },
@@ -375,7 +378,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       ),
     ).toBe(true)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     await sendText(taskId, conversationId, '重试后的说明', `e2e-fail-retry-${taskId}`).expect(201)
     await processor.processDueJobs(5)
     const recovered = await listEvents(taskId, conversationId)

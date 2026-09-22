@@ -12,6 +12,7 @@ describe('AI collaboration structured errors', () => {
     ['VERSION_CONFLICT', '草稿版本已变化，请重新读取任务上下文后再提交候选'],
     ['REVIEW_PENDING', '已有待确认审核包，请先在表单拒绝或确认后再提交新候选'],
     ['CONTEXT_CAPACITY_EXCEEDED', '上下文超出容量上限，请拆分或精简后再试'],
+    ['AGENT_OUTCOME_INCOMPLETE', '这次处理没有形成可确认的结果，请重试或换一种说法'],
   ] as const)('maps %s to a stable user-facing message', (code, message) => {
     const error = AiCollaborationError.fromCode(code)
     expect(error.code).toBe(code)

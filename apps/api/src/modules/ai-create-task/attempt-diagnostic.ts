@@ -65,7 +65,7 @@ export function recoveryFromAttempt(attempt: {
     attempt.resultJson &&
     typeof attempt.resultJson === 'object' &&
     'kind' in attempt.resultJson &&
-    (attempt.resultJson.kind === 'completed' ||
+    (attempt.resultJson.kind === 'answered' ||
       attempt.resultJson.kind === 'failed' ||
       attempt.resultJson.kind === 'awaiting_review' ||
       attempt.resultJson.kind === 'awaiting_user_input' ||

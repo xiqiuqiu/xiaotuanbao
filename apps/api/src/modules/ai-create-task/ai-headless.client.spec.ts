@@ -15,6 +15,7 @@ const request = {
   ...identity,
   userText: '帮我建一个喀纳斯3日团',
   userTextSha256: 'a'.repeat(64),
+  executionGoal: 'answer' as const,
 }
 
 describe('AiHeadlessClient.run', () => {
@@ -112,7 +113,7 @@ describe('AiHeadlessClient.run', () => {
   it('still returns a completed result when the agent responds in time', async () => {
     server = createServer((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      response.end(JSON.stringify({ data: { kind: 'completed', message: '已整理当前资料。' } }))
+      response.end(JSON.stringify({ data: { kind: 'answered', message: '已整理当前资料。', completionBasis: { kind: 'final_answer' } } }))
     })
     const origin = await listen(server)
     const client = createClient({
@@ -122,8 +123,9 @@ describe('AiHeadlessClient.run', () => {
     })
 
     await expect(client.run(request, 'delegation-token')).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已整理当前资料。',
+      completionBasis: { kind: 'final_answer' },
     })
   })
 
@@ -152,7 +154,7 @@ describe('AiHeadlessClient.run', () => {
       response.end(
         `${JSON.stringify({
           type: 'run.completed',
-          result: { kind: 'completed', message: '已记下路线。日期待核对。' },
+          result: { kind: 'answered', message: '已记下路线。日期待核对。', completionBasis: { kind: 'final_answer' } },
         })}\n`,
       )
     })
@@ -173,8 +175,9 @@ describe('AiHeadlessClient.run', () => {
         },
       }),
     ).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已记下路线。日期待核对。',
+      completionBasis: { kind: 'final_answer' },
     })
     expect(reasoningText).toEqual(['先核对', '先核对日期', '再核人数'])
     expect(publicText).toEqual(['已记下路线。', '已记下路线。日期待核对。'])
@@ -199,7 +202,7 @@ describe('AiHeadlessClient.run', () => {
       response.end(
         `${JSON.stringify({
           type: 'run.completed',
-          result: { kind: 'completed', message: `${soliloquy}${publicReply}` },
+          result: { kind: 'answered', message: `${soliloquy}${publicReply}`, completionBasis: { kind: 'final_answer' } },
         })}\n`,
       )
     })
@@ -220,8 +223,9 @@ describe('AiHeadlessClient.run', () => {
         },
       }),
     ).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: `${soliloquy}${publicReply}`,
+      completionBasis: { kind: 'final_answer' },
     })
     expect(reasoningText).toEqual([])
     expect(publicText.at(-1)).toBe(`${soliloquy}${publicReply}`)
@@ -241,7 +245,7 @@ describe('AiHeadlessClient.run', () => {
       response.end(
         `${JSON.stringify({
           type: 'run.completed',
-          result: { kind: 'completed', message: '已整理当前资料。' },
+          result: { kind: 'answered', message: '已整理当前资料。', completionBasis: { kind: 'final_answer' } },
         })}\n`,
       )
     })
@@ -259,8 +263,9 @@ describe('AiHeadlessClient.run', () => {
         },
       }),
     ).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已整理当前资料。',
+      completionBasis: { kind: 'final_answer' },
     })
     expect(deltas).toEqual(['已', '已整理当前资料。'])
   })
@@ -282,7 +287,7 @@ describe('AiHeadlessClient.run', () => {
       response.end(
         `${JSON.stringify({
           type: 'run.completed',
-          result: { kind: 'completed', message: '已整理当前资料。' },
+          result: { kind: 'answered', message: '已整理当前资料。', completionBasis: { kind: 'final_answer' } },
         })}\n`,
       )
     })
@@ -293,8 +298,9 @@ describe('AiHeadlessClient.run', () => {
       'app.aiCreateAssist.runTimeoutMs': 1_000,
     })
     await expect(client.run(request, 'delegation-token')).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已整理当前资料。',
+      completionBasis: { kind: 'final_answer' },
     })
   })
 
@@ -358,7 +364,7 @@ describe('AiHeadlessClient.run', () => {
       response.end(
         `${JSON.stringify({
           type: 'run.completed',
-          result: { kind: 'completed', message: '已整理当前资料。' },
+          result: { kind: 'answered', message: '已整理当前资料。', completionBasis: { kind: 'final_answer' } },
         })}\n`,
       )
     })
@@ -375,8 +381,9 @@ describe('AiHeadlessClient.run', () => {
         },
       }),
     ).resolves.toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已整理当前资料。',
+      completionBasis: { kind: 'final_answer' },
     })
     expect(publicText).toEqual(['已整理当前资料。'])
     expect(publicText.join('')).not.toContain('must-not-surface')
@@ -514,7 +521,7 @@ describe('AiHeadlessClient.run', () => {
         }
         posted = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-        response.end(JSON.stringify({ data: { kind: 'completed', message: '已整理当前资料。' } }))
+        response.end(JSON.stringify({ data: { kind: 'answered', message: '已整理当前资料。', completionBasis: { kind: 'final_answer' } } }))
       })()
     })
     const origin = await listen(server)
