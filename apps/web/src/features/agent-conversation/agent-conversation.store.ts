@@ -13,10 +13,96 @@ import {
   nextPageAttachment,
   type AgentCurrentPageAttachment,
 } from './page-locator-attachment'
+import { parsePageLocator } from '@xiaotuanbao/shared'
 
 export const NEW_CONVERSATION_TITLE = '新会话'
 
 export type AgentConversationView = 'page' | 'history' | 'new'
+
+const PAGE_CONTEXT_STORAGE_KEY = 'agent-conversation-page-context'
+
+function samePageAttachment(
+  left: AgentCurrentPageAttachment | null,
+  right: AgentCurrentPageAttachment | null,
+): boolean {
+  if (!left || !right || left.kind !== right.kind) {
+    return left === right
+  }
+  if (left.kind === 'page_locator' && right.kind === 'page_locator') {
+    return (
+      left.locator.kind === right.locator.kind &&
+      left.locator.objectId === right.locator.objectId &&
+      left.locator.section === right.locator.section
+    )
+  }
+  return (
+    left.kind === 'agent_task' &&
+    right.kind === 'agent_task' &&
+    left.taskType === right.taskType &&
+    left.taskId === right.taskId
+  )
+}
+
+function persistPageContext(state: Pick<
+  AgentConversationState,
+  'conversationId' | 'attachedPageAttachment' | 'pageContextDismissed'
+>) {
+  sessionStorage.setItem(
+    PAGE_CONTEXT_STORAGE_KEY,
+    JSON.stringify({
+      conversationId: state.conversationId,
+      attachment: state.attachedPageAttachment,
+      dismissed: state.pageContextDismissed,
+    }),
+  )
+}
+
+function readPersistedPageContext(conversationId: string | null): {
+  attachment: AgentCurrentPageAttachment | null
+  dismissed: boolean
+} | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PAGE_CONTEXT_STORAGE_KEY) ?? 'null') as {
+      conversationId?: unknown
+      attachment?: unknown
+      dismissed?: unknown
+    } | null
+    if (!value || value.conversationId !== conversationId || typeof value.dismissed !== 'boolean') {
+      return null
+    }
+    const attachment = value.attachment as Partial<AgentCurrentPageAttachment> | null
+    if (attachment === null) {
+      return { attachment: null, dismissed: value.dismissed }
+    }
+    if (attachment?.kind === 'page_locator') {
+      const locator = parsePageLocator(attachment.locator)
+      if (!locator) return null
+      return {
+        attachment: {
+          kind: 'page_locator',
+          locator,
+          ...(typeof attachment.objectLabel === 'string'
+            ? { objectLabel: attachment.objectLabel }
+            : {}),
+        },
+        dismissed: value.dismissed,
+      }
+    }
+    if (
+      attachment?.kind === 'agent_task' &&
+      typeof attachment.taskType === 'string' &&
+      typeof attachment.taskId === 'string'
+    ) {
+      return {
+        attachment: attachment as AgentCurrentPageAttachment,
+        dismissed: value.dismissed,
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
 
 interface AgentConversationState {
   view: AgentConversationView
@@ -30,6 +116,8 @@ interface AgentConversationState {
   openHistoricalConversation: (conversation: { id: string; title: string }) => void
   startNewConversation: (currentAttachment?: AgentCurrentPageAttachment | null) => void
   pageContextDismissed: boolean
+  pageAttachmentSynced: boolean
+  observedPageAttachment: AgentCurrentPageAttachment | null
   composerEpoch: number
   attachCurrentPage: (currentAttachment: AgentCurrentPageAttachment | null) => void
   detachCurrentPage: () => void
@@ -57,6 +145,8 @@ const INITIAL_CONVERSATION_STATE = {
   globalOpen: false,
   attachedPageAttachment: null as AgentCurrentPageAttachment | null,
   pageContextDismissed: false,
+  pageAttachmentSynced: false,
+  observedPageAttachment: null as AgentCurrentPageAttachment | null,
   composerEpoch: 0,
 }
 
@@ -71,6 +161,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       conversationId: conversation.id,
       title: conversation.title || NEW_CONVERSATION_TITLE,
     })
+    persistPageContext(get())
   },
   openHistoricalConversation: (conversation) => {
     const current = get()
@@ -87,23 +178,28 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       attachedPageAttachment: reopeningCurrentHistory ? current.attachedPageAttachment : null,
       pageContextDismissed: false,
     })
+    persistPageContext(get())
   },
-  startNewConversation: (currentAttachment = null) => {
+  startNewConversation: (currentAttachment) => {
     persistSelectedConversation(null)
+    sessionStorage.removeItem('conversation-pending-draft:new')
     set({
       view: 'new',
       conversationId: null,
       title: NEW_CONVERSATION_TITLE,
       attachedPageAttachment: nextPageAttachment({
         view: 'new',
-        currentAttachment,
+        currentAttachment: currentAttachment ?? null,
         captured: false,
       }),
       pageContextDismissed: false,
+      pageAttachmentSynced: currentAttachment !== undefined,
+      observedPageAttachment: currentAttachment ?? null,
       composerEpoch: get().composerEpoch + 1,
     })
+    persistPageContext(get())
   },
-  attachCurrentPage: (currentAttachment) =>
+  attachCurrentPage: (currentAttachment) => {
     set({
       attachedPageAttachment: nextPageAttachment({
         view: get().view,
@@ -111,20 +207,59 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         captured: true,
       }),
       pageContextDismissed: false,
-    }),
-  detachCurrentPage: () => set({ attachedPageAttachment: null, pageContextDismissed: true }),
+      pageAttachmentSynced: true,
+      observedPageAttachment: currentAttachment,
+    })
+    persistPageContext(get())
+  },
+  detachCurrentPage: () => {
+    set({ attachedPageAttachment: null, pageContextDismissed: true })
+    persistPageContext(get())
+  },
   syncDefaultPageAttachment: (currentAttachment) => {
     const current = get()
-    if (current.view === 'history' || current.pageContextDismissed) {
+    if (!current.pageAttachmentSynced) {
+      const attachmentMatches = samePageAttachment(
+        current.attachedPageAttachment,
+        currentAttachment,
+      )
+      set({
+        pageAttachmentSynced: true,
+        observedPageAttachment: currentAttachment,
+        attachedPageAttachment: attachmentMatches
+          ? currentAttachment
+          : current.attachedPageAttachment
+            ? null
+            : current.view === 'history' || current.pageContextDismissed
+              ? null
+              : currentAttachment,
+        pageContextDismissed:
+          current.attachedPageAttachment && !attachmentMatches
+            ? true
+            : current.pageContextDismissed,
+      })
+      persistPageContext(get())
       return
     }
-    const next = nextPageAttachment({
-      view: current.view === 'page' ? 'new' : current.view,
-      currentAttachment,
-      captured: false,
-    })
-    if (next && !current.attachedPageAttachment) {
-      set({ attachedPageAttachment: next })
+    if (!samePageAttachment(current.observedPageAttachment, currentAttachment)) {
+      set({
+        observedPageAttachment: currentAttachment,
+        attachedPageAttachment: null,
+        pageContextDismissed: true,
+      })
+      persistPageContext(get())
+      return
+    }
+    if (
+      current.attachedPageAttachment &&
+      currentAttachment &&
+      current.attachedPageAttachment.kind === 'page_locator' &&
+      currentAttachment.kind === 'page_locator' &&
+      samePageAttachment(current.attachedPageAttachment, currentAttachment) &&
+      current.attachedPageAttachment.objectLabel !== currentAttachment.objectLabel
+    ) {
+      set({ attachedPageAttachment: currentAttachment })
+      persistPageContext(get())
     }
   },
   expandToGlobal: (location) => {
@@ -186,18 +321,31 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
   setHistoryRailCollapsed: (collapsed) => set({ historyRailCollapsed: collapsed }),
   hydrateFromSession: () => {
     const stored = readPersistedSelectedConversation()
+    const persistedPageContext = readPersistedPageContext(stored?.conversationId ?? null)
     if (!stored) {
+      if (persistedPageContext) {
+        set({
+          attachedPageAttachment: persistedPageContext.attachment,
+          pageContextDismissed: persistedPageContext.dismissed,
+          pageAttachmentSynced: false,
+        })
+      }
       return
     }
     set({
       view: 'history',
       conversationId: stored.conversationId,
       title: stored.title || NEW_CONVERSATION_TITLE,
+      attachedPageAttachment: persistedPageContext?.attachment ?? null,
+      pageContextDismissed: persistedPageContext?.dismissed ?? false,
+      pageAttachmentSynced: false,
     })
   },
   reset: () => {
     persistReturnLocation(null)
     persistSelectedConversation(null)
+    sessionStorage.removeItem(PAGE_CONTEXT_STORAGE_KEY)
+    sessionStorage.removeItem('conversation-pending-draft:new')
     set({ ...INITIAL_CONVERSATION_STATE })
   },
 }))

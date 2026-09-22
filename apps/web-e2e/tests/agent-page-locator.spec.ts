@@ -2,7 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { coordinatorUser } from '../support/credentials'
 import { loginAs } from '../support/auth'
 
-async function openSupportedDeparturePage(page: Page): Promise<string> {
+async function openSupportedDeparturePage(
+  page: Page,
+): Promise<{ departureId: string; departureNo: string }> {
   const me = await page.request.get('/api/auth/me')
   expect(me.status(), await me.text()).toBe(200)
   const ownerUserId = ((await me.json()) as { data?: { user?: { id?: string } } }).data?.user?.id
@@ -20,23 +22,42 @@ async function openSupportedDeparturePage(page: Page): Promise<string> {
     headers: { Origin: 'http://localhost:5173' },
   })
   expect(created.status(), await created.text()).toBe(201)
-  const departureId = ((await created.json()) as { data?: { id?: string } }).data?.id
+  const departure = ((await created.json()) as {
+    data?: { id?: string; departureNo?: string }
+  }).data
+  const departureId = departure?.id
   expect(departureId).toBeTruthy()
+  expect(departure?.departureNo).toBeTruthy()
 
   await page.goto(`/departure/${departureId}`)
   await expect(page).toHaveURL(new RegExp(`/departure/${departureId}`))
-  return departureId as string
+  return {
+    departureId: departureId as string,
+    departureNo: departure!.departureNo!,
+  }
 }
 
 test.describe('agent page locator #371', () => {
   test('新会话默认带当前页面标签，发送时携带 locator', async ({ page }) => {
     await loginAs(page, coordinatorUser)
-    await openSupportedDeparturePage(page)
+    const { departureNo } = await openSupportedDeparturePage(page)
 
     await page.getByRole('button', { name: '展开电子化助理' }).click()
     const pane = page.getByRole('complementary', { name: '电子化助理' })
     await expect(pane).toBeVisible()
-    await expect(pane.getByTestId('current-page-chip')).toBeVisible()
+    await expect(pane.getByTestId('current-page-chip')).toContainText(
+      `当前页：${departureNo} · 概览信息`,
+    )
+
+    await page.getByRole('tab', { name: '执行安排' }).click()
+    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
+    await pane.getByRole('button', { name: '获取当前页面' }).click()
+    await expect(pane.getByTestId('current-page-chip')).toContainText(
+      `当前页：${departureNo} · 执行安排`,
+    )
+    await page.getByRole('tab', { name: '概览信息' }).click()
+    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
+    await pane.getByRole('button', { name: '获取当前页面' }).click()
 
     const locatorRequest = page.waitForRequest(
       (request) =>
@@ -50,6 +71,30 @@ test.describe('agent page locator #371', () => {
     expect((attached.postDataJSON() as { pageLocator?: { kind?: string } }).pageLocator?.kind).toBe(
       'departure',
     )
+    expect(
+      (attached.postDataJSON() as { pageLocator?: { section?: string } }).pageLocator?.section,
+    ).toBe('overview')
+    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
+    await expect(pane.getByRole('button', { name: '获取当前页面' })).toBeVisible()
+  })
+
+  test('刷新同一页面恢复未发送草稿和当前页附件', async ({ page }) => {
+    await loginAs(page, coordinatorUser)
+    const { departureNo } = await openSupportedDeparturePage(page)
+
+    await page.getByRole('button', { name: '展开电子化助理' }).click()
+    let pane = page.getByRole('complementary', { name: '电子化助理' })
+    await pane.getByRole('textbox', { name: '询问小团宝业务' }).fill('刷新后继续编辑')
+    await expect(pane.getByTestId('current-page-chip')).toContainText(departureNo)
+
+    await page.reload()
+    pane = page.getByRole('complementary', { name: '电子化助理' })
+    await expect(pane).toBeVisible()
+
+    await expect(pane.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue(
+      '刷新后继续编辑',
+    )
+    await expect(pane.getByTestId('current-page-chip')).toContainText(departureNo)
   })
 
   test('移除当前页面标签后不再发送 locator', async ({ page }) => {
