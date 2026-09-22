@@ -9,8 +9,9 @@ import {
 describe('Attempt diagnostic persist', () => {
   it('projects omitted diagnostic as missing usage without inventing tokens', () => {
     const result = headlessExecutionResultSchema.parse({
-      kind: 'completed',
+      kind: 'answered',
       message: '已记下当前说明。',
+      completionBasis: { kind: 'final_answer' },
     })
 
     expect(attemptDiagnosticPersist(result)).toEqual({
@@ -30,8 +31,9 @@ describe('Attempt diagnostic persist', () => {
     expect(
       attemptDiagnosticPersist(
         headlessExecutionResultSchema.parse({
-          kind: 'completed',
+          kind: 'answered',
           message: 'ok',
+          completionBasis: { kind: 'final_answer' },
           diagnostic: {
             mastraTraceId: 'trace-actual',
             usageSource: 'actual',
@@ -101,8 +103,9 @@ describe('Attempt diagnostic persist', () => {
   it('judges recovery from PostgreSQL Attempt fields even after Mastra trace is deleted', () => {
     const persisted = attemptDiagnosticPersist(
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         message: '已完成。',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: { mastraTraceId: 'trace-to-drop', usageSource: 'missing' },
       }),
     )
@@ -111,7 +114,7 @@ describe('Attempt diagnostic persist', () => {
       attemptRecoveryJudgment({
         status: 'completed',
         errorCode: null,
-        resultKind: 'completed',
+        resultKind: 'answered',
         mastraTraceId: persisted.mastraTraceId,
       }),
     ).toEqual({ recoverable: true, status: 'completed', errorCode: null })
@@ -120,7 +123,7 @@ describe('Attempt diagnostic persist', () => {
       attemptRecoveryJudgment({
         status: 'completed',
         errorCode: null,
-        resultKind: 'completed',
+        resultKind: 'answered',
         mastraTraceId: null,
       }),
     ).toEqual({ recoverable: true, status: 'completed', errorCode: null })

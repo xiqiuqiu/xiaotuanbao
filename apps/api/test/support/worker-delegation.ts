@@ -123,6 +123,7 @@ export async function mintRunningAttemptDelegation(options: {
     inputBatchId: batch.id,
     attemptId: attempt.id,
     contextManifestId: manifest.id,
+    executionGoal: 'propose_change',
     agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
     grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
     entitlementStatus: 'unavailable',

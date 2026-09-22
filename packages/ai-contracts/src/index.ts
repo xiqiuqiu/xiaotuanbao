@@ -358,6 +358,15 @@ export {
   type AssistStreamEvent,
 } from './events/assist-stream-event'
 export {
+  AGENT_EXECUTION_GOALS,
+  COMPLETION_BASIS_KINDS,
+  agentExecutionGoalSchema,
+  completionBasisSchema,
+  type AgentExecutionGoal,
+  type CompletionBasis,
+  type CompletionBasisKind,
+} from './runtime/execution-goal'
+export {
   HEADLESS_EXECUTION_OUTCOME_KINDS,
   TOOL_STEP_STATUSES,
   USAGE_SOURCES,
@@ -375,6 +384,7 @@ export {
   toolStepDiagnosticSchema,
   usageCountsFromProvider,
   usageCountsSchema,
+  validateHeadlessOutcomeAgainstGoal,
   type AttemptDiagnosticRecord,
   type AttemptRecoveryJudgment,
   type AttemptRecoverySnapshot,
@@ -384,7 +394,7 @@ export {
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
-  type HeadlessCompletedResult,
+  type HeadlessAnsweredResult,
   type HeadlessRegisteredIntentResult,
   type HeadlessInteraction,
   type HeadlessAwaitingUserInputResult,

@@ -26,6 +26,7 @@ describe('isImmediateWorkflowFailure', () => {
     expect(isImmediateWorkflowFailure('CONTEXT_CAPACITY_EXCEEDED')).toBe(true)
     expect(isImmediateWorkflowFailure('CONTEXT_PROFILE_MISSING')).toBe(true)
     expect(isImmediateWorkflowFailure('INVALID_FORMAT')).toBe(true)
+    expect(isImmediateWorkflowFailure('AGENT_OUTCOME_INCOMPLETE')).toBe(true)
     expect(isImmediateWorkflowFailure('AGENT_UNAVAILABLE')).toBe(false)
     expect(isImmediateWorkflowFailure('CONTEXT_PREPARE_FAILED')).toBe(false)
   })

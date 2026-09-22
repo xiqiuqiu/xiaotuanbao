@@ -21,6 +21,7 @@ export interface AiOperationDelegationPayload {
   inputBatchId: string
   attemptId: string
   contextManifestId?: string
+  executionGoal: 'answer' | 'propose_change' | 'clarify' | 'governed_action'
   agentDefinition: { key: string; version: number }
   grantedCapabilities: Array<{ key: string; version: number }>
   entitlementStatus: 'available' | 'unavailable'

@@ -1,10 +1,26 @@
 import { z } from 'zod'
-import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
+import { AiCollaborationError, aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
 import { submitSourceOrderReviewPackageModelInputSchema } from '../review/source-order-schema'
 import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-resource-schema'
 import { submitDepartureResourceReviewModelInputSchema } from '../review/departure-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
+import {
+  agentExecutionGoalSchema,
+  completionBasisSchema,
+  type AgentExecutionGoal,
+  type CompletionBasisKind,
+} from './execution-goal'
+
+export {
+  AGENT_EXECUTION_GOALS,
+  COMPLETION_BASIS_KINDS,
+  agentExecutionGoalSchema,
+  completionBasisSchema,
+  type AgentExecutionGoal,
+  type CompletionBasis,
+  type CompletionBasisKind,
+} from './execution-goal'
 
 export const USAGE_SOURCES = ['missing', 'estimated', 'actual'] as const
 
@@ -88,7 +104,7 @@ export const headlessDiagnosticSchema = z
   .superRefine((value, ctx) => refineUsageSource(value, ctx))
 
 export const HEADLESS_EXECUTION_OUTCOME_KINDS = [
-  'completed',
+  'answered',
   'registered_intent',
   'awaiting_user_input',
   'awaiting_review',
@@ -111,13 +127,15 @@ export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
   .extend({
     userText: z.string().trim().min(1),
     userTextSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    executionGoal: agentExecutionGoalSchema,
   })
   .strip()
 
-export const headlessCompletedResultSchema = z
+export const headlessAnsweredResultSchema = z
   .object({
-    kind: z.literal('completed'),
+    kind: z.literal('answered'),
     message: z.string().min(1),
+    completionBasis: completionBasisSchema,
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()
@@ -127,6 +145,7 @@ export const headlessRegisteredIntentResultSchema = z
     kind: z.literal('registered_intent'),
     intent: registeredAgentIntentSchema,
     message: z.string().min(1),
+    completionBasis: completionBasisSchema,
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()
@@ -168,6 +187,7 @@ export const headlessAwaitingUserInputResultSchema = z
   .object({
     kind: z.literal('awaiting_user_input'),
     interaction: headlessInteractionSchema,
+    completionBasis: completionBasisSchema,
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()
@@ -184,6 +204,7 @@ export const headlessAwaitingReviewResultSchema = z
     kind: z.literal('awaiting_review'),
     reviewPackage: headlessReviewPackageSchema,
     reviewPackages: z.array(headlessReviewPackageSchema).min(1).optional(),
+    completionBasis: completionBasisSchema,
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()
@@ -197,7 +218,7 @@ export const headlessFailedResultSchema = z
   .strip()
 
 export const headlessExecutionResultSchema = z.discriminatedUnion('kind', [
-  headlessCompletedResultSchema,
+  headlessAnsweredResultSchema,
   headlessRegisteredIntentResultSchema,
   headlessAwaitingUserInputResultSchema,
   headlessAwaitingReviewResultSchema,
@@ -251,7 +272,7 @@ export type HeadlessExecutionIdentity = z.infer<typeof headlessExecutionIdentity
 export type HeadlessExecutionRequest = z.infer<typeof headlessExecutionRequestSchema>
 export type HeadlessExecutionResult = z.infer<typeof headlessExecutionResultSchema>
 export type HeadlessRunFrame = z.infer<typeof headlessRunFrameSchema>
-export type HeadlessCompletedResult = z.infer<typeof headlessCompletedResultSchema>
+export type HeadlessAnsweredResult = z.infer<typeof headlessAnsweredResultSchema>
 export type HeadlessRegisteredIntentResult = z.infer<typeof headlessRegisteredIntentResultSchema>
 export type HeadlessInteraction = z.infer<typeof headlessInteractionSchema>
 export type HeadlessAwaitingUserInputResult = z.infer<typeof headlessAwaitingUserInputResultSchema>
@@ -370,6 +391,84 @@ export function aggregateUsageCounts(values: ReadonlyArray<UsageCounts | undefin
 
 function nonNegativeInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+const UNRESOLVED_TOOL_STATUSES = new Set(['failed', 'schema_rejected', 'denied'])
+
+function incompleteOutcome(diagnostic?: HeadlessDiagnostic): HeadlessFailedResult {
+  const error = AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE')
+  return {
+    kind: 'failed',
+    error: error.toJSON(),
+    ...(diagnostic
+      ? { diagnostic: { ...diagnostic, errorCode: diagnostic.errorCode ?? error.code } }
+      : {}),
+  }
+}
+
+function hasUnresolvedStructuredWork(outcome: HeadlessExecutionResult): boolean {
+  if (outcome.kind === 'failed') {
+    return false
+  }
+  const toolSteps = outcome.diagnostic?.toolSteps ?? []
+  return toolSteps.some((step) => UNRESOLVED_TOOL_STATUSES.has(step.status))
+}
+
+function requiredBasisForGoal(goal: AgentExecutionGoal): CompletionBasisKind {
+  switch (goal) {
+    case 'answer':
+      return 'final_answer'
+    case 'propose_change':
+      return 'accepted_review_package'
+    case 'clarify':
+      return 'persistent_clarification'
+    case 'governed_action':
+      return 'governed_action_result'
+  }
+}
+
+function outcomeMatchesGoal(goal: AgentExecutionGoal, outcome: HeadlessExecutionResult): boolean {
+  if (outcome.kind === 'failed') {
+    return true
+  }
+  if (
+    (goal === 'answer' || goal === 'propose_change') &&
+    outcome.kind === 'awaiting_user_input'
+  ) {
+    return outcome.completionBasis.kind === 'persistent_clarification'
+  }
+  if (goal === 'answer' && outcome.kind === 'registered_intent') {
+    return outcome.completionBasis.kind === 'governed_action_result'
+  }
+  const required = requiredBasisForGoal(goal)
+  if (outcome.completionBasis.kind !== required) {
+    return false
+  }
+  switch (goal) {
+    case 'answer':
+      return outcome.kind === 'answered' && outcome.message.trim().length > 0
+    case 'propose_change':
+      return outcome.kind === 'awaiting_review'
+    case 'clarify':
+      return outcome.kind === 'awaiting_user_input'
+    case 'governed_action':
+      return outcome.kind === 'registered_intent'
+  }
+}
+
+export function validateHeadlessOutcomeAgainstGoal(input: {
+  executionGoal: AgentExecutionGoal
+  outcome: HeadlessExecutionResult
+}): HeadlessExecutionResult {
+  const goal = agentExecutionGoalSchema.parse(input.executionGoal)
+  const outcome = input.outcome
+  if (outcome.kind === 'failed') {
+    return outcome
+  }
+  if (hasUnresolvedStructuredWork(outcome) || !outcomeMatchesGoal(goal, outcome)) {
+    return incompleteOutcome(outcome.diagnostic)
+  }
+  return outcome
 }
 
 export interface AttemptRecoverySnapshot {

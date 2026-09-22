@@ -60,6 +60,7 @@ function isCollaborationCode(code: unknown): code is AiCollaborationErrorCode {
     code === 'SERVICE_IDENTITY_INVALID' ||
     code === 'VERSION_CONFLICT' ||
     code === 'REVIEW_PENDING' ||
-    code === 'CONTEXT_CAPACITY_EXCEEDED'
+    code === 'CONTEXT_CAPACITY_EXCEEDED' ||
+    code === 'AGENT_OUTCOME_INCOMPLETE'
   )
 }

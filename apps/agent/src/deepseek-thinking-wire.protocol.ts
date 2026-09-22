@@ -30,6 +30,7 @@ const IDENTITY = {
   contextManifestId: 'manifest-1',
   userText: '帮我建一个喀纳斯3日团',
   userTextSha256: 'a'.repeat(64),
+  executionGoal: 'answer' as const,
 }
 
 const TOOL_CALL_ID = 'call_route_conversation'
@@ -52,6 +53,7 @@ const routingContext = requestContextSchema.parse({
   inputBatchId: IDENTITY.inputBatchId,
   attemptId: IDENTITY.attemptId,
   contextManifestId: IDENTITY.contextManifestId,
+  executionGoal: 'answer',
   agentDefinition: CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
   grantedCapabilities: [CONVERSATION_ROUTING_CAPABILITY_REF],
   entitlementStatus: 'unavailable',

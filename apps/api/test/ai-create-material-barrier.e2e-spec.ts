@@ -37,7 +37,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 

@@ -12,7 +12,9 @@ import {
   submitSourceOrderReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   createThinkTagSplitter,
+  PUBLIC_REPLY_FALLBACK,
   selectPublicReply,
+  validateHeadlessOutcomeAgainstGoal,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -149,16 +151,19 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       yield* consumeThinkParts(thinkTags.flush())
       commitModelStep()
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
-      const result = resultFromGenerate(
-        { ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] },
-        {
-          streamedPublicText,
-          streamedReasoning,
-          allowFullOutputFallback: streamed?.fullStream == null,
-        },
-      )
+      const result = validateHeadlessOutcomeAgainstGoal({
+        executionGoal: request.executionGoal,
+        outcome: resultFromGenerate(
+          { ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] },
+          {
+            streamedPublicText,
+            streamedReasoning,
+            allowFullOutputFallback: streamed?.fullStream == null,
+          },
+        ),
+      })
       if (
-        (result.kind === 'completed' || result.kind === 'registered_intent') &&
+        (result.kind === 'answered' || result.kind === 'registered_intent') &&
         result.message
       ) {
         yield { type: 'message.delta', sequence, text: result.message }
@@ -214,7 +219,13 @@ function resultFromGenerate(
   }
   const reviewPackages = acceptedReviewPackagesFromGenerate(output)
   if (reviewPackages.length > 0) {
-    return { kind: 'awaiting_review', reviewPackage: reviewPackages[0]!, reviewPackages, diagnostic }
+    return {
+      kind: 'awaiting_review',
+      reviewPackage: reviewPackages[0]!,
+      reviewPackages,
+      completionBasis: { kind: 'accepted_review_package' },
+      diagnostic,
+    }
   }
   const rejectedReview = [
     'proposeReviewPackage',
@@ -232,6 +243,7 @@ function resultFromGenerate(
     streamedPublicText: publicReply.streamedPublicText,
     streamedReasoning: publicReply.streamedReasoning,
     fullOutputText: publicReply.allowFullOutputFallback === false ? '' : output.text ?? '',
+    fallback: '',
   })
   const routing = acceptedConversationRoutingFromGenerate(output)
   if (
@@ -242,7 +254,8 @@ function resultFromGenerate(
     return {
       kind: 'registered_intent',
       intent: routing.registeredIntent,
-      message,
+      message: message || PUBLIC_REPLY_FALLBACK,
+      completionBasis: { kind: 'governed_action_result' },
       diagnostic,
     }
   }
@@ -250,10 +263,23 @@ function resultFromGenerate(
     return {
       kind: 'awaiting_user_input',
       interaction: routing.interaction,
+      completionBasis: { kind: 'persistent_clarification' },
       diagnostic,
     }
   }
-  return { kind: 'completed', message, diagnostic }
+  if (!message.trim()) {
+    return {
+      kind: 'failed',
+      error: AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE').toJSON(),
+      diagnostic,
+    }
+  }
+  return {
+    kind: 'answered',
+    message,
+    completionBasis: { kind: 'final_answer' },
+    diagnostic,
+  }
 }
 
 async function outputFromStream(streamed: MastraStreamLike): Promise<MastraGenerateLike> {
@@ -389,8 +415,6 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
       : toolResults?.map(toolPayload).filter((item) => item.toolName === toolName)[
           toolCalls.slice(0, index).filter((item) => toolNameFromCall(item) === toolName).length
         ]
-    // 只有实际结果才能证明工具成功；没有结果的调用不伪造成功记录。
-    if (!result) return []
     const capability = capabilityForToolName(toolName)
     return [
       {
@@ -399,7 +423,10 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
         ...(capability
           ? { capabilityKey: capability.key, capabilityVersion: capability.version }
           : {}),
-        status: result.isError === true || result.error != null ? 'failed' as const : 'succeeded' as const,
+        status:
+          !result || result.isError === true || result.error != null
+            ? 'failed' as const
+            : 'succeeded' as const,
       },
     ]
   })

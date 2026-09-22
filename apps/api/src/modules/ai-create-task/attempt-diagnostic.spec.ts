@@ -6,8 +6,9 @@ describe('Attempt diagnostic persist', () => {
   it('defaults omitted diagnostic to missing usage without inventing tokens', () => {
     expect(
       attemptDiagnosticUpdate({
-        kind: 'completed',
+        kind: 'answered',
         message: '已记下当前说明。',
+        completionBasis: { kind: 'final_answer' },
       }),
     ).toEqual({
       mastraTraceId: null,
@@ -21,8 +22,9 @@ describe('Attempt diagnostic persist', () => {
   it('keeps estimated and actual usage distinguishable', () => {
     expect(
       attemptDiagnosticUpdate({
-        kind: 'completed',
+        kind: 'answered',
         message: 'ok',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: {
           mastraTraceId: 'trace-actual',
           usageSource: 'actual',
@@ -71,7 +73,7 @@ describe('Attempt diagnostic persist', () => {
     const completed = {
       status: 'completed' as const,
       errorCode: null,
-      resultJson: { kind: 'completed', message: '已完成。' },
+      resultJson: { kind: 'answered', message: '已完成。', completionBasis: { kind: 'final_answer' } },
       mastraTraceId: 'trace-to-drop',
     }
     expect(recoveryFromAttempt(completed)).toEqual({
@@ -93,6 +95,7 @@ describe('Attempt diagnostic persist', () => {
         errorCode: null,
         resultJson: {
           kind: 'registered_intent',
+          completionBasis: { kind: 'governed_action_result' },
           intent: {
             key: 'task.departure-creation.requested',
             confidence: 'high',
@@ -111,8 +114,9 @@ describe('Attempt diagnostic persist', () => {
   it('copies provider usage onto the Context Manifest without forging actual tokens', () => {
     expect(
       manifestUsageUpdate({
-        kind: 'completed',
+        kind: 'answered',
         message: 'ok',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: {
           processorVersion: 'mastra-token-limiter-contiguous/v1',
           usageSource: 'actual',

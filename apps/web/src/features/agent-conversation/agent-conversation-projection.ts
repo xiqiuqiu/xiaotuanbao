@@ -261,6 +261,9 @@ function failedBatchLabel(errorCode?: string): string {
   if (errorCode === 'INVALID_FORMAT') {
     return '这次处理结果无法使用，请换一种说法再试'
   }
+  if (errorCode === 'AGENT_OUTCOME_INCOMPLETE') {
+    return '这次处理没有形成可确认的结果，请重试或换一种说法'
+  }
   return errorCode ? `处理失败（${errorCode}）` : '处理失败'
 }
 

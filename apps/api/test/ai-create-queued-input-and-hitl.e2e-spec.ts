@@ -63,7 +63,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -120,7 +120,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   afterEach(async () => {
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     agent.release()
     ocr.release()
     await Promise.allSettled([...activeProcessorRuns])
@@ -291,7 +291,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
-    expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
+    expect(batches.map((batch) => batch.status)).toEqual(['awaiting_user_input', 'awaiting_user_input'])
   })
 
   it('keeps near-simultaneous sends from two devices as independent sequenced batches', async () => {
@@ -319,6 +319,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   it('persists a free-text question atomically and restores it after reopen', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
     })
     const opened = await openSession()
@@ -375,6 +376,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   it('keeps the composer draft when answering an interaction card', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
     })
     const opened = await openSession()
@@ -399,7 +401,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       draftEpoch: 1,
     })
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     const replied = await sendMessage(
       taskId,
       conversationId,
@@ -428,6 +430,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   it('requires a valid replyToEventId and does not treat earlier queued text as the answer', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
     })
     const opened = await openSession()
@@ -481,7 +484,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-iso-stale-${taskId}`,
     ).expect(409)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     const replied = await sendMessage(
       taskId,
       conversationId,
@@ -513,7 +516,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       await prisma.aiInputBatch.findUniqueOrThrow({
         where: { id: earlierOrdinary.body.data.batch.id as string },
       }),
-    ).toMatchObject({ status: 'completed' })
+    ).toMatchObject({ status: 'awaiting_user_input' })
     expect(
       await prisma.aiInputBatch.findUniqueOrThrow({
         where: { id: laterOrdinary.body.data.batch.id as string },
@@ -538,6 +541,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   it('更早的普通输入不被带附件的追问回复阻塞，回复在资料就绪后按序执行', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
     })
     const opened = await openSession()
@@ -560,7 +564,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     expect(asked.queuedBatches).toHaveLength(1)
     const queuedBatchId = asked.queuedBatches[0]?.id
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     ocr.holdNextCall()
     const replied = await authRequest(app, coordinatorToken)
       .post(`/api/agent/conversations/${conversationId}/messages`)
@@ -586,7 +590,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const queuedDuringParse = await prisma.aiInputBatch.findUnique({
       where: { id: queuedBatchId as string },
     })
-    expect(queuedDuringParse?.status).toBe('completed')
+    expect(queuedDuringParse?.status).toBe('awaiting_user_input')
     expect(
       await prisma.aiInputBatch.count({
         where: { id: replied.body.data.batch.id as string, status: 'waiting_for_materials' },
@@ -609,6 +613,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   it('accepts the first valid interaction response and rejects a late duplicate from another device', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: {
         type: 'single_choice',
         prompt: SINGLE_CHOICE_PROMPT,
@@ -648,7 +653,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-cas-schema-${taskId}`,
     ).expect(400)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     const accepted = await sendMessage(
       taskId,
       conversationId,
@@ -720,7 +725,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const completedDuringReview = await prisma.aiInputBatch.findUnique({
       where: { id: second.body.data.batch.id as string },
     })
-    expect(completedDuringReview?.status).toBe('completed')
+    expect(completedDuringReview?.status).toBe('awaiting_user_input')
     expect(
       await prisma.aiWorkflowJob.count({
         where: {
@@ -790,12 +795,13 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
-    expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
+    expect(batches.map((batch) => batch.status)).toEqual(['awaiting_user_input', 'awaiting_user_input'])
   })
 
   it('cancels the current wait so previously queued batches can run in sequence', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
     })
     const opened = await openSession()
@@ -813,7 +819,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processOwnedDueJobs(1)
     const asked = await listEvents(taskId, conversationId)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     await authRequest(app, coordinatorToken)
       .post(
         `/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`,
@@ -834,7 +840,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
-    expect(batches.map((batch) => batch.status)).toEqual(['cancelled', 'completed'])
+    expect(batches.map((batch) => batch.status)).toEqual(['cancelled', 'awaiting_user_input'])
   })
 
   it('stops the current attempt and keeps a clear event link for the next reorganized batch', async () => {

@@ -19,6 +19,7 @@ const requestContext = requestContextSchema.parse({
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  executionGoal: 'answer',
   agentDefinition: { key: 'conversation.general', version: 1 },
   objectScopes: [{ organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' }],
 })
@@ -93,6 +94,7 @@ describe('建团 Attempt 能力授予', () => {
       inputBatchId: 'batch-1',
       attemptId: 'attempt-1',
       contextManifestId: 'manifest-1',
+      executionGoal: 'propose_change',
       agentDefinition: { key: 'departure.create', version: 1 },
       objectScopes: [
         { organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' },

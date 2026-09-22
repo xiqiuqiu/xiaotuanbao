@@ -28,7 +28,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -69,7 +69,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
   })
 
   afterEach(() => {
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     agent.release()
   })
 
@@ -102,6 +102,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
   it('fails open jobs, cancels batches, and skips leftover actions when confirming a departure', async () => {
     const name = `${testPrefix}-isolate`
     const opened = await openConfirmableSession(name)
+    agent.holdNextCall()
     const sent = await authRequest(app, token)
       .post(`/api/agent/conversations/${opened.conversationId}/messages`)
       .set('Idempotency-Key', `${testPrefix}-isolate-send`)

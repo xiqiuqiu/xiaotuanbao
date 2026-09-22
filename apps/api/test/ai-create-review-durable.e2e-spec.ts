@@ -34,7 +34,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -80,7 +80,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
   })
 
   afterEach(() => {
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome(reviewOutcome(1))
     agent.release()
     ocr.release()
   })
@@ -139,6 +139,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
   function reviewOutcome(objectVersion: number, name = `${testPrefix}-候选团名`) {
     return {
       kind: 'awaiting_review' as const,
+      completionBasis: { kind: 'accepted_review_package' as const },
       reviewPackage: {
         objectVersion,
         confirmationUnit: 'basic_info_draft' as const,
@@ -182,6 +183,41 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       expect(batch).not.toBeNull()
     })
   }
+
+  it('rejects a display-only propose_change as AGENT_OUTCOME_INCOMPLETE without retry or agent_message #474', async () => {
+    agent.setOutcome({
+      kind: 'answered',
+      message: '我将继续处理团名修改。',
+      completionBasis: { kind: 'final_answer' },
+    })
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    const beforeCalls = agent.callCount()
+    await sendMessage(taskId, conversationId, '请按这个团名建团', `e2e-false-complete-${taskId}`).expect(201)
+    await processor.processDueJobs(5)
+    await processor.processDueJobs(5)
+
+    expect(agent.callCount()).toBe(beforeCalls + 1)
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({
+      where: { taskLinks: { some: { taskId } } },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(batch.status).toBe('failed')
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({ where: { inputBatchId: batch.id } })
+    expect(attempt.status).toBe('failed')
+    expect(attempt.errorCode).toBe('AGENT_OUTCOME_INCOMPLETE')
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId, type: 'agent_batch' },
+    })
+    expect(job.status).toBe('failed')
+    expect(job.lastErrorCode).toBe('AGENT_OUTCOME_INCOMPLETE')
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: 'agent_message' },
+      }),
+    ).toBe(0)
+  })
 
   it('atomically persists the review package, completion message and awaiting_review without writing the draft', async () => {
     const opened = await openSession()
@@ -305,7 +341,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       `${testPrefix}-修正团名`,
     )
 
-    agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
+    agent.setOutcome({
+      kind: 'answered',
+      message: CONTINUATION_MESSAGE,
+      completionBasis: { kind: 'final_answer' },
+    })
     const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
@@ -382,7 +422,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
-    agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
+    agent.setOutcome({
+      kind: 'answered',
+      message: CONTINUATION_MESSAGE,
+      completionBasis: { kind: 'final_answer' },
+    })
     await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
@@ -396,7 +440,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(agent.lastUserText()).toContain('已在中间表单确认')
     expect(agent.lastUserText()).not.toContain(ordinaryText)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
     await processor.processDueJobs(5)
     expect(agent.callCount()).toBe(callsAfterSubmit + 2)
     expect(agent.lastUserText()).toContain(ordinaryText)
@@ -473,7 +517,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
-    agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
+    agent.setOutcome({
+      kind: 'answered',
+      message: CONTINUATION_MESSAGE,
+      completionBasis: { kind: 'final_answer' },
+    })
     const body = {
       expectedVersion: opened.task.draft.version,
       expectedPackageVersion: pending.version,

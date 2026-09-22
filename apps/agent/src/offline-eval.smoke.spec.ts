@@ -17,6 +17,7 @@ const IDENTITY = {
   contextManifestId: 'manifest-1',
   userText: '帮我建一个喀纳斯3日团',
   userTextSha256: 'a'.repeat(64),
+  executionGoal: 'propose_change' as const,
 }
 
 const REVIEW_ARGS = {

@@ -10,7 +10,10 @@ const IDENTITY = {
   contextManifestId: 'manifest-1',
   userText: '帮我建一个喀纳斯3日团',
   userTextSha256: 'a'.repeat(64),
+  executionGoal: 'answer' as const,
 }
+
+const PROPOSE = { ...IDENTITY, executionGoal: 'propose_change' as const }
 
 const REVIEW_ARGS = {
   objectVersion: 2,
@@ -103,7 +106,7 @@ describe('createMastraHeadlessExecutor', () => {
         toolResults: [{ toolName: 'proposeSourceOrderReviewPackage', result: { status: 'accepted', ...reviewPackage } }],
       }),
     })
-    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
       result: { kind: 'awaiting_review', reviewPackage },
     })
   })
@@ -150,7 +153,7 @@ describe('createMastraHeadlessExecutor', () => {
         }],
       }),
     })
-    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
       result: { kind: 'awaiting_review', reviewPackage },
     })
   })
@@ -173,8 +176,8 @@ describe('createMastraHeadlessExecutor', () => {
         getFullOutput: async () => ({ text: '请审核', toolResults: [results[1]] }),
       }),
     })
-    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
-      result: { kind: 'awaiting_review', reviewPackage: packages[0], reviewPackages: packages },
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', completionBasis: { kind: 'accepted_review_package' }, reviewPackage: packages[0], reviewPackages: packages },
     })
   })
 
@@ -186,7 +189,7 @@ describe('createMastraHeadlessExecutor', () => {
         result: { status: 'accepted', ...REVIEW_ARGS },
       })) }),
     })
-    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
       result: { kind: 'awaiting_review', reviewPackages: [REVIEW_ARGS, REVIEW_ARGS] },
     })
   })
@@ -217,6 +220,7 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: {
         kind: 'registered_intent',
+        completionBasis: { kind: 'governed_action_result' },
         intent: {
           key: 'task.departure-creation.requested',
           confidence: 'high',
@@ -253,6 +257,7 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: {
         kind: 'awaiting_user_input',
+        completionBasis: { kind: 'persistent_clarification' },
         interaction: {
           type: 'free_text',
           prompt: '你希望新建发团，还是查询已有发团？',
@@ -272,7 +277,7 @@ describe('createMastraHeadlessExecutor', () => {
 
     await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
       result: {
-        kind: 'completed',
+        kind: 'answered',
         message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
         diagnostic: {
           processorVersion: 'mastra-token-limiter-contiguous/v1',
@@ -293,7 +298,7 @@ describe('createMastraHeadlessExecutor', () => {
           yield { type: 'step-start' }
           yield {
             type: 'tool-call-delta',
-            payload: { toolName: 'proposeReviewPackage', argsTextDelta: '{"secret":1}' },
+            payload: { toolName: 'getTaskContext', argsTextDelta: '{"secret":1}' },
           }
           yield { type: 'step-finish' }
           yield { type: 'step-start' }
@@ -303,7 +308,10 @@ describe('createMastraHeadlessExecutor', () => {
         })(),
         getFullOutput: async () => ({
           text: '已记下喀纳斯三日团。',
-          toolCalls: [{ toolName: 'proposeReviewPackage', args: REVIEW_ARGS }],
+          toolCalls: [{ toolName: 'getTaskContext', toolCallId: 'context-1', args: {} }],
+          toolResults: [
+            { toolName: 'getTaskContext', toolCallId: 'context-1', result: { snapshot: {} } },
+          ],
         }),
       }),
     })
@@ -326,7 +334,7 @@ describe('createMastraHeadlessExecutor', () => {
     )
     expect(JSON.stringify(frames)).not.toContain('secret')
     expect(result).toMatchObject({
-      kind: 'completed',
+      kind: 'answered',
       message: '已记下喀纳斯三日团。',
     })
   })
@@ -414,7 +422,7 @@ describe('createMastraHeadlessExecutor', () => {
       }),
     })
 
-    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
       result: {
         kind: 'awaiting_review',
         reviewPackage: REVIEW_ARGS,
@@ -520,7 +528,7 @@ describe('createMastraHeadlessExecutor', () => {
     })
     await expect(collectHeadlessRun(withActual(IDENTITY))).resolves.toMatchObject({
       result: {
-        kind: 'completed',
+        kind: 'answered',
         diagnostic: {
           usageSource: 'actual',
           usage: { input: 80, output: 20, total: 100 },
@@ -537,8 +545,116 @@ describe('createMastraHeadlessExecutor', () => {
       generate: async () => ({ text: '已记下。' }),
     })
     const missing = await collectHeadlessRun(withoutUsage(IDENTITY))
-    expect(missing.result).toMatchObject({ kind: 'completed', diagnostic: { usageSource: 'missing' } })
-    expect(missing.result.kind === 'completed' ? missing.result.diagnostic?.usage : 'x').toBeUndefined()
+    expect(missing.result).toMatchObject({ kind: 'answered', diagnostic: { usageSource: 'missing' } })
+    expect(missing.result.kind === 'answered' ? missing.result.diagnostic?.usage : 'x').toBeUndefined()
+  })
+
+  it('completes an ordinary answer with a final-answer basis', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '今天合作伙伴账款怎么查？',
+      generate: async () => ({ text: '合作伙伴账款在财务菜单查看。', toolCalls: [] }),
+    })
+    await expect(
+      collectHeadlessRun(executor({ ...IDENTITY, executionGoal: 'answer' })),
+    ).resolves.toMatchObject({
+      result: {
+        kind: 'answered',
+        message: '合作伙伴账款在财务菜单查看。',
+        completionBasis: { kind: 'final_answer' },
+      },
+    })
+  })
+
+  it('rejects an empty model answer instead of completing with the display fallback', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '今天合作伙伴账款怎么查？',
+      generate: async () => ({ text: '   ', toolCalls: [] }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+      },
+    })
+  })
+
+  it('fails propose_change that only returned display text as AGENT_OUTCOME_INCOMPLETE', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '把团名改成八月川西团',
+      generate: async () => ({ text: '我将继续处理团名修改。', toolCalls: [] }),
+    })
+    await expect(
+      collectHeadlessRun(executor({ ...IDENTITY, executionGoal: 'propose_change' })),
+    ).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+      },
+    })
+  })
+
+  it('accepts propose_change after an accepted review package', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '把团名改成八月川西团',
+      generate: async () => ({
+        text: '请审核团名。',
+        toolCalls: [{ toolName: 'proposeReviewPackage' }],
+        toolResults: [{ toolName: 'proposeReviewPackage', result: { status: 'accepted', ...REVIEW_ARGS } }],
+      }),
+    })
+    await expect(
+      collectHeadlessRun(executor({ ...IDENTITY, executionGoal: 'propose_change' })),
+    ).resolves.toMatchObject({
+      result: {
+        kind: 'awaiting_review',
+        completionBasis: { kind: 'accepted_review_package' },
+      },
+    })
+  })
+
+  it('does not complete an answer that still has unresolved tool failures', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: 'tool-error',
+            payload: { toolName: 'getMaterialParseResult', toolCallId: 'failed', error: 'private details' },
+          }
+          yield { type: 'text-delta', payload: { text: '无法读取，但我先结束。' } }
+        })(),
+        getFullOutput: async () => ({
+          text: '无法读取，但我先结束。',
+          toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'failed' }],
+        }),
+      }),
+    })
+    await expect(
+      collectHeadlessRun(executor({ ...IDENTITY, executionGoal: 'answer' })),
+    ).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+      },
+    })
+  })
+
+  it('does not complete an answer when a tool call has no result', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '读取附件',
+      generate: async () => ({
+        text: '已经读取完成。',
+        toolCalls: [{ toolName: 'getMaterialParseResult', toolCallId: 'missing-result' }],
+        toolResults: [],
+      }),
+    })
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false },
+        diagnostic: { toolSteps: [{ status: 'failed' }] },
+      },
+    })
   })
 
   it('turns a TokenLimiter tripwire into a recoverable capacity failure', async () => {

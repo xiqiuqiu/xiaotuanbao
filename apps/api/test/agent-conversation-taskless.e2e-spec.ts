@@ -54,7 +54,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+      outcome: { kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } },
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -91,7 +91,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   beforeEach(async () => {
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
     await prisma.aiWorkflowJob.updateMany({
       where: {
         organizationId,
@@ -374,6 +374,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     agent.setOutcomes([
       {
         kind: 'registered_intent',
+        completionBasis: { kind: 'governed_action_result' },
         intent: {
           key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
           confidence: 'high',
@@ -381,7 +382,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         },
         message: '正在准备建团任务。',
       },
-      { kind: 'completed', message: '已进入建团专长。' },
+      {
+        kind: 'awaiting_user_input',
+        interaction: { type: 'free_text', prompt: '已进入建团专长。' },
+        completionBasis: { kind: 'persistent_clarification' },
+      },
     ])
     const beforeWorker = agent.callCount()
     const sent = await sendFirst(
@@ -405,7 +410,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         },
       },
     })
-    expect(batch.status).toBe(AiInputBatchStatus.completed)
+    expect(batch.status).toBe(AiInputBatchStatus.awaiting_user_input)
     expect(agent.callCount()).toBe(beforeWorker + 2)
     expect(batch.taskLinks).toHaveLength(1)
     expect(batch.taskLinks[0].role).toBe(InputBatchTaskRole.created)
@@ -445,7 +450,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     await expect(prisma.agentTask.findUniqueOrThrow({ where: { id: taskId } })).resolves.toMatchObject({
       goal: '创建七月喀纳斯发团',
       ownerUserId,
-      status: 'active',
+      status: 'waiting',
     })
     const events = await prisma.aiConversationEvent.findMany({
       where: { conversationId },
@@ -474,6 +479,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       kind: 'registered_intent',
       intent: { key: 'partner.ledger.query', confidence: 'high', goal: '查询伙伴账款' },
       message: '当前尚未登记这个能力。',
+      completionBasis: { kind: 'governed_action_result' },
     })
     const sent = await sendFirst(
       coordinatorToken,
@@ -502,6 +508,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     agent.setOutcomes([
       {
         kind: 'registered_intent',
+        completionBasis: { kind: 'governed_action_result' },
         intent: {
           key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
           confidence: 'high',
@@ -509,7 +516,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         },
         message: '正在准备建团任务。',
       },
-      { kind: 'completed', message: '不应执行的续跑。' },
+      { kind: 'answered', message: '不应执行的续跑。', completionBasis: { kind: 'final_answer' } },
     ])
     const beforeWorker = agent.callCount()
     const sent = await sendFirst(
@@ -552,6 +559,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         goal: `${testPrefix} 创建无权限发团`,
       },
       message: '正在准备建团任务。',
+      completionBasis: { kind: 'governed_action_result' },
     })
     const sent = await sendFirst(
       financeToken,
@@ -655,6 +663,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   it('等待回答会释放执行权，普通输入继续执行且不会处置待回答交互', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '你希望新建发团，还是查询已有发团？' },
     })
     const sent = await sendFirst(
@@ -685,7 +694,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       version: 1,
     })
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
     await sendFollowUp(
       coordinatorToken,
       conversationId,
@@ -713,6 +722,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   it('同一会话允许多条未处置追问并存', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充出发城市' },
     })
     const sent = await sendFirst(
@@ -725,6 +735,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充预算' },
     })
     await sendFollowUp(
@@ -755,9 +766,10 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     agent.setOutcomes([
       {
         kind: 'awaiting_user_input',
+        completionBasis: { kind: 'persistent_clarification' },
         interaction: { type: 'free_text', prompt: '请补充信息' },
       },
-      { kind: 'completed', message: COMPLETED_MESSAGE },
+      { kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } },
     ])
     const first = await sendFirst(
       coordinatorToken,
@@ -833,6 +845,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   it('answers a pending interaction and resumes the taskless run', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '还需要补充哪一段？' },
     })
     const sent = await sendFirst(
@@ -854,7 +867,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       { interactionId: asked.pendingInteraction?.id, interactionVersion: 1 },
     ).expect(400)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
     const replied = await sendFollowUp(
       coordinatorToken,
       conversationId,
@@ -901,6 +914,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   it('追问回复按服务端事件顺序执行，不越过更早的普通输入', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
+      completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充城市' },
     })
     const sent = await sendFirst(
@@ -930,7 +944,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       },
     ).expect(201)
 
-    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
     await processor.processDueJobs(1)
     expect(
       await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: ordinary.body.data.batch.id } }),
@@ -1349,6 +1363,33 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         where: { conversationId, kind: AiConversationEventKind.agent_message },
       }),
     ).toBe(1)
+  })
+
+  it('completes an ordinary answer with matching completion basis #474', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 今天合作伙伴账款怎么查？`,
+      `${testPrefix}-ordinary-answer`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const inputBatchId = sent.body.data.batch.id as string
+    await processor.processDueJobs(5)
+
+    const batch = await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: inputBatchId } })
+    expect(batch.status).toBe(AiInputBatchStatus.completed)
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({ where: { inputBatchId } })
+    expect(attempt.status).toBe(AiAgentAttemptStatus.completed)
+    expect(attempt.resultJson).toMatchObject({
+      kind: 'answered',
+      completionBasis: { kind: 'final_answer' },
+    })
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId, type: AiWorkflowJobType.agent_batch },
+    })
+    expect(job.status).toBe(AiWorkflowJobStatus.succeeded)
+    const events = await listEvents(coordinatorToken, conversationId)
+    expect(events.events.some((event) => event.kind === 'agent_message')).toBe(true)
+    expect(events.activeBatch).toBeNull()
   })
 
   it('does not persist a final agent_message when the Agent rate-limits the run #419', async () => {

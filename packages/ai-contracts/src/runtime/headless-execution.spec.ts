@@ -45,11 +45,19 @@ describe('headless Agent execution contract', () => {
     expect(
       headlessRunFrameSchema.parse({
         type: 'run.completed',
-        result: { kind: 'completed', message: '已根据当前资料整理出团基础信息。' },
+        result: {
+          kind: 'answered',
+          message: '已根据当前资料整理出团基础信息。',
+          completionBasis: { kind: 'final_answer' },
+        },
       }),
     ).toEqual({
       type: 'run.completed',
-      result: { kind: 'completed', message: '已根据当前资料整理出团基础信息。' },
+      result: {
+        kind: 'answered',
+        message: '已根据当前资料整理出团基础信息。',
+        completionBasis: { kind: 'final_answer' },
+      },
     })
 
     expect(() =>
@@ -76,6 +84,7 @@ describe('headless Agent execution contract', () => {
         ...identity,
         userText: '帮我建一个喀纳斯3日团',
         userTextSha256,
+        executionGoal: 'answer',
         runId: 'legacy-run',
         messages: ['must not become execution identity'],
       }),
@@ -83,6 +92,7 @@ describe('headless Agent execution contract', () => {
       ...identity,
       userText: '帮我建一个喀纳斯3日团',
       userTextSha256,
+      executionGoal: 'answer',
     })
 
     expect(
@@ -93,6 +103,7 @@ describe('headless Agent execution contract', () => {
         contextManifestId: identity.contextManifestId,
         userText: '今天合作伙伴账款怎么查？',
         userTextSha256,
+        executionGoal: 'answer',
       }),
     ).toEqual({
       conversationId: identity.conversationId,
@@ -101,6 +112,7 @@ describe('headless Agent execution contract', () => {
       contextManifestId: identity.contextManifestId,
       userText: '今天合作伙伴账款怎么查？',
       userTextSha256,
+      executionGoal: 'answer',
     })
 
     expect(() =>
@@ -118,11 +130,13 @@ describe('headless Agent execution contract', () => {
         ...identity,
         userText: '  帮我建一个喀纳斯3日团  ',
         userTextSha256,
+        executionGoal: 'answer',
       }),
     ).toEqual({
       ...identity,
       userText: '帮我建一个喀纳斯3日团',
       userTextSha256,
+      executionGoal: 'answer',
     })
   })
 
@@ -145,13 +159,15 @@ describe('headless Agent execution contract', () => {
   it('accepts only structured terminal outcomes and rejects model prose as a status', () => {
     expect(
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         message: '已根据当前资料整理出团基础信息。',
+        completionBasis: { kind: 'final_answer' },
         extra: 'strip',
       }),
     ).toEqual({
-      kind: 'completed',
+      kind: 'answered',
       message: '已根据当前资料整理出团基础信息。',
+      completionBasis: { kind: 'final_answer' },
     })
 
     expect(
@@ -165,6 +181,7 @@ describe('headless Agent execution contract', () => {
           grantedCapabilities: ['departure:write'],
         },
         message: '正在准备建团任务。',
+        completionBasis: { kind: 'governed_action_result' },
       }),
     ).toEqual({
       kind: 'registered_intent',
@@ -174,16 +191,19 @@ describe('headless Agent execution contract', () => {
         goal: '创建七月喀纳斯发团',
       },
       message: '正在准备建团任务。',
+      completionBasis: { kind: 'governed_action_result' },
     })
 
     expect(
       headlessExecutionResultSchema.parse({
         kind: 'awaiting_user_input',
         interaction: { type: 'free_text', prompt: '出团日期是哪一天？' },
+        completionBasis: { kind: 'persistent_clarification' },
       }),
     ).toEqual({
       kind: 'awaiting_user_input',
       interaction: { type: 'free_text', prompt: '出团日期是哪一天？' },
+      completionBasis: { kind: 'persistent_clarification' },
     })
 
     expect(
@@ -197,6 +217,7 @@ describe('headless Agent execution contract', () => {
             { id: '5d', label: '5天' },
           ],
         },
+        completionBasis: { kind: 'persistent_clarification' },
       }),
     ).toMatchObject({
       kind: 'awaiting_user_input',
@@ -221,6 +242,7 @@ describe('headless Agent execution contract', () => {
       headlessExecutionResultSchema.parse({
         kind: 'awaiting_review',
         reviewPackage,
+        completionBasis: { kind: 'accepted_review_package' },
       }),
     ).toMatchObject({
       kind: 'awaiting_review',
@@ -243,7 +265,7 @@ describe('headless Agent execution contract', () => {
 
     expect(() =>
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         text: '模型说已经问完了',
       }),
     ).toThrow()
@@ -260,8 +282,9 @@ describe('headless Agent execution contract', () => {
     expect(
       diagnosticFromResult(
         headlessExecutionResultSchema.parse({
-          kind: 'completed',
+          kind: 'answered',
           message: '已根据当前资料整理出团基础信息。',
+          completionBasis: { kind: 'final_answer' },
         }),
       ),
     ).toEqual({
@@ -274,8 +297,9 @@ describe('headless Agent execution contract', () => {
   it('accepts optional diagnostic and distinguishes missing, estimated and actual usage', () => {
     expect(
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         message: '已根据当前资料整理出团基础信息。',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: {
           mastraTraceId: 'trace-1',
           usageSource: 'actual',
@@ -324,16 +348,18 @@ describe('headless Agent execution contract', () => {
 
     expect(() =>
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         message: 'ok',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: { usageSource: 'actual' },
       }),
     ).toThrow()
 
     expect(() =>
       headlessExecutionResultSchema.parse({
-        kind: 'completed',
+        kind: 'answered',
         message: 'ok',
+        completionBasis: { kind: 'final_answer' },
         diagnostic: { usageSource: 'missing', usage: { total: 10 } },
       }),
     ).toThrow()
