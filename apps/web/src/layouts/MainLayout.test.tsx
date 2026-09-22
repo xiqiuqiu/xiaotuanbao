@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App, ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -463,6 +465,27 @@ describe('MainLayout 侧栏开关', () => {
       search: undefined,
       hash: undefined,
     })
+  })
+
+  it('生产只挂载统一会话壳，不再挂旧建团聊天或其 bootstrap', () => {
+    const webSrc = resolve(__dirname, '..')
+    expect(existsSync(resolve(webSrc, 'features/ai-assist/AiCreateAssistChat.tsx'))).toBe(false)
+    expect(existsSync(resolve(webSrc, 'features/ai-assist/useAiCreateAssistBootstrap.ts'))).toBe(false)
+    const layout = readFileSync(resolve(__dirname, 'AssistPane.tsx'), 'utf8')
+    const workspace = readFileSync(
+      resolve(webSrc, 'features/agent-conversation/DepartureCollaborationWorkspace.tsx'),
+      'utf8',
+    )
+    const chat = readFileSync(
+      resolve(webSrc, 'features/agent-conversation/AgentConversationChat.tsx'),
+      'utf8',
+    )
+    expect(layout).toMatch(/AgentConversationChat/)
+    expect(layout).not.toMatch(/AiCreateAssistChat|useAiCreateAssistBootstrap/)
+    expect(workspace).toMatch(/<AgentConversationChat/)
+    expect(workspace).not.toMatch(/AiCreateAssistChat|sendAiConversationMessage/)
+    expect(chat).toMatch(/sendAgentConversationText/)
+    expect(chat).not.toMatch(/sendAiConversationMessage|primaryTaskId:\s*taskId/)
   })
 
   it('persist 默认收起电子化助理', () => {

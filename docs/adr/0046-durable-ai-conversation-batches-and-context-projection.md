@@ -81,7 +81,7 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 - 消息、附件、建议项、流式状态及工具调用展示应先使用 CopilotKit v2 组件、Slots、`useAttachments` 和 activity/message/tool renderer。只有框架扩展点无法满足已确认需求时才允许自定义，并须在 PR 中记录缺口与不可复用证据；Ant Design 继续负责表单、审核、业务状态和通用反馈。
 - 确认后后台工作流可创建后续批次，重新读取最新任务事实并继续协作。拒绝表示本次候选作废且草稿未修改；系统等待 User 下一条明确指令，不追问、不自动重新生成。
 - User 在表单修正候选值时，原证据只保留为 AI 原提案的依据；修正另行记录操作者、时间和前后值，不把修正值伪装成原资料识别结果。永久审核记录采用去重证据目录与候选引用：目录只复制稳定来源定位、内容哈希及有硬上限的短摘录，完整消息或资料正文继续由原始事实源持有；同一证据支持多个候选时只保存一次。候选数、单候选证据数、短摘录长度及整包 JSON 均须设服务端硬上限。
-- 发送后立即显示 User 消息及持续更新的业务状态，例如“发送中、解析 1/2、正在整理、等待回答、等待表单审核”。解析期间不先生成没有实际内容的“已收到，稍后处理”。后台失败应在原位置提供重试失败文件、移除后继续或放弃本批等明确操作。
+- 发送后立即显示 User 消息及持续更新的业务状态，例如“发送中、解析 1/2、正在整理、等待回答、等待审核”。解析期间不先生成没有实际内容的“已收到，稍后处理”。后台失败应在原位置提供重试失败文件、移除后继续或放弃本批等明确操作。
 
 ## 跨设备文本草稿
 
@@ -95,7 +95,7 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 expand 阶段已把会话、批次、Worker、SSE 与 Context Manifest 落地。contract 阶段删除仍让浏览器拥有执行身份的旧缝，不新开 ADR，也不把 ADR-0047 动作网关并进本票。
 
 - 打开协助窗只创建或恢复任务与 `AiConversation`；`assist-session` 只返回这两者。不创建 `AiCreateActivityRun`，不签发 AI 操作委托，不返回 `runId` / `delegationToken` / `expiresAt`。
-- `AiCreateActivityRun` 仅在 Worker 认领已齐套批次时创建，是一次 Agent attempt 的外壳。attempt 到达已完成、等待 User 回答、等待表单审核或失败时结束该运行（实体仍为 `completed` / `failed`，暂停原因在批次）；等待审核期间不得保持 `running`。下一批次认领新建；租约回收未结束的 attempt 时复用原运行。审核包归属产生它的那次运行。不在本票删除或与 `AiAgentAttempt` 合并该实体。
+- `AiCreateActivityRun` 仅在 Worker 认领已齐套批次时创建，是一次 Agent attempt 的外壳。attempt 到达已完成、等待 User 回答、等待审核或失败时结束该运行（实体仍为 `completed` / `failed`，暂停原因在批次）；等待审核期间不得保持 `running`。下一批次认领新建；租约回收未结束的 attempt 时复用原运行。审核包归属产生它的那次运行。不在本票删除或与 `AiAgentAttempt` 合并该实体。
 - HTTP `*ForAgent()` 仍供无头 Agent 使用，但委托必须绑定 `running` 的 attempt，且与会话、批次、运行一致。缺 attempt 的开窗形态直接拒绝。浏览器不持有委托。
 - Agent 进程唯一执行入口是 Worker 调用 `/v1/headless-runs`。`POST /copilotkit` 拒绝交互式执行；`GET /copilotkit/info` 可留作壳层发现。CopilotKit 继续作为受控 `CopilotChatView` 与附件 Slot，审核/工具提示投影自持久化会话事件，不依赖直播 toolCalls，也不把可执行 runtime 当第二执行者。
 - CI 用确定性 OCR/Agent 的 API e2e 覆盖关页、刷新、第二设备、Worker 重启、解析失败、重试、拒绝与确认。一条 Playwright 冒烟走纯文字 → 待审核包 → 表单确认写入发团创建草稿 → 刷新后仍在，放在现有 `web-e2e`、本票不进 CI 门禁；真实 OCR/模型冒烟不进默认 CI，只写开发与运维边界。

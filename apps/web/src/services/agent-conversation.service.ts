@@ -194,6 +194,21 @@ export async function retryFailedAgentConversationMaterials(
   )
 }
 
+export async function retryFailedAgentConversationBatch(
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/retry`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
 export async function removeAgentConversationMaterials(
   conversationId: string,
   batchId: string,

@@ -19,6 +19,7 @@ import {
   listAgentConversations,
   removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
+  retryFailedAgentConversationBatch,
   retryFailedAgentConversationMaterials,
   saveAgentConversationDraft,
   sendAgentConversationText,
@@ -159,6 +160,16 @@ describe('agent conversation service', () => {
       '/agent/conversations/c-1/batches/batch-3/retry-failed-materials',
       {},
       { silentError: true, headers: { 'Idempotency-Key': 'key-retry-materials' } },
+    )
+  })
+
+  it('retries a failed Agent batch on the conversation HTTP path without a task identity', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 4 })
+    await retryFailedAgentConversationBatch('c-1', 'batch-fail', 'key-retry-batch')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-fail/retry',
+      {},
+      { silentError: true, headers: { 'Idempotency-Key': 'key-retry-batch' } },
     )
   })
 

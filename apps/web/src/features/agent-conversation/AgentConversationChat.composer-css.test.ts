@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-describe('AiCreateAssistChat composer CSS', () => {
-  const css = readFileSync(resolve(__dirname, './AiCreateAssistChat.module.css'), 'utf8')
+describe('AgentConversationChat composer CSS', () => {
+  const css = readFileSync(resolve(__dirname, './AgentConversationChat.module.css'), 'utf8')
 
   it('keeps the input overlay opaque so message text cannot show through attachments', () => {
     expect(css).toContain("[data-testid='copilot-input-overlay']")
