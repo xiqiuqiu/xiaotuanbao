@@ -96,6 +96,7 @@ test.describe('agent page locator #371', () => {
     await history.getByRole('searchbox', { name: '搜索会话' }).fill(String(stamp))
     await history.getByRole('option', { name: title }).click()
 
+    await expect(pane.getByRole('button', { name: '打开会话历史' })).toContainText(title)
     await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
     await pane.getByRole('button', { name: '获取当前页面' }).click()
     await expect(pane.getByTestId('current-page-chip')).toBeVisible()
@@ -103,12 +104,14 @@ test.describe('agent page locator #371', () => {
     const locatorRequest = page.waitForRequest(
       (request) =>
         request.method() === 'POST' &&
-        /\/api\/agent\/conversations\/[^/]+\/messages$/.test(new URL(request.url()).pathname) &&
-        Boolean((request.postDataJSON() as { pageLocator?: unknown }).pageLocator),
+        /\/api\/agent\/conversations(?:\/[^/]+)?\/messages$/.test(new URL(request.url()).pathname),
     )
     await pane.getByRole('textbox', { name: '询问小团宝业务' }).fill('请读取当前发团')
     await pane.getByRole('textbox', { name: '询问小团宝业务' }).press('Enter')
     const captured = await locatorRequest
+    expect(new URL(captured.url()).pathname).toMatch(
+      /\/api\/agent\/conversations\/[^/]+\/messages$/,
+    )
     expect((captured.postDataJSON() as { pageLocator?: { kind?: string } }).pageLocator?.kind).toBe(
       'departure',
     )

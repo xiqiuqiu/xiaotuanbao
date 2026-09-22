@@ -1578,7 +1578,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
-        executionGoal: executionGoalForRoute({ route }),
+        executionGoal: executionGoalForRoute({ route, userText }),
         agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
