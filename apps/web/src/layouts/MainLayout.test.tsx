@@ -472,8 +472,20 @@ describe('MainLayout 侧栏开关', () => {
     expect(existsSync(resolve(webSrc, 'features/ai-assist/AiCreateAssistChat.tsx'))).toBe(false)
     expect(existsSync(resolve(webSrc, 'features/ai-assist/useAiCreateAssistBootstrap.ts'))).toBe(false)
     const layout = readFileSync(resolve(__dirname, 'AssistPane.tsx'), 'utf8')
+    const workspace = readFileSync(
+      resolve(webSrc, 'features/agent-conversation/DepartureCollaborationWorkspace.tsx'),
+      'utf8',
+    )
+    const chat = readFileSync(
+      resolve(webSrc, 'features/agent-conversation/AgentConversationChat.tsx'),
+      'utf8',
+    )
     expect(layout).toMatch(/AgentConversationChat/)
     expect(layout).not.toMatch(/AiCreateAssistChat|useAiCreateAssistBootstrap/)
+    expect(workspace).toMatch(/<AgentConversationChat/)
+    expect(workspace).not.toMatch(/AiCreateAssistChat|sendAiConversationMessage/)
+    expect(chat).toMatch(/sendAgentConversationText/)
+    expect(chat).not.toMatch(/sendAiConversationMessage|primaryTaskId:\s*taskId/)
   })
 
   it('persist 默认收起电子化助理', () => {

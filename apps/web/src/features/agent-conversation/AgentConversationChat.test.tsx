@@ -1658,6 +1658,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     expect(source).not.toMatch(/runAgent|useHumanInTheLoop|useAiCreateAssistBootstrap/)
     expect(source).not.toMatch(/sendAiConversationMessage|primaryTaskId:\s*taskId/)
     expect(source).toMatch(/projectAgentInteraction/)
+    expect(source).toMatch(/sendAgentConversationText/)
     renderChat()
     await screen.findByRole('textbox', { name: '询问小团宝业务' })
   })

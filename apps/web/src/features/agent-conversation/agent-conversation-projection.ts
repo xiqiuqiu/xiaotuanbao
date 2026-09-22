@@ -425,7 +425,6 @@ export type ProjectConversationFrameInput = {
   activeBatch?: AiInputBatchView | null
   pendingUploadCount?: number
   liveAssistant?: LiveAssistantSnapshot | null
-  sessionReasoning?: Record<string, string>
 }
 
 export function isCopilotChatRunning(

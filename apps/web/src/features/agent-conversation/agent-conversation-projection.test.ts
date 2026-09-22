@@ -151,6 +151,19 @@ describe('projectAgentInteraction #482', () => {
       }),
     ])
   })
+
+  it('does not take sessionReasoning on the conversation-frame or interaction projection', () => {
+    const source = readFileSync(join(__dirname, 'agent-conversation-projection.ts'), 'utf8')
+    expect(source).toMatch(/export type ProjectConversationFrameInput/)
+    expect(source).toMatch(/export type AgentInteractionProjectionInput/)
+    expect(source).not.toMatch(
+      /export type ProjectConversationFrameInput = \{[\s\S]*?sessionReasoning[\s\S]*?\}/,
+    )
+    expect(source).not.toMatch(
+      /export type AgentInteractionProjectionInput = \{[\s\S]*?sessionReasoning[\s\S]*?\}/,
+    )
+    expect(source).not.toMatch(/sessionReasoning:\s*input\.sessionReasoning/)
+  })
 })
 
 
@@ -366,7 +379,6 @@ describe('AI create chat status projection', () => {
         events: started.visibleEvents,
         pendingText: null,
         liveAssistant: null,
-        sessionReasoning: null,
       })
         .filter((message) => message.role === 'user' || message.role === 'assistant')
         .map((message) => message.content),
@@ -432,7 +444,6 @@ describe('AI create chat status projection', () => {
       events: queued.visibleEvents,
       pendingText: null,
       liveAssistant: null,
-      sessionReasoning: null,
     })
 
     expect(queued.messages).toEqual([])
@@ -502,7 +513,6 @@ describe('AI create chat status projection', () => {
       events: queued.visibleEvents,
       pendingText: null,
       liveAssistant: null,
-      sessionReasoning: null,
     })
       .filter((message) => message.role === 'user' || message.role === 'assistant')
       .map((message) => message.content)
@@ -550,7 +560,6 @@ describe('AI create chat status projection', () => {
       events: queued.visibleEvents,
       pendingText: null,
       liveAssistant,
-      sessionReasoning: null,
     })
 
     expect(queued.messages).toEqual([])
@@ -1166,7 +1175,6 @@ describe('projectConversationFrame live reasoning #416', () => {
       events: completed,
       pendingText: null,
       liveAssistant: null,
-      sessionReasoning: { 'attempt-9': '再核人数' },
     })
     expect(inSession.some((message) => message.role === 'reasoning')).toBe(false)
     expect(inSession.filter((message) => message.role === 'assistant')).toEqual([
@@ -1218,7 +1226,6 @@ describe('projectConversationFrame live reasoning #416', () => {
         reasoningText: '再核第二轮人数',
         text: '',
       },
-      sessionReasoning: { 'attempt-9': '先核对出团日期' },
     })
     expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
       {
@@ -1302,7 +1309,6 @@ describe('projectConversationFrame live reasoning #416', () => {
         reasoningText: '先核对出团日期',
         text: '半段回复',
       },
-      sessionReasoning: { 'attempt-9': '先核对出团日期' },
     })
     expect(messages.some((message) => message.role === 'reasoning')).toBe(false)
     expect(messages.some((message) => message.content === '半段回复')).toBe(false)
@@ -1382,7 +1388,6 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
       ],
       pendingText: null,
       liveAssistant: livePartial,
-      sessionReasoning: { 'attempt-9': '先核对出团日期' },
     })
     expect(
       messages
