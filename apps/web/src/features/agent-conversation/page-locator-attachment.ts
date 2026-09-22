@@ -10,8 +10,20 @@ import {
 } from '@xiaotuanbao/shared'
 
 export type AgentCurrentPageAttachment =
-  | { kind: 'page_locator'; locator: PageLocator }
+  | { kind: 'page_locator'; locator: PageLocator; objectLabel?: string }
   | AgentTaskPageAttachment
+
+const PAGE_SECTION_LABELS: Partial<Record<PageLocator['section'] & string, string>> = {
+  accounts: '往来账款',
+  overview: '概览信息',
+  sourceOrders: '客源管理',
+  execution: '执行安排',
+  incomeRecords: '增收记录',
+  receivables: '应收管理',
+  payables: '应付管理',
+  transactions: '收支流水',
+  verifications: '核销记录',
+}
 
 export function currentPageAttachmentFromLocation(
   pathname: string,
@@ -27,6 +39,12 @@ export function currentPageAttachmentFromLocation(
 
 export function currentPageAttachmentLabel(attachment: AgentCurrentPageAttachment): string {
   if (attachment.kind === 'page_locator') {
+    const sectionLabel = attachment.locator.section
+      ? PAGE_SECTION_LABELS[attachment.locator.section]
+      : undefined
+    if (attachment.objectLabel) {
+      return `当前页：${attachment.objectLabel}${sectionLabel ? ` · ${sectionLabel}` : ''}`
+    }
     return pageLocatorLabel(attachment.locator)
   }
   return registeredTaskDescriptors.getByTaskType(attachment.taskType).attachmentLabel

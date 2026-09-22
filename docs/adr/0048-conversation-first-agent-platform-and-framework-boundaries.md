@@ -68,7 +68,7 @@ Review Package 同样属于产生它的 Conversation、InputBatch、Attempt 和 
 
 侧边栏的会话切换与业务导航解耦：选择任意历史 Conversation 只替换聊天投影，当前业务页面、Tab、筛选和未保存编辑保持不动，也不自动把该会话关联当前业务对象。会话头部不展示“上次业务位置”或返回链接，业务导航交给 User；侧边栏不按当前页面过滤全部历史。查看历史不会启动 Agent，是否携带当前页面 locator 由下一条消息的页面上下文规则决定。
 
-第一版不做自动上下文感知。User 从业务页新建会话时，Composer 默认展示可移除的当前页面 Context Chip，首个 InputBatch 携带服务端可验证的 page/object/section locator；切换历史会话后不自动带入当前页面，只提供“获取当前页面”操作，点击后才为下一批次附加。locator 不包含 DOM、截图、未保存表单值、前端缓存或权限声明，不永久改变 Conversation；API 据此重新解析真实目标并通过 Capability 读取最新事实。未来自动感知另行原型和决策。
+第一版不做自动上下文感知。User 从业务页新建会话时，Composer 默认展示可移除的当前页面 Context Chip，首个 InputBatch 携带服务端可验证的 page/object/section locator；Chip 明确展示业务标识与页面区域，发送成功后消费。切换历史会话后不自动带入当前页面，只提供“获取当前页面”操作，点击后才为下一批次附加；业务对象或页面区域变化时移除旧附件，不静默替换为新页面，同一 URL 刷新恢复尚未发送的附件。locator 不包含 DOM、截图、未保存表单值、前端缓存或权限声明，不永久改变 Conversation；API 据此重新解析真实目标并通过 Capability 读取最新事实。未来自动感知另行原型和决策。
 
 “新建会话”先进入未持久化空白态，不立即产生数据库记录或历史项，也不弹窗要求命名。首次有效发送时，服务端在同一事务中创建 Conversation、User Event 和 InputBatch；未发送即切走不留空会话。跨设备会话草稿从 Conversation 建立后才生效，首次发送前的临时输入只属于当前浏览器。
 

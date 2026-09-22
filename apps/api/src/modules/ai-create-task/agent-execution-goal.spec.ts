@@ -32,7 +32,7 @@ describe('executionGoalForRoute', () => {
     ).toBe('answer')
   })
 
-  it('defaults departure.create and departure.collaboration to propose_change', () => {
+  it('defaults departure.create and departure changes to propose_change', () => {
     const createRoute: AgentExecutionRoute = {
       kind: 'execution_definition',
       source: 'task',
@@ -46,7 +46,26 @@ describe('executionGoalForRoute', () => {
       taskId: 'task-2',
     }
     expect(executionGoalForRoute({ route: createRoute })).toBe('propose_change')
-    expect(executionGoalForRoute({ route: collaborationRoute })).toBe('propose_change')
+    expect(
+      executionGoalForRoute({ route: collaborationRoute, userText: '团名改成九月川西回团' }),
+    ).toBe('propose_change')
+    expect(
+      executionGoalForRoute({ route: collaborationRoute, userText: '能把团名改成九月川西回团吗？' }),
+    ).toBe('propose_change')
+  })
+
+  it('treats an ordinary departure question as answer', () => {
+    expect(
+      executionGoalForRoute({
+        route: {
+          kind: 'execution_definition',
+          source: 'task',
+          agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+          taskId: 'task-2',
+        },
+        userText: '现在这个发团的团名是什么？',
+      }),
+    ).toBe('answer')
   })
 
   it('defaults a persistent follow-up to clarify', () => {

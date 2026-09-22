@@ -7,10 +7,13 @@ const DRAFT_SAVE_DEBOUNCE_MS = 600
 
 type DraftVersion = Pick<AiConversationDraftView, 'draftEpoch' | 'revision'>
 
+function pendingDraftStorageKey(conversationId: string | null): string {
+  return `conversation-pending-draft:${conversationId ?? 'new'}`
+}
+
 export function readPendingConversationDraft(conversationId: string | null): (DraftVersion & { text: string }) | null {
-  if (!conversationId) return null
   try {
-    const value = JSON.parse(sessionStorage.getItem(`conversation-pending-draft:${conversationId}`) ?? 'null')
+    const value = JSON.parse(sessionStorage.getItem(pendingDraftStorageKey(conversationId)) ?? 'null')
     return value && typeof value.text === 'string' && Number.isInteger(value.draftEpoch) && Number.isInteger(value.revision)
       ? value : null
   } catch { return null }
@@ -18,7 +21,7 @@ export function readPendingConversationDraft(conversationId: string | null): (Dr
 
 export function clearPendingConversationDraft(conversationId: string | null, text: string) {
   if (readPendingConversationDraft(conversationId)?.text === text) {
-    sessionStorage.removeItem(`conversation-pending-draft:${conversationId}`)
+    sessionStorage.removeItem(pendingDraftStorageKey(conversationId))
   }
 }
 
@@ -96,12 +99,12 @@ export function useAgentConversationDraft(conversationId: string | null) {
         conversationId: conversationIdRef.current,
         draft: value,
       })
+      sessionStorage.setItem(pendingDraftStorageKey(conversationIdRef.current), JSON.stringify({
+        text: value, draftEpoch: draftEpochRef.current, revision: draftRevisionRef.current,
+      }))
       if (!conversationIdRef.current) {
         return
       }
-      sessionStorage.setItem(`conversation-pending-draft:${conversationIdRef.current}`, JSON.stringify({
-        text: value, draftEpoch: draftEpochRef.current, revision: draftRevisionRef.current,
-      }))
       editingDraftRef.current = true
       draftSaveGenerationRef.current += 1
       const generation = draftSaveGenerationRef.current

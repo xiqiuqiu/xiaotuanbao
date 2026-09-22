@@ -1,7 +1,17 @@
 export const PAGE_LOCATOR_UNSUPPORTED = 'PAGE_LOCATOR_UNSUPPORTED'
 
 export const PAGE_LOCATOR_KINDS = ['partner', 'departure'] as const
-export const PAGE_LOCATOR_SECTIONS = ['accounts', 'overview'] as const
+export const PAGE_LOCATOR_SECTIONS = [
+  'accounts',
+  'overview',
+  'sourceOrders',
+  'execution',
+  'incomeRecords',
+  'receivables',
+  'payables',
+  'transactions',
+  'verifications',
+] as const
 
 export type PageLocatorKind = (typeof PAGE_LOCATOR_KINDS)[number]
 export type PageLocatorSection = (typeof PAGE_LOCATOR_SECTIONS)[number]
@@ -109,10 +119,11 @@ export function parsePageLocatorFromLocation(
   }
   const departureId = firstPathSegmentAfter(pathname, '/departure')
   if (departureId) {
+    const section = parseSection(searchParam(search, 'tab'))
     return parsePageLocator({
       kind: 'departure',
       objectId: departureId,
-      section: parseSection(searchParam(search, 'tab')) ?? undefined,
+      section: section ?? 'overview',
     })
   }
   return null
