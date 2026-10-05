@@ -30,7 +30,7 @@
 - A11：pass；阻断反馈使用 Alert/Modal，Tag 仅承载状态。
 - A12：F5；关闭节点使用危险 Modal，调整/重新打开均说明业务影响。
 - A13：pass；仅保留筛选与主表两个真实工作面，无嵌套 Card 墙。
-- A14：pass；沿用 `CONTEXT.md` 的应收、应付、收付款节点与核销术语。
+- A14：pass；沿用 `GLOSSARY.md` 的应收、应付、收付款节点与核销术语。
 
 ### Waives
 

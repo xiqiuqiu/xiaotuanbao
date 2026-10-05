@@ -25,4 +25,4 @@ ADR-0046/0048 已规定：流式 Token 可以丢失，最终 Agent 消息与业�
 
 ## Consequences
 
-CopilotKit 仍是受控聊天壳：即时输出投影进 `CopilotChatView` 的进行中助手消息，传输层是会话 SSE 而不是 AG-UI 直播协议。第一版必须修正 `isRunning`（含 `ready_for_agent` / `preparing_context` / `agent_running` / `waiting_for_materials`），轮询只作断线补读。词表见 `CONTEXT.md` 中 Agent 即时输出、Agent 思考过程、Agent 会话事件、Agent 交互投影、Agent 本次运行停止。
+CopilotKit 仍是受控聊天壳：即时输出投影进 `CopilotChatView` 的进行中助手消息，传输层是会话 SSE 而不是 AG-UI 直播协议。第一版必须修正 `isRunning`（含 `ready_for_agent` / `preparing_context` / `agent_running` / `waiting_for_materials`），轮询只作断线补读。词表见 `GLOSSARY.md` 中 Agent 即时输出、Agent 思考过程、Agent 会话事件、Agent 交互投影、Agent 本次运行停止。

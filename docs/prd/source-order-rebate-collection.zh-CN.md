@@ -2,7 +2,7 @@
 
 **状态**：已定稿（产品六问 2026-07-27；grilling 边界补钉 2026-07-27；落账时机修订 2026-07-28；Issue [#187](https://github.com/xiqiuqiu/xiaotuanbao/issues/187)）  
 **Menu Key**：`/departure`（客源单 / 发团概览）；应付侧复用 `/finance/*` 与 Partner 往来账款；确认单在合作团单·客源  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)（重点：Collection Split、Partner Collected Deposit、Customer Settlement Receivable、Guest Collection Receivable、Source Order Rebate Payable、Source Order Actual Collection Settlement、Settlement Amount、Departure Financial Summary）  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)（重点：Collection Split、Partner Collected Deposit、Customer Settlement Receivable、Guest Collection Receivable、Source Order Rebate Payable、Source Order Actual Collection Settlement、Settlement Amount、Departure Financial Summary）  
 **决议来源**：[ADR-0033](../adr/0033-source-order-rebate-and-split-collection.md)；六问定稿；grilling 补钉；2026-07-28 补款落账时机修订；部分取代 ADR-0002「付给合作方仅手工」；修订 ADR-0010「路径之和=结算金额」
 
 ---

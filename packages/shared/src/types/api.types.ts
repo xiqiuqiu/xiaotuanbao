@@ -2071,7 +2071,7 @@ export interface PartnerOutsourceOrderListResult {
 }
 
 /**
- * 《往来账确认单》明细行（对外单据，客户习惯名映射见 CONTEXT.md
+ * 《往来账确认单》明细行（对外单据，客户习惯名映射见 GLOSSARY.md
  * 「Partner Reconciliation Statement」词条）。字段仍用系统规范语义命名，
  * 客户习惯名（原始应收/实际应收/客户已收押金/客户补款）只出现在渲染层文案。
  */

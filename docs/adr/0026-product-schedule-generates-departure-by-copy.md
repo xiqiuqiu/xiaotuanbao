@@ -13,7 +13,7 @@ status: accepted
 
 ## Consequences
 
-- 领域用语见 `CONTEXT.md` Product Departure Source；与 Route Template 的 `sourceTemplateId` 追溯同属「来源指针、非活引用」家族，但是不同来源类型。
+- 领域用语见 `GLOSSARY.md` Product Departure Source；与 Route Template 的 `sourceTemplateId` 追溯同属「来源指针、非活引用」家族，但是不同来源类型。
 - 权限上「生成发团」仍受发团可写能力约束；财务角色不可借产品入口绕过。
 - 本决策保留为 Product Center 后续业务的实现口径；它不纳入当前 AI 建团竖切与创建发团基础功能的完成门槛。
 - 产品中心试点 P2 验收依赖本不变量。

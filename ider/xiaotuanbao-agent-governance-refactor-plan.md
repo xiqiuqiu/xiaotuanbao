@@ -6,7 +6,7 @@
 状态：**观察期已落地（代码在 `main`）**  
 对照原文：`ider/xiaotuanbao-agent-governance-refactor-plan.docx`（v1.0，2026-08-20，Proposal）  
 权威架构：[`docs/adr/0047-ai-action-gateway.md`](../docs/adr/0047-ai-action-gateway.md)  
-词汇：`CONTEXT.md` 中的 **AI 动作**、**AI 动作网关**、**AI 动作能力**、**AI 阶段审核包**、**AI 协作控制权**
+词汇：`GLOSSARY.md` 中的 **AI 动作**、**AI 动作网关**、**AI 动作能力**、**AI 阶段审核包**、**AI 协作控制权**
 
 > v1.0 Word 稿是提案。正式决策以 ADR-0047 为准；本文件只对齐「提案 → 现网代码」的进度与分叉，不再把未落地项写成已发生。
 

@@ -42,4 +42,4 @@ status: accepted
 - Organization 创建流程（含 seed、测试 helper、未来 Platform Admin 开户）必须写入 `businessPrefix`。
 - 复制发团视为新建，团号按复制当天（上海时区）年月分配，不复用源团号。
 - 需替换现有 `generate-*-no` 工具函数及 finance/departure service 中的分配逻辑；E2E 断言与演示 seed 一并更新。
-- 详细字段校验与前端交互见 `ider/业务编号规则设计说明.md`；领域词汇见根目录 `CONTEXT.md`（Organization Business Prefix）。
+- 详细字段校验与前端交互见 `ider/业务编号规则设计说明.md`；领域词汇见根目录 `GLOSSARY.md`（Organization Business Prefix）。

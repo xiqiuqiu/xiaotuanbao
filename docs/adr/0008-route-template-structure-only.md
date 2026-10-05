@@ -17,7 +17,7 @@ status: accepted
 
 ## Consequences
 
-- 领域用语见 `CONTEXT.md` Route Template；产品文案与 `ider/新建.md` 等需去掉参考价与分层 copy 表述。
+- 领域用语见 `GLOSSARY.md` Route Template；产品文案与 `ider/新建.md` 等需去掉参考价与分层 copy 表述。
 - API 契约（#78）：创建发团 / 复制发团 / 从发团保存常用路线不再接受分层 copy 标志；结构恒复制、资源金额恒 0；存量模板资源金额迁移清零。
 - UI / schema 收尾（#79–#82）：删除确认窗与分层勾选、简化保存弹窗、去掉 `fromTemplate`、建团卡片删除模板等另开 issue，不阻塞 #78。
 - 无行程段不可保存为常用路线；有段无资源可保存。删除模板不影响已建发团（`sourceTemplateId` 仅追溯、非外键）。

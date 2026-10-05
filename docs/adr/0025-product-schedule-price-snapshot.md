@@ -13,6 +13,6 @@ status: accepted
 
 ## Consequences
 
-- 领域用语见 `CONTEXT.md` Product Spec、Product Schedule Price Snapshot。
+- 领域用语见 `GLOSSARY.md` Product Spec、Product Schedule Price Snapshot。
 - 产品中心试点设计与导出「以所选班期为准」依赖此不变量。
 - 与常用路线「不存参考价」（ADR-0008）正交：规格/班期价是销售报价，不是执行资源成本。

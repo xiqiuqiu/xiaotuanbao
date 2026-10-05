@@ -12,7 +12,7 @@ Five canonical roles mapped 1:1 to GitHub labels (`needs-triage`, `needs-info`, 
 
 ### Domain docs
 
-Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
 ### UI design
 

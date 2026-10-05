@@ -52,4 +52,4 @@ docs/              项目文档
 5. 前端请求统一走 `request` 层 + TanStack Query
 6. 后端统一返回格式、DTO 校验、全局异常处理
 
-完整设计见根目录 [xiaotuanbao-infrastructure.md](../../xiaotuanbao-infrastructure.md)，领域术语见 [CONTEXT.md](../../CONTEXT.md)。
+完整设计见根目录 [xiaotuanbao-infrastructure.md](../../xiaotuanbao-infrastructure.md)，领域术语见 [GLOSSARY.md](../../GLOSSARY.md)。

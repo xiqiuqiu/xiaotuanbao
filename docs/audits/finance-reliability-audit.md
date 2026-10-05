@@ -8,7 +8,7 @@
 
 ## 1. 判定口径
 
-- 业务语义来源：`CONTEXT.md` 与已接受 ADR。
+- 业务语义来源：`GLOSSARY.md` 与已接受 ADR。
 - 实现事实来源：当前 Prisma schema、后端 public HTTP 接口及服务、Departure read model、前端入口和自动化测试。
 - 文档与代码冲突时不替任一方做业务裁决；本报告单列冲突。
 - 缺陷必须有可重复红灯、最小复现、可证伪假设和根因证据。
@@ -267,7 +267,7 @@ flowchart LR
 - 影响用户：发布人员、财务数据维护者；合法数据被阻断发布，且误导维护者删除正确的稳定键。
 - 违反不变量：I3、I9 的检查口径必须与领域事实一致。
 - 确定性红灯：通过合法客源单创建 Guest 应收、Guest 收入流水与核销；两侧 `counterpartyId` 均为同一 Source Order ID，但检查器返回两条 `COUNTERPARTY_REFERENCE_BROKEN`。
-- 可证伪假设：客源单不存在、跨 Organization、串团、检查规则滞后。只读查询证明三个现有 Guest 节点的 `counterpartyId = sourceId`，且客源单同团同 Organization；`CONTEXT.md`、ADR-0002 与生成函数均要求该稳定键，确认规则滞后。
+- 可证伪假设：客源单不存在、跨 Organization、串团、检查规则滞后。只读查询证明三个现有 Guest 节点的 `counterpartyId = sourceId`，且客源单同团同 Organization；`GLOSSARY.md`、ADR-0002 与生成函数均要求该稳定键，确认规则滞后。
 - 根因：完整性检查仍沿用旧规则“Guest/Manual 不得保存目录 ID”，未随 Guest 稳定键领域变更更新。
 - 修复：Guest ID 现在必须解析到同 Organization、同发团 Source Order；Guest 来源节点还必须满足 `counterpartyId = sourceId`。Manual 仍禁止 ID。核销匹配直接复用 shared `assertCounterpartyMatch`，避免服务与检查器再次漂移。
 - mutation：临时移除 Guest Source Order 引用校验后，断裂引用回归测试确定性变红；恢复后 3/3 通过。
@@ -298,7 +298,7 @@ flowchart LR
 
 1. **Finance Facade 边界未按 ADR-0004 落地**：ADR 要求 Facade 拥有 generation、snapshot、source finance state；当前 `DepartureFinanceFacade` 主要承担归档写门槛、结清回退与调额同步，生成和 source state 仍在 `DepartureFinanceBridgeService`，`DepartureReadModelService` 仍直接读取 Payment Schedule/Verification。属于架构债与测试 seam 漂移，尚未证明造成错误财务事实。
 2. **业务时区命名冲突**：ADR-0003 与代码明确使用 Asia/Shanghai；本目标要求覆盖 Asia/Taipei 边界。两者当前 UTC 偏移相同且均无 DST，数值结果一致，但权威命名未统一。
-3. **客源应收显式调额与 Gross Receivable 定义冲突**：`CONTEXT.md` 定义 Gross Receivable 必须由成人/儿童数量与单价派生；当前显式调整单一路径时不改人数/单价，却把 `grossReceivableCents` 改为“调整后两路径之和 + 优惠”。现有 journey 把这种行为写成预期。需业务裁决：调额是在改客源计价事实，还是只建立财务调整差异；裁决前不擅自修改。
+3. **客源应收显式调额与 Gross Receivable 定义冲突**：`GLOSSARY.md` 定义 Gross Receivable 必须由成人/儿童数量与单价派生；当前显式调整单一路径时不改人数/单价，却把 `grossReceivableCents` 改为“调整后两路径之和 + 优惠”。现有 journey 把这种行为写成预期。需业务裁决：调额是在改客源计价事实，还是只建立财务调整差异；裁决前不擅自修改。
 
 ## 8. 基线验证
 

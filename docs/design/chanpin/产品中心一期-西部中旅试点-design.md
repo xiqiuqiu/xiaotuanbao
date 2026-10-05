@@ -5,7 +5,7 @@
 **样本模板：** `docs/design/chanpin/（6.20日版大巴）2026年疆游记（西部中旅）.xlsx`  
 **终态参考：** `docs/design/chanpin/小团宝_产品中心一期_PRD_菜单合并版.docx`（全量 PRD，本文件为其试点裁剪）  
 **AI 能力参考：** `docs/design/chanpin/产品功能开发AI赋能.png`（P1 之后增强，不阻塞本试点主路径）  
-**领域权威：** 根目录 `CONTEXT.md`（Product Center 节）＞ 已采纳 ADR ＞ 本文 ＞ 全量 PRD 字面
+**领域权威：** 根目录 `GLOSSARY.md`（Product Center 节）＞ 已采纳 ADR ＞ 本文 ＞ 全量 PRD 字面
 
 ---
 
@@ -99,7 +99,7 @@
 - 班期销售价**不**写入客源单价、**不**触发生成应收。
 - 改 Product Spec 默认价**不回写**既有班期快照。
 
-UI：菜单「产品中心」；对象称「产品」「班期」。发团主名称仍为「发团」；操作文案可用「生成团单」但语义生成 Departure（以 `CONTEXT.md` 为准）。
+UI：菜单「产品中心」；对象称「产品」「班期」。发团主名称仍为「发团」；操作文案可用「生成团单」但语义生成 Departure（以 `GLOSSARY.md` 为准）。
 
 ---
 
@@ -276,7 +276,7 @@ P0 默认一个规格占位（如「标准」），班期价挂在该规格上�
 | 上下架/删除策略 | 按权限 | 不允许 | 允许 |
 | 组织须知模板 | 不允许 | 不允许 | 允许 |
 
-具体 Menu Key / Action Permission 落地时写入 ADR 或权限 seed，并更新 `CONTEXT.md`。
+具体 Menu Key / Action Permission 落地时写入 ADR 或权限 seed，并更新 `GLOSSARY.md`。
 
 ---
 
@@ -306,7 +306,7 @@ P0 默认一个规格占位（如「标准」），班期价挂在该规格上�
 | 多规格、完整须知结构化 | P0/P1 单规格 + 须知可整段 |
 | 生成团单 | 仅 P2 |
 
-实施以本文为准裁剪范围；全量 PRD 作终态与字段灵感来源。领域用语冲突时：`CONTEXT.md` 与已采纳 ADR > 本文 > 全量 PRD 字面。
+实施以本文为准裁剪范围；全量 PRD 作终态与字段灵感来源。领域用语冲突时：`GLOSSARY.md` 与已采纳 ADR > 本文 > 全量 PRD 字面。
 
 ---
 
@@ -314,7 +314,7 @@ P0 默认一个规格占位（如「标准」），班期价挂在该规格上�
 
 - 导入解析的置信度展示与「待处理内容」桶的交互细节
 - PDF 版式像素级还原程度（「接近阅读习惯」即可）；具体 PDF 库（pdfkit / react-pdf 等）实现期选定
-- 产品 Menu Key 命名与角色 seed 变更方式（须同步 `CONTEXT.md` 权限相关词条）
+- 产品 Menu Key 命名与角色 seed 变更方式（须同步 `GLOSSARY.md` 权限相关词条）
 - Short Itinerary 拆日失败时，写入发团的文案落点（备注 vs 说明字段）最终选型
 - Product Import Session 会话 TTL / 废弃清理策略
 - 正式环境是否从 Garage 切到阿里云 OSS（开发期固定 Garage，见 ADR-0027）

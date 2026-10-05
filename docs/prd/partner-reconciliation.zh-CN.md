@@ -2,7 +2,7 @@
 
 **状态**：已定稿（Wayfinder [#116](https://github.com/xiqiuqiu/xiaotuanbao/issues/116)，2026-07-15）  
 **Menu Key**：`/partner`（详情子路由不单独设 Menu Key，沿 Partner Epic 1）  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)（重点词条：Partner Reconciliation Statement、Source Order、Payment Schedule、Customer Settlement Receivable、Guest Collection Receivable、Guest Representative）  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)（重点词条：Partner Reconciliation Statement、Source Order、Payment Schedule、Customer Settlement Receivable、Guest Collection Receivable、Guest Representative）  
 **决议来源**：[#109 分层](https://github.com/xiqiuqiu/xiaotuanbao/issues/109)、[#110 合作团单 Tab](https://github.com/xiqiuqiu/xiaotuanbao/issues/110)、[#111 往来账款 Tab](https://github.com/xiqiuqiu/xiaotuanbao/issues/111)、[#112 确认单口径](https://github.com/xiqiuqiu/xiaotuanbao/issues/112)、[#113 确认单版式](https://github.com/xiqiuqiu/xiaotuanbao/issues/113)、[#114 取消发团结算表](https://github.com/xiqiuqiu/xiaotuanbao/issues/114)
 
 ---
@@ -76,7 +76,7 @@
 
 客源单数｜总人数｜原始团款合计｜优惠合计｜结算金额合计｜游客代收合计
 
-系统内用 CONTEXT.md 规范名；客户习惯名仅出现在导出物。现有 `SourceOrderListSummary` 缺**原始团款合计**（`totalGrossReceivableCents`），需补充。
+系统内用 GLOSSARY.md 规范名；客户习惯名仅出现在导出物。现有 `SourceOrderListSummary` 缺**原始团款合计**（`totalGrossReceivableCents`），需补充。
 
 #### 列集
 
@@ -114,7 +114,7 @@
 
 - 新增「**所属发团出团日期**」区间筛选（快捷项同合作团单 Tab），作为与确认单周期同口径的主时间轴。
 - 保留到期日筛选做催收用途。
-- 手工其他应收按领域定义归属发团（CONTEXT.md），随其所属发团出团日期落入区间。
+- 手工其他应收按领域定义归属发团（GLOSSARY.md），随其所属发团出团日期落入区间。
 
 #### 操作能力与深链
 
@@ -138,7 +138,7 @@
 
 #### 对外命名（豁免仅限导出物）
 
-导出物整套沿用客户习惯名，与系统规范名映射（已入 CONTEXT.md「Partner Reconciliation Statement」词条）：
+导出物整套沿用客户习惯名，与系统规范名映射（已入 GLOSSARY.md「Partner Reconciliation Statement」词条）：
 
 | 导出物（客户习惯名） | 系统规范名 |
 | --- | --- |
@@ -243,9 +243,9 @@
 
 ## Further Notes
 
-- 口径底线（CONTEXT.md 传统）：业务源事实与财务账款不混表；确认单只含业务事实＋收款拆分，不含核销进度。
+- 口径底线（GLOSSARY.md 传统）：业务源事实与财务账款不混表；确认单只含业务事实＋收款拆分，不含核销进度。
 - 实现顺序建议：客源单跨发团查询＋summary 补字段 → 合作团单 Tab → 账款出团日期过滤＋聚合端点 → 往来账款 Tab → 确认单 service/renderer＋抽屉 → 删样张脚本。
-- 权威来源：CONTEXT.md ＋ 闭票决议（#109–#114）＞ 客户模板字面 ＞ 本 PRD 之前的占位描述。
+- 权威来源：GLOSSARY.md ＋ 闭票决议（#109–#114）＞ 客户模板字面 ＞ 本 PRD 之前的占位描述。
 
 ---
 

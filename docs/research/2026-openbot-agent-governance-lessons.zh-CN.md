@@ -3,7 +3,7 @@
 > 研究日期：2026-08-20
 >
 > 源码快照：OpenBot [`93ff1b1`](https://github.com/CopilotKit/openbot/commit/93ff1b1)（本地路径 `/Users/sigclr/Projects/openbot`）；小团宝当时工作区 `2604a47` 加未提交的 AI 建团改动。
-> 范围：只核对 OpenBot 官方仓库文档与源码、小团宝 ADR-0043/0045/0046、`CONTEXT.md` 中的 AI 词汇，以及已有提案 `ider/xiaotuanbao-agent-governance-refactor-plan.docx`。本文区分源码事实和针对小团宝的架构推论。后续架构决策见 [ADR-0047](../adr/0047-ai-action-gateway.md)。
+> 范围：只核对 OpenBot 官方仓库文档与源码、小团宝 ADR-0043/0045/0046、`GLOSSARY.md` 中的 AI 词汇，以及已有提案 `ider/xiaotuanbao-agent-governance-refactor-plan.docx`。本文区分源码事实和针对小团宝的架构推论。后续架构决策见 [ADR-0047](../adr/0047-ai-action-gateway.md)。
 
 ## 结论
 

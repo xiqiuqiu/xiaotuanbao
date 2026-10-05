@@ -21,4 +21,4 @@ status: accepted
 - 落地顺序：先竖切 FileStore + StoredObject（上传/按 id 下载可测），再产品导入解析；解析为同步（代传后同请求读对象），西部中旅总表用 ExcelJS 专用适配器。
 - P1 单产品资料用纯库生成 PDF + ExcelJS 总表；Word 为 P1.5；不上无头浏览器打 PDF。
 - 更新 `xiaotuanbao-infrastructure.md` 与部署环境变量说明；`UPLOAD_DIR` 视为遗留，随 FileStore 落地淘汰。
-- 领域用语：Product Import Session 见 `CONTEXT.md`；StoredObject / FileStore 为基建名，不进 glossary。
+- 领域用语：Product Import Session 见 `GLOSSARY.md`；StoredObject / FileStore 为基建名，不进 glossary。

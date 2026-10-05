@@ -60,7 +60,7 @@
 
 ## 领域语言
 
-业务术语以 [CONTEXT.md](../../CONTEXT.md) 为准。关键约定：
+业务术语以 [GLOSSARY.md](../../GLOSSARY.md) 为准。关键约定：
 
 - **Organization**（不用「租户」「公司」）
 - **User / Employee**（Organization 内员工）
