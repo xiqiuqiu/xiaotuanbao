@@ -233,6 +233,24 @@ describe('headless Agent runtime contract', () => {
     })
   })
 
+  it.each(['pendingItems', 'currentUserText', 'executionGoal'])('rejects tampered %s before running an Agent', async field => {
+    const runtime = await listen()
+    try {
+      const body = { ...REQUEST, executionGoal: 'resolve_items', pendingItems: [], currentUserText: USER_TEXT }
+      const token = delegationToken({
+        executionGoal: 'resolve_items',
+        pendingItemsSha256: createHash('sha256').update('[]').digest('hex'),
+        currentUserTextSha256: createHash('sha256').update(USER_TEXT).digest('hex'),
+      })
+      const tampered = { ...body, [field]: field === 'pendingItems'
+        ? [{ id: 'fake', request: 'fake', goal: 'answer' }]
+        : field === 'executionGoal' ? 'answer' : '用户没有说过的撤销' }
+      const response = await postHeadless(runtime.port, { body: tampered, authorization: `Bearer ${token}` })
+      expect(response.status).toBe(401)
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally { await runtime.close() }
+  })
+
   it('在调用模型前拒绝与 Context Manifest 摘要不一致的 User 输入', async () => {
     const runtime = await listen()
     try {
@@ -293,6 +311,8 @@ describe('headless Agent runtime contract', () => {
         'getMaterialParseResult',
         'readConversationHistory',
         'readConversationSource',
+
+        'routeConversation',
       ])
     } finally {
       await runtime.close()

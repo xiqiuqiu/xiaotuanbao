@@ -23,6 +23,7 @@ export const AI_CREATE_TOOL_NAMES = [
   'getMaterialParseResult',
   'readConversationHistory',
   'readConversationSource',
+  'routeConversation',
 ] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
 
@@ -324,6 +325,7 @@ export function capabilitiesForPendingReview(
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ]
   }
   if (hasPendingReview) {
@@ -336,6 +338,7 @@ export function capabilitiesForPendingReview(
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ]
   }
   return [
@@ -348,6 +351,7 @@ export function capabilitiesForPendingReview(
     'getMaterialParseResult',
     'readConversationHistory',
     'readConversationSource',
+    'routeConversation',
   ]
 }
 

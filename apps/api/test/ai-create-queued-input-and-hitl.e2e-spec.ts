@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
@@ -63,7 +63,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -120,7 +120,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   afterEach(async () => {
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     agent.release()
     ocr.release()
     await Promise.allSettled([...activeProcessorRuns])
@@ -317,11 +317,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('persists a free-text question atomically and restores it after reopen', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -374,11 +374,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('keeps the composer draft when answering an interaction card', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -401,7 +401,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       draftEpoch: 1,
     })
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     const replied = await sendMessage(
       taskId,
       conversationId,
@@ -428,11 +428,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('requires a valid replyToEventId and does not treat earlier queued text as the answer', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -484,7 +484,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-iso-stale-${taskId}`,
     ).expect(409)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     const replied = await sendMessage(
       taskId,
       conversationId,
@@ -539,11 +539,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('更早的普通输入不被带附件的追问回复阻塞，回复在资料就绪后按序执行', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -564,7 +564,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     expect(asked.queuedBatches).toHaveLength(1)
     const queuedBatchId = asked.queuedBatches[0]?.id
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     ocr.holdNextCall()
     const replied = await authRequest(app, coordinatorToken)
       .post(`/api/agent/conversations/${conversationId}/messages`)
@@ -611,7 +611,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('accepts the first valid interaction response and rejects a late duplicate from another device', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: {
@@ -622,7 +622,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
           { id: '5d', label: '5天' },
         ],
       },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -653,7 +653,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-cas-schema-${taskId}`,
     ).expect(400)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     const accepted = await sendMessage(
       taskId,
       conversationId,
@@ -799,11 +799,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   })
 
   it('cancels the current wait so previously queued batches can run in sequence', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -819,7 +819,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processOwnedDueJobs(1)
     const asked = await listEvents(taskId, conversationId)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     await authRequest(app, coordinatorToken)
       .post(
         `/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`,

@@ -1908,14 +1908,16 @@ export class AiConversationService {
         if (updatedCount.count !== 1) {
           throw new ConflictException(staleInteractionMessage(interaction))
         }
+        const status = await this.pendingBatchStatus(tx, organizationId, conversationId, interaction.inputBatchId)
+          ?? AiInputBatchStatus.cancelled
         const updated = await tx.aiInputBatch.update({
           where: { id: interaction.inputBatchId },
-          data: { status: AiInputBatchStatus.cancelled },
+          data: { status },
           include: BATCH_MATERIAL_INCLUDE,
         })
         const cancelledTaskId = taskId ?? primaryTaskId(updated)
         if (cancelledTaskId) {
-          await tx.agentTask.updateMany({
+          if (status === AiInputBatchStatus.cancelled) await tx.agentTask.updateMany({
             where: { id: cancelledTaskId, status: AgentTaskStatus.waiting },
             data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
           })
@@ -1936,7 +1938,7 @@ export class AiConversationService {
           kind: AiConversationEventKind.batch_status,
           payload: {
             batchId: updated.id,
-            status: AiInputBatchStatus.cancelled,
+            status,
             reason: 'interaction_cancelled',
             interactionId: interaction.id,
           },
@@ -2073,7 +2075,7 @@ export class AiConversationService {
       where: {
         organizationId: params.organizationId, conversationId: pkg.conversationId,
         taskLinks: { some: { taskId: params.taskId } },
-        status: AiInputBatchStatus.awaiting_review,
+        status: { in: [AiInputBatchStatus.awaiting_review, AiInputBatchStatus.awaiting_user_input] },
         ...(affectedIds.length ? { id: { in: affectedIds } } : {}),
       },
       orderBy: { conversationVersion: affectedIds.length ? 'asc' : 'desc' },
@@ -2105,8 +2107,11 @@ export class AiConversationService {
         id: { not: params.reviewPackageId },
       },
     })
+    const pendingInteractions = await tx.aiConversationInteraction.count({
+      where: { organizationId: params.organizationId, inputBatchId: batch.id, status: AiConversationInteractionStatus.pending },
+    })
     const directlyAffected = batch.id === params.inputBatchId || referencedIds.includes(params.reviewPackageId)
-    if (!directlyAffected && remainingPending > 0) return []
+    if (!directlyAffected && (remainingPending > 0 || pendingInteractions > 0)) return []
     const reviewPayload = directlyAffected
       ? { reviewPackageId: params.reviewPackageId, disposition: params.disposition }
       : { reason: 'review_items_completed' }
@@ -2132,14 +2137,16 @@ export class AiConversationService {
       },
     })
 
-    if (followUp === 'keep_awaiting_review') {
+    if (pendingInteractions > 0 || followUp === 'keep_awaiting_review') {
+      const status = pendingInteractions > 0 ? AiInputBatchStatus.awaiting_user_input : AiInputBatchStatus.awaiting_review
+      await tx.aiInputBatch.update({ where: { id: batch.id }, data: { status } })
       const statusEvent = await this.appendEvent(tx, {
         organizationId: params.organizationId,
         conversationId: batch.conversationId,
         kind: AiConversationEventKind.batch_status,
         payload: {
           batchId: batch.id,
-          status: AiInputBatchStatus.awaiting_review,
+          status,
           ...reviewPayload,
         },
       })
@@ -2157,7 +2164,13 @@ export class AiConversationService {
     const taskPending = await tx.aiReviewPackage.count({
       where: { organizationId: params.organizationId, taskId: params.taskId, status: AiReviewPackageStatus.pending },
     })
-    if (taskPending === 0) {
+    const taskPendingInteractions = await tx.aiConversationInteraction.count({
+      where: {
+        organizationId: params.organizationId, status: AiConversationInteractionStatus.pending,
+        inputBatch: { taskLinks: { some: { taskId: params.taskId } } },
+      },
+    })
+    if (taskPending === 0 && taskPendingInteractions === 0) {
       await tx.agentTask.updateMany({
         where: { id: params.taskId, status: AgentTaskStatus.waiting },
         data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
@@ -2174,7 +2187,7 @@ export class AiConversationService {
       },
     })
     const events = [statusEvent]
-    if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected) {
+    if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected || taskPendingInteractions > 0) {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
         data: { updatedAt: new Date() },
@@ -2616,6 +2629,37 @@ export class AiConversationService {
     }
   }
 
+  async pendingBatchStatus(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    conversationId: string,
+    inputBatchId: string,
+  ): Promise<AiInputBatchStatus | null> {
+    const interactions = await tx.aiConversationInteraction.count({
+      where: { organizationId, inputBatchId, status: AiConversationInteractionStatus.pending },
+    })
+    if (interactions > 0) return AiInputBatchStatus.awaiting_user_input
+    const messages = await tx.aiConversationEvent.findMany({
+      where: {
+        organizationId, conversationId, kind: AiConversationEventKind.agent_message,
+        payload: { path: ['batchId'], equals: inputBatchId },
+      },
+      select: { payload: true },
+    })
+    const referencedIds = messages.flatMap(({ payload }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+      return [payload.reviewPackageId, ...(Array.isArray(payload.reviewPackageIds) ? payload.reviewPackageIds : [])]
+        .filter((id): id is string => typeof id === 'string')
+    })
+    const reviews = await tx.aiReviewPackage.count({
+      where: {
+        organizationId, status: AiReviewPackageStatus.pending,
+        OR: [{ inputBatchId }, { id: { in: referencedIds } }],
+      },
+    })
+    return reviews > 0 ? AiInputBatchStatus.awaiting_review : null
+  }
+
   private async consumeInteractionReply(
     tx: Prisma.TransactionClient,
     params: {
@@ -2664,9 +2708,11 @@ export class AiConversationService {
     if (updated.count !== 1) {
       throw new ConflictException(staleInteractionMessage(interaction))
     }
+    const status = await this.pendingBatchStatus(tx, params.organizationId, params.conversationId, interaction.inputBatchId)
+      ?? AiInputBatchStatus.completed
     await tx.aiInputBatch.update({
       where: { id: interaction.inputBatchId },
-      data: { status: AiInputBatchStatus.completed },
+      data: { status },
     })
     const statusEvent = await this.appendEvent(tx, {
       organizationId: params.organizationId,
@@ -2674,7 +2720,7 @@ export class AiConversationService {
       kind: AiConversationEventKind.batch_status,
       payload: {
         batchId: interaction.inputBatchId,
-        status: AiInputBatchStatus.completed,
+        status,
         interactionId: interaction.id,
         interactionStatus: AiConversationInteractionStatus.answered,
       },

@@ -36,6 +36,7 @@ const reviewPackage = {
 describe('Agent execution goal and completion basis', () => {
   it('requires a structured execution goal on the headless request', () => {
     expect(AGENT_EXECUTION_GOALS).toEqual([
+      'resolve_items',
       'answer',
       'propose_change',
       'clarify',
@@ -67,6 +68,7 @@ describe('Agent execution goal and completion basis', () => {
 
   it('replaces completed with answered and carries a matching completion basis', () => {
     expect(COMPLETION_BASIS_KINDS).toEqual([
+      'resolved_items',
       'final_answer',
       'accepted_review_package',
       'persistent_clarification',

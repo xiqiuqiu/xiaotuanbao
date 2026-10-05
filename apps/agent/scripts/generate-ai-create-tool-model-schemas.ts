@@ -1,3 +1,4 @@
+import { createRecordWorkItemsTool } from '../src/work-items.tool'
 import { createProposeSourceOrderReviewTool } from '../src/propose-source-order-review.tool'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -23,6 +24,7 @@ const config = {
   modelApiKey: 'schema-generation-only',
 }
 const tools = {
+  recordWorkItems: createRecordWorkItemsTool(),
   getTaskContext: createGetTaskContextTool(config),
   searchRouteTemplates: createSearchRouteTemplatesTool(config),
   searchUsers: createSearchUsersTool(config),

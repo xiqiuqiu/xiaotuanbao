@@ -1,3 +1,4 @@
+import { WORK_ITEMS_TOOL_DESCRIPTION } from './work-items-instructions'
 import { uniqueCapabilityDefinitions } from './capability-catalog'
 import { AI_CREATE_CAPABILITY_DEFINITIONS } from './ai-create-definitions'
 import { CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS } from './conversation-general-definitions'
@@ -49,6 +50,7 @@ export interface AiCreateModelContract {
 }
 
 export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  recordWorkItems: WORK_ITEMS_TOOL_DESCRIPTION,
   getTaskContext:
     '读取当前业务快照、字段覆盖和未解决审核状态；已有发团时包含正式客源列表、客户名称及实际人数合计，建团前返回草稿。对话尾部与资料索引在冻结投影里，不在本工具中。不改写业务数据。',
   searchRouteTemplates:
@@ -73,7 +75,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   readConversationSource:
     '按 locator 回读当前会话来源的固定解析版本原文。必须传入 sourceId 与 parseVersion；页数较多或已裁剪时再传入 pageNumber。回读结果不是正式业务资料或候选证据。',
   routeConversation:
-    '仅当 User 明确要求创建发团时登记建团目标；目标含糊或同时包含多个目标时产生持久追问。普通问答不要调用。',
+    '仅当 User 明确要求创建发团时登记建团目标；目标含糊时产生持久追问。普通问答不要调用。',
 }
 
 const MODEL_TOOL_CAPABILITY_DEFINITIONS = uniqueCapabilityDefinitions([
@@ -88,22 +90,24 @@ export function aiCreateModelContractForTools(toolNames: readonly string[]): AiC
     requested.has(definition.toolName),
   )
 
-  if (definitions.length !== requested.size) {
-    const registered = new Set<string>(definitions.map((definition) => definition.toolName))
+  const names: string[] = definitions.map(definition => definition.toolName)
+  if (requested.has('recordWorkItems')) names.push('recordWorkItems')
+  if (names.length !== requested.size) {
+    const registered = new Set<string>(names)
     const unknown = [...requested].filter((name) => !registered.has(name)).sort()
     throw new Error(`AI 建团模型工具未注册: ${unknown.join(', ')}`)
   }
 
   return {
-    toolNames: definitions.map((definition) => definition.toolName),
+    toolNames: names,
     toolSchemaText: JSON.stringify(
-      definitions.map((definition) => ({
+      names.map((name) => ({
         type: 'function',
-        name: definition.toolName,
-        description: AI_CREATE_TOOL_DESCRIPTIONS[definition.toolName],
+        name,
+        description: AI_CREATE_TOOL_DESCRIPTIONS[name],
         inputSchema: (
           AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS as Readonly<Record<string, unknown>>
-        )[definition.toolName],
+        )[name],
       })),
     ),
   }

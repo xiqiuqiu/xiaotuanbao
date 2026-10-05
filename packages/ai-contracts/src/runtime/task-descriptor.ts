@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-definitions'
+import { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-ref'
 import { DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF } from './departure-collaboration-ref'
 import { versionedDefinitionRefSchema, type VersionedDefinitionRef } from './agent-platform'
 

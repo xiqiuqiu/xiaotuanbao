@@ -1,9 +1,9 @@
 import { AiConversationService } from './ai-conversation.service'
 
-function setup(pendingIds: string[]) {
+function setup(pendingIds: string[], pendingInteractionBatches: string[] = []) {
   const batches = ['original', 'revision-1', 'revision-2', 'multi'].map((id, index) => ({
     id, conversationId: 'conv-1', conversationVersion: index + 1,
-    status: 'awaiting_review', userMessageEventId: `message-${id}`,
+    status: pendingInteractionBatches.includes(id) ? 'awaiting_user_input' : 'awaiting_review', userMessageEventId: `message-${id}`,
   }))
   const messages = [
     { batchId: 'original', reviewPackageIds: ['pkg-a', 'pkg-b'] },
@@ -19,8 +19,10 @@ function setup(pendingIds: string[]) {
         id !== where.id.not && (where.OR[1].id.in.includes(id) || (where.OR[0].inputBatchId === 'original' && ['pkg-a', 'pkg-b'].includes(id))),
       ).length)),
     },
+    aiConversationInteraction: { count: jest.fn(({ where }) => Promise.resolve(where.inputBatch ? pendingInteractionBatches.length : pendingInteractionBatches.includes(where.inputBatchId) ? 1 : 0)) },
     aiInputBatch: {
-      findMany: jest.fn(({ where }) => Promise.resolve(batches.filter((batch) => where.id.in.includes(batch.id) && batch.status === 'awaiting_review'))),
+      findMany: jest.fn(({ where }) => Promise.resolve(batches.filter((batch) => where.id.in.includes(batch.id) && (typeof where.status === 'string' ? batch.status === where.status : where.status.in.includes(batch.status))))),
+      create: jest.fn().mockResolvedValue({ id: 'continuation' }),
       update: jest.fn(({ where, data }) => {
         const batch = batches.find((item) => item.id === where.id)!
         Object.assign(batch, data)
@@ -35,6 +37,7 @@ function setup(pendingIds: string[]) {
     agentTask: { findFirst: jest.fn().mockResolvedValue({ type: 'departure_collaboration' }), updateMany: jest.fn() },
     taskActivity: { create: jest.fn() },
     aiConversation: { update: jest.fn() },
+    aiWorkflowJob: { create: jest.fn() },
   }
   const service = new AiConversationService({} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never)
   return { tx, service, batches }
@@ -87,4 +90,32 @@ describe('revision batches finish with the reviewed item', () => {
     })
   })
 
+})
+
+it('keeps sibling clarifications pending after the last review is confirmed', async () => {
+  const { tx, service, batches } = setup([], ['original'])
+  tx.agentTask.findFirst.mockResolvedValue({ type: 'departure_creation' })
+  await service.finalizeReviewDisposition(tx as never, {
+    organizationId: 'org-1', taskId: 'task-1', userId: 'user-1',
+    reviewPackageId: 'pkg-b', inputBatchId: 'original', disposition: 'confirmed',
+  })
+  expect(tx.aiConversationInteraction.count).toHaveBeenCalledWith({ where: {
+    organizationId: 'org-1', inputBatchId: 'original', status: 'pending',
+  } })
+  expect(batches[0].status).toBe('awaiting_user_input')
+  expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
+  expect(tx.agentTask.updateMany).not.toHaveBeenCalled()
+})
+
+it('queues only one creation continuation when all waiting items are resolved', async () => {
+  const { tx, service } = setup([])
+  tx.agentTask.findFirst.mockResolvedValue({ type: 'departure_creation' })
+  const params = {
+    organizationId: 'org-1', taskId: 'task-1', userId: 'user-1',
+    reviewPackageId: 'pkg-b', inputBatchId: 'original', disposition: 'confirmed' as const,
+  }
+  await service.finalizeReviewDisposition(tx as never, params)
+  await service.finalizeReviewDisposition(tx as never, params)
+  expect(tx.aiInputBatch.create).toHaveBeenCalledTimes(1)
+  expect(tx.aiWorkflowJob.create).toHaveBeenCalledTimes(1)
 })

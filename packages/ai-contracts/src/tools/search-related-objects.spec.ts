@@ -30,6 +30,7 @@ describe('search related objects contract v1 #443', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(SEARCH_RELATED_OBJECTS_LIMIT).toBe(5)
   })
@@ -45,6 +46,7 @@ describe('search related objects contract v1 #443', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
@@ -55,6 +57,7 @@ describe('search related objects contract v1 #443', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
   })
 

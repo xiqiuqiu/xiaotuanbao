@@ -1,3 +1,5 @@
+import { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-ref'
+import { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
 import { z } from 'zod'
 import {
   GET_MATERIAL_PARSE_RESULT_TOOL,
@@ -38,12 +40,10 @@ import {
   type CapabilityDefinition,
 } from './agent-platform'
 
-export const AI_CREATE_AGENT_DEFINITION_REF = {
-  key: 'departure.create',
-  version: 1,
-} as const
+export { AI_CREATE_AGENT_DEFINITION_REF } from './ai-create-ref'
 
 export const AI_CREATE_CAPABILITY_REFS_BY_TOOL = {
+  routeConversation: CONVERSATION_ROUTING_CAPABILITY_REF,
   getTaskContext: {
     key: 'departure.task-context.read',
     version: GET_TASK_CONTEXT_TOOL.version,
@@ -222,6 +222,7 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
   },
   CONVERSATION_HISTORY_READ_CAPABILITY,
   CONVERSATION_SOURCE_READ_CAPABILITY,
+  CONVERSATION_ROUTING_CAPABILITY,
 ] as const satisfies readonly CapabilityDefinition[]
 
 export const aiCreateCapabilityDefinitionRegistry = new CapabilityDefinitionRegistry(

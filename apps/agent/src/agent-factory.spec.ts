@@ -122,7 +122,7 @@ describe('Agent Factory', () => {
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
-    ])
+     'recordWorkItems',])
     const processors = agentConfigs.at(-1)?.inputProcessors as Array<{
       trimMode?: string
       limit?: number
@@ -163,7 +163,7 @@ describe('Agent Factory', () => {
         ],
       },
     )
-    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([])
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([ 'recordWorkItems'])
   })
 
   it('生产 Agent 不挂载 Mastra Memory / Observational Memory', () => {
@@ -212,7 +212,7 @@ describe('Agent Factory', () => {
       { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
       routingContext,
     )
-    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation', 'recordWorkItems'])
   })
 
   it('协作 Agent 只暴露已授权的资源工具', () => {
@@ -246,7 +246,7 @@ describe('Agent Factory', () => {
       'proposeSegmentResourceReviewPackage',
       'proposeDepartureResourceReviewPackage',
       'getMaterialParseResult',
-    ])
+     'recordWorkItems',])
   })
 
   it('拒绝上下文声明未注册的 Capability 版本', () => {
@@ -268,12 +268,12 @@ describe('Agent Factory', () => {
       { apiBaseUrl: 'http://api.local', serviceSecret: 'test-only' },
       collaborationContext,
     )
-    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['getTaskContext'])
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['getTaskContext', 'recordWorkItems'])
   })
 })
 
  it('exposes routing for an explicitly granted departure collaboration goal', () => {
    const routingContext = { ...context, agentDefinition: { key: 'departure.collaboration', version: 1 }, grantedCapabilities: [{ key: 'conversation.intent.route', version: 1 }] }
    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://localhost:3000', serviceSecret: 'test' }, routingContext)
-   expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
+   expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation', 'recordWorkItems'])
  })

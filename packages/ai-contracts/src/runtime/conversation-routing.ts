@@ -70,7 +70,7 @@ export const conversationRoutingOutputSchema = z.union([
 export const CONVERSATION_ROUTING_TOOL = {
   name: 'routeConversation',
   description:
-    '仅当 User 明确要求创建发团时登记建团目标；目标含糊或同时包含多个目标时产生持久追问。普通问答不要调用。',
+    '仅当 User 明确要求创建发团时登记建团目标；目标含糊时产生持久追问。普通问答不要调用。',
 } as const
 
 export type RegisteredAgentIntent = z.infer<typeof registeredAgentIntentSchema>

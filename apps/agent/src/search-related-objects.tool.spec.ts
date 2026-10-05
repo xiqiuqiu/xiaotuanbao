@@ -125,6 +125,8 @@ describe('related object search tools #443', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+
+      'routeConversation',
     ])
     expect(() =>
       standardSchemaToJSONSchema(createSearchUsersTool(toolConfig).inputSchema as never, {

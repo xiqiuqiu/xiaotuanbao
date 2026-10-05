@@ -213,3 +213,30 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   }
   return {}
 }
+
+/** Explicitly declare a single understood item in lifecycle fixtures; never use for false-completion tests. */
+export function resolvedItemOutcome(outcome: HeadlessExecutionResult): HeadlessExecutionResult {
+  if (outcome.kind === 'failed' || outcome.kind === 'resolved_items') return outcome
+  const expectedBasis = { answered: 'final_answer', awaiting_review: 'accepted_review_package',
+    awaiting_user_input: 'persistent_clarification', registered_intent: 'governed_action_result' } as const
+  if (outcome.completionBasis.kind !== expectedBasis[outcome.kind]) return outcome
+  const common = { id: 'fixture-item', request: '生命周期测试中明确指定的诉求' }
+  const diagnostic = outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}
+  switch (outcome.kind) {
+    case 'answered': return { kind: 'resolved_items', message: outcome.message, items: [{ ...common,
+      goal: 'answer', resolution: { kind: 'answered', message: outcome.message } }],
+      reviewPackages: [], completionBasis: { kind: 'resolved_items' }, ...diagnostic }
+    case 'awaiting_user_input': return { kind: 'resolved_items', message: outcome.interaction.prompt, items: [{ ...common,
+      goal: 'clarify', resolution: { kind: 'awaiting_user_input', interaction: outcome.interaction } }],
+      reviewPackages: [], completionBasis: { kind: 'resolved_items' }, ...diagnostic }
+    case 'awaiting_review': {
+      const reviewPackages = outcome.reviewPackages ?? [outcome.reviewPackage]
+      return { kind: 'resolved_items', message: '已提交待审核建议，请确认。', items: [{ ...common,
+        goal: 'propose_change', resolution: { kind: 'awaiting_review', reviewPackageIndexes: reviewPackages.map((_, index) => index) } }],
+        reviewPackages, completionBasis: { kind: 'resolved_items' }, ...diagnostic }
+    }
+    case 'registered_intent': return { kind: 'resolved_items', message: outcome.message, items: [{ ...common,
+      goal: 'governed_action', resolution: { kind: 'registered_intent', intent: outcome.intent } }],
+      reviewPackages: [], completionBasis: { kind: 'resolved_items' }, ...diagnostic }
+  }
+}

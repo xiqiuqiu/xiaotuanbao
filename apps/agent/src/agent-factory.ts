@@ -1,3 +1,4 @@
+import { createRecordWorkItemsTool, WORK_ITEMS_INSTRUCTIONS } from './work-items.tool'
 import { createProposeSourceOrderReviewTool } from './propose-source-order-review.tool'
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
@@ -6,6 +7,7 @@ import {
   requestContextSchema,
   tokenLimiterLimitForModel,
   type AgentDefinition,
+  type AgentWorkItem,
   type RequestContext,
 } from '@xiaotuanbao/ai-contracts'
 import {
@@ -35,6 +37,7 @@ import { adaptMastraTokenLimiter, createTokenLimiterSafetyNet } from './token-li
 export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 
 export interface AiCreateAgentFactoryConfig extends GetTaskContextToolConfig {
+  pendingItems?: AgentWorkItem[]
   model?: string
   modelBaseUrl?: string
   modelThinking?: 'enabled' | 'disabled'
@@ -84,13 +87,13 @@ function createMastra(
   const agent = new Agent({
     id: AI_CREATE_AGENT_ID,
     name: definition.name,
-    instructions: definition.instructions,
+    instructions: `${definition.instructions}\n${WORK_ITEMS_INSTRUCTIONS}`,
     model: {
       id: modelId,
       url: config.modelBaseUrl ?? 'https://api.deepseek.com',
       apiKey: config.modelApiKey || 'missing',
     },
-    tools,
+    tools: { ...tools, recordWorkItems: createRecordWorkItemsTool(config.pendingItems) },
     defaultOptions: modelId.startsWith('deepseek')
       ? { providerOptions: { deepseek: deepseekThinkingOptions(config) } }
       : {},

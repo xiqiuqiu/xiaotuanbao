@@ -24,7 +24,7 @@ import {
   PLAINTEXT_TOOL_SCHEMA_VERSION,
 } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '这是一条无任务会话的确定性回复。'
@@ -54,7 +54,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } },
+      outcome: resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -91,7 +91,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   beforeEach(async () => {
-    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }))
     await prisma.aiWorkflowJob.updateMany({
       where: {
         organizationId,
@@ -372,7 +372,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
   it('creates a departure task from a registered intent and continues on the same batch', async () => {
     agent.setOutcomes([
-      {
+      resolvedItemOutcome({
         kind: 'registered_intent',
         completionBasis: { kind: 'governed_action_result' },
         intent: {
@@ -381,12 +381,12 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
           goal: '创建七月喀纳斯发团',
         },
         message: '正在准备建团任务。',
-      },
-      {
+      }),
+      resolvedItemOutcome({
         kind: 'awaiting_user_input',
         interaction: { type: 'free_text', prompt: '已进入建团专长。' },
         completionBasis: { kind: 'persistent_clarification' },
-      },
+      })
     ])
     const beforeWorker = agent.callCount()
     const sent = await sendFirst(
@@ -420,7 +420,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(batch.agentAttempts[0]).toMatchObject({
       taskId: null,
       agentDefinitionKey: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key,
-      resultJson: { kind: 'registered_intent' },
+      resultJson: { kind: 'resolved_items', items: [{ goal: 'governed_action', resolution: { kind: 'registered_intent' } }] },
     })
     expect(batch.agentAttempts[0].contextManifest.taskRefs).toEqual([])
     expect(batch.agentAttempts[1]).toMatchObject({
@@ -474,13 +474,13 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     )
   })
 
-  it('ignores an unregistered intent and completes as a general reply', async () => {
-    agent.setOutcome({
+  it('rejects an unregistered governed intent without silently completing as a reply', async () => {
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'registered_intent',
       intent: { key: 'partner.ledger.query', confidence: 'high', goal: '查询伙伴账款' },
       message: '当前尚未登记这个能力。',
       completionBasis: { kind: 'governed_action_result' },
-    })
+    }))
     const sent = await sendFirst(
       coordinatorToken,
       `${testPrefix} 未登记意图`,
@@ -494,11 +494,12 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       await prisma.inputBatchTaskLink.count({ where: { inputBatch: { conversationId } } }),
     ).toBe(0)
     const events = await listEvents(coordinatorToken, conversationId)
+    expect(events.events.some(event => event.kind === 'agent_message')).toBe(false)
     expect(events.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: 'agent_message',
-          payload: expect.objectContaining({ text: '当前尚未登记这个能力。' }),
+          kind: 'error',
+          payload: expect.objectContaining({ errorCode: 'INVALID_FORMAT' }),
         }),
       ]),
     )
@@ -506,7 +507,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
   it('stops a same-batch continuation before its second attempt starts', async () => {
     agent.setOutcomes([
-      {
+      resolvedItemOutcome({
         kind: 'registered_intent',
         completionBasis: { kind: 'governed_action_result' },
         intent: {
@@ -515,8 +516,8 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
           goal: `${testPrefix} 将停止的建团`,
         },
         message: '正在准备建团任务。',
-      },
-      { kind: 'answered', message: '不应执行的续跑。', completionBasis: { kind: 'final_answer' } },
+      }),
+      resolvedItemOutcome({ kind: 'answered', message: '不应执行的续跑。', completionBasis: { kind: 'final_answer' } })
     ])
     const beforeWorker = agent.callCount()
     const sent = await sendFirst(
@@ -551,7 +552,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   it('rejects a departure task proposal without departure:write', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'registered_intent',
       intent: {
         key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
@@ -560,7 +561,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       },
       message: '正在准备建团任务。',
       completionBasis: { kind: 'governed_action_result' },
-    })
+    }))
     const sent = await sendFirst(
       financeToken,
       `${testPrefix} 财务尝试建团`,
@@ -661,11 +662,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   it('等待回答会释放执行权，普通输入继续执行且不会处置待回答交互', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '你希望新建发团，还是查询已有发团？' },
-    })
+    }))
     const sent = await sendFirst(
       coordinatorToken,
       `${testPrefix} 帮我处理一下发团`,
@@ -694,7 +695,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       version: 1,
     })
 
-    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }))
     await sendFollowUp(
       coordinatorToken,
       conversationId,
@@ -720,11 +721,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   it('同一会话允许多条未处置追问并存', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充出发城市' },
-    })
+    }))
     const sent = await sendFirst(
       coordinatorToken,
       `${testPrefix} 第一条追问`,
@@ -733,11 +734,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     const conversationId = track(sent.body.data.conversationId as string)
     await processor.processDueJobs(1)
 
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充预算' },
-    })
+    }))
     await sendFollowUp(
       coordinatorToken,
       conversationId,
@@ -764,12 +765,12 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
   it('撤回排队消息并编辑重发后，新批次在前一回答结束时继续执行', async () => {
     agent.setOutcomes([
-      {
+      resolvedItemOutcome({
         kind: 'awaiting_user_input',
         completionBasis: { kind: 'persistent_clarification' },
         interaction: { type: 'free_text', prompt: '请补充信息' },
-      },
-      { kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } },
+      }),
+      resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
     ])
     const first = await sendFirst(
       coordinatorToken,
@@ -843,11 +844,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   it('answers a pending interaction and resumes the taskless run', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '还需要补充哪一段？' },
-    })
+    }))
     const sent = await sendFirst(
       coordinatorToken,
       `${testPrefix} 回答追问`,
@@ -867,7 +868,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       { interactionId: asked.pendingInteraction?.id, interactionVersion: 1 },
     ).expect(400)
 
-    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }))
     const replied = await sendFollowUp(
       coordinatorToken,
       conversationId,
@@ -912,11 +913,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   })
 
   it('追问回复按服务端事件顺序执行，不越过更早的普通输入', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
       interaction: { type: 'free_text', prompt: '请补充城市' },
-    })
+    }))
     const sent = await sendFirst(
       coordinatorToken,
       `${testPrefix} 顺序追问`,
@@ -944,7 +945,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       },
     ).expect(201)
 
-    agent.setOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }))
     await processor.processDueJobs(1)
     expect(
       await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: ordinary.body.data.batch.id } }),
@@ -1380,8 +1381,9 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({ where: { inputBatchId } })
     expect(attempt.status).toBe(AiAgentAttemptStatus.completed)
     expect(attempt.resultJson).toMatchObject({
-      kind: 'answered',
-      completionBasis: { kind: 'final_answer' },
+      kind: 'resolved_items',
+      completionBasis: { kind: 'resolved_items' },
+      items: [{ goal: 'answer', resolution: { kind: 'answered' } }],
     })
     const job = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { conversationId, type: AiWorkflowJobType.agent_batch },

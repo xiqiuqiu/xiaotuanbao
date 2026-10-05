@@ -5,7 +5,7 @@ import { DepartureType, PrismaClient } from '@prisma/client'
 import { WORKFLOW_MAX_ATTEMPTS } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
@@ -37,7 +37,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 

@@ -3,7 +3,7 @@ import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
@@ -28,7 +28,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -69,7 +69,7 @@ describe('AgentTask confirm isolates the current run and keeps the task open (e2
   })
 
   afterEach(() => {
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     agent.release()
   })
 

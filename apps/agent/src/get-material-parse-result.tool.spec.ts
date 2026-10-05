@@ -134,6 +134,8 @@ describe('createGetMaterialParseResultTool', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+
+      'routeConversation',
     ])
   })
 

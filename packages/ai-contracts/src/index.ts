@@ -607,3 +607,8 @@ export {
   type NormalizedEvidenceV1,
   type NormalizedEvidenceProposalV1,
 } from './evidence/evidence-contract'
+
+export { agentWorkItemSchema, type AgentWorkItem } from './runtime/execution-goal'
+export { resolvedWorkItemSchema, headlessResolvedItemsResultSchema, type ResolvedWorkItem, type HeadlessResolvedItemsResult } from './runtime/headless-execution'
+
+export { WORK_ITEMS_INSTRUCTIONS, WORK_ITEMS_TOOL_DESCRIPTION } from './runtime/work-items-instructions'

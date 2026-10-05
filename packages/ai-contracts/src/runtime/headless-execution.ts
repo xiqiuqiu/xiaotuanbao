@@ -6,6 +6,7 @@ import { submitSegmentResourceReviewModelInputSchema } from '../review/segment-r
 import { submitDepartureResourceReviewModelInputSchema } from '../review/departure-resource-schema'
 import { registeredAgentIntentSchema } from './conversation-routing'
 import {
+  agentWorkItemSchema,
   agentExecutionGoalSchema,
   completionBasisSchema,
   type AgentExecutionGoal,
@@ -105,6 +106,7 @@ export const headlessDiagnosticSchema = z
   .superRefine((value, ctx) => refineUsageSource(value, ctx))
 
 export const HEADLESS_EXECUTION_OUTCOME_KINDS = [
+  'resolved_items',
   'answered',
   'registered_intent',
   'awaiting_user_input',
@@ -129,6 +131,8 @@ export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
     userText: z.string().trim().min(1),
     userTextSha256: z.string().regex(/^[a-f0-9]{64}$/),
     executionGoal: agentExecutionGoalSchema,
+    currentUserText: z.string().optional(),
+    pendingItems: z.array(agentWorkItemSchema).max(50).optional(),
   })
   .strip()
 
@@ -210,6 +214,27 @@ export const headlessAwaitingReviewResultSchema = z
   })
   .strip()
 
+export const resolvedWorkItemSchema = agentWorkItemSchema.extend({
+  resolution: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('withdrawn'), userExcerpt: z.string().trim().min(1) }),
+    z.object({ kind: z.literal('answered'), message: z.string().trim().min(1) }),
+    z.object({ kind: z.literal('awaiting_review'), reviewPackageIndexes: z.array(z.number().int().nonnegative()).min(1) }),
+    z.object({ kind: z.literal('awaiting_user_input'), interaction: headlessInteractionSchema }),
+    z.object({ kind: z.literal('registered_intent'), intent: registeredAgentIntentSchema }),
+  ]),
+})
+
+export const headlessResolvedItemsResultSchema = z.object({
+  kind: z.literal('resolved_items'),
+  message: z.string().trim().min(1),
+  items: z.array(resolvedWorkItemSchema).min(1).max(50),
+  reviewPackages: z.array(headlessReviewPackageSchema),
+  completionBasis: completionBasisSchema,
+  diagnostic: headlessDiagnosticSchema.optional(),
+}).strip()
+export type ResolvedWorkItem = z.infer<typeof resolvedWorkItemSchema>
+export type HeadlessResolvedItemsResult = z.infer<typeof headlessResolvedItemsResultSchema>
+
 export const headlessFailedResultSchema = z
   .object({
     kind: z.literal('failed'),
@@ -219,6 +244,7 @@ export const headlessFailedResultSchema = z
   .strip()
 
 export const headlessExecutionResultSchema = z.discriminatedUnion('kind', [
+  headlessResolvedItemsResultSchema,
   headlessAnsweredResultSchema,
   headlessRegisteredIntentResultSchema,
   headlessAwaitingUserInputResultSchema,
@@ -440,6 +466,8 @@ function hasUnresolvedStructuredWork(outcome: HeadlessExecutionResult): boolean 
 
 function requiredBasisForGoal(goal: AgentExecutionGoal): CompletionBasisKind {
   switch (goal) {
+    case 'resolve_items':
+      return 'resolved_items'
     case 'answer':
       return 'final_answer'
     case 'propose_change':
@@ -455,6 +483,23 @@ function outcomeMatchesGoal(goal: AgentExecutionGoal, outcome: HeadlessExecution
   if (outcome.kind === 'failed') {
     return true
   }
+  if (goal === 'resolve_items') {
+    if (outcome.kind !== 'resolved_items' || outcome.completionBasis.kind !== 'resolved_items') return false
+    const ids = new Set(outcome.items.map(item => item.id))
+    const usedPackages = new Set<number>()
+    return ids.size === outcome.items.length && outcome.items.length > 0 && outcome.items.every(item => {
+      const resolution = item.resolution
+      if (resolution.kind === 'awaiting_user_input' || resolution.kind === 'withdrawn') return true
+      if (resolution.kind === 'answered') return item.goal === 'answer' && resolution.message.trim().length > 0
+      if (resolution.kind === 'registered_intent') return item.goal === 'governed_action'
+      return item.goal === 'propose_change' && resolution.reviewPackageIndexes.length > 0 && resolution.reviewPackageIndexes.every(index => {
+        if (usedPackages.has(index) || outcome.reviewPackages[index] == null) return false
+        usedPackages.add(index)
+        return true
+      })
+    }) && outcome.reviewPackages.every((_, index) => usedPackages.has(index))
+  }
+  if (outcome.kind === 'resolved_items') return false
   if (
     (goal === 'answer' || goal === 'propose_change') &&
     outcome.kind === 'awaiting_user_input'
@@ -483,11 +528,23 @@ function outcomeMatchesGoal(goal: AgentExecutionGoal, outcome: HeadlessExecution
 export function validateHeadlessOutcomeAgainstGoal(input: {
   executionGoal: AgentExecutionGoal
   outcome: HeadlessExecutionResult
+  pendingItems?: z.infer<typeof agentWorkItemSchema>[]
+  currentUserText?: string
 }): HeadlessExecutionResult {
   const goal = agentExecutionGoalSchema.parse(input.executionGoal)
   const outcome = input.outcome
   if (outcome.kind === 'failed') {
     return outcome
+  }
+  if (outcome.kind === 'resolved_items') {
+    const preservesPending = (input.pendingItems ?? []).every(previous => {
+      const item = outcome.items.find(candidate => candidate.id === previous.id)
+      return item != null && item.request === previous.request &&
+        (item.goal === previous.goal || previous.goal === 'answer' || previous.goal === 'clarify')
+    })
+    const authorizedWithdrawals = outcome.items.every(item => item.resolution.kind !== 'withdrawn' ||
+      Boolean(input.currentUserText?.includes(item.resolution.userExcerpt)))
+    if (!preservesPending || !authorizedWithdrawals) return incompleteOutcome(outcome.diagnostic)
   }
   if (hasUnresolvedStructuredWork(outcome) || !outcomeMatchesGoal(goal, outcome)) {
     return incompleteOutcome(outcome.diagnostic)

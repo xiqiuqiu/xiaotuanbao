@@ -1,3 +1,4 @@
+import { workItemsInputSchema, preservesWorkItems, type RecordedWorkItem } from './work-items.tool'
 import {
   AI_CREATE_CAPABILITY_DEFINITIONS,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
@@ -15,6 +16,7 @@ import {
   PUBLIC_REPLY_FALLBACK,
   selectPublicReply,
   validateHeadlessOutcomeAgainstGoal,
+  type HeadlessResolvedItemsResult,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -153,17 +155,20 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const output = streamed ? await outputFromStream(streamed) : await requireGenerate(deps)(userText)
       const result = validateHeadlessOutcomeAgainstGoal({
         executionGoal: request.executionGoal,
+        pendingItems: request.pendingItems,
+        currentUserText: request.currentUserText,
         outcome: resultFromGenerate(
           { ...output, toolResults: [...streamedToolResults, ...(output.toolResults ?? [])] },
           {
             streamedPublicText,
             streamedReasoning,
+            request,
             allowFullOutputFallback: streamed?.fullStream == null,
           },
         ),
       })
       if (
-        (result.kind === 'answered' || result.kind === 'registered_intent') &&
+        (result.kind === 'answered' || result.kind === 'registered_intent' || result.kind === 'resolved_items') &&
         result.message
       ) {
         yield { type: 'message.delta', sequence, text: result.message }
@@ -207,6 +212,7 @@ function resultFromGenerate(
     streamedPublicText: string
     streamedReasoning: readonly string[]
     allowFullOutputFallback?: boolean
+    request?: HeadlessExecutionRequest
   } = {
     streamedPublicText: '',
     streamedReasoning: [],
@@ -216,6 +222,9 @@ function resultFromGenerate(
   const diagnostic = diagnosticFromMastraGenerate(output, toolSteps)
   if (isCapacityTripwire(output)) {
     return capacityFailure(diagnostic)
+  }
+  if (publicReply.request?.executionGoal === 'resolve_items') {
+    return resolvedItemsFromGenerate(output, publicReply.request, diagnostic)
   }
   const reviewPackages = acceptedReviewPackagesFromGenerate(output)
   if (reviewPackages.length > 0) {
@@ -518,4 +527,62 @@ function lastToolResult(toolResults: unknown[] | undefined, expectedToolName: st
     }
   }
   return last
+}
+
+function resolvedItemsFromGenerate(
+  output: MastraGenerateLike,
+  request: HeadlessExecutionRequest,
+  diagnostic: ReturnType<typeof diagnosticFromMastraGenerate>,
+): HeadlessExecutionResult {
+  const fail = (): HeadlessExecutionResult => ({ kind: 'failed', error: AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE').toJSON(), diagnostic })
+  let items: RecordedWorkItem[] = (request.pendingItems ?? []).map(item => ({ ...item, resolution: { kind: 'pending' } }))
+  const seenCalls = new Set<string>()
+  const routing: ReturnType<typeof conversationRoutingOutputSchema.parse>[] = []
+  for (const raw of output.toolResults ?? []) {
+    const { toolName, toolCallId, result } = toolPayload(raw)
+    if (toolCallId && seenCalls.has(toolCallId)) continue
+    if (toolCallId) seenCalls.add(toolCallId)
+    if (toolName === CONVERSATION_ROUTING_TOOL.name) {
+      const parsed = conversationRoutingOutputSchema.safeParse(result)
+      if (parsed.success) routing.push(parsed.data)
+    }
+    if (toolName !== 'recordWorkItems' || !result || typeof result !== 'object' || !('status' in result) || result.status !== 'accepted') continue
+    const parsed = workItemsInputSchema.safeParse(result)
+    if (!parsed.success || !preservesWorkItems(items, parsed.data.items)) return fail()
+    items = parsed.data.items
+  }
+  if (items.length === 0) return fail()
+  const resolved: HeadlessResolvedItemsResult['items'] = []
+  const usedRouting = new Set<number>()
+  for (const item of items) {
+    const resolution = item.resolution
+    if (resolution.kind === 'pending') return fail()
+    if (resolution.kind === 'withdrawn' && !request.currentUserText?.includes(resolution.userExcerpt)) return fail()
+    if (resolution.kind === 'awaiting_user_input' || resolution.kind === 'registered_intent') {
+      if (usedRouting.has(resolution.routingIndex)) return fail()
+      usedRouting.add(resolution.routingIndex)
+      const actual = routing[resolution.routingIndex]
+      if (resolution.kind === 'awaiting_user_input') {
+        if (!actual || !('interaction' in actual)) return fail()
+        resolved.push({ ...item, resolution: { kind: 'awaiting_user_input', interaction: actual.interaction } })
+      } else {
+        if (!actual || !('registeredIntent' in actual)) return fail()
+        resolved.push({ ...item, resolution: { kind: 'registered_intent', intent: actual.registeredIntent } })
+      }
+    } else resolved.push({ ...item, resolution })
+  }
+  const messages = resolved.flatMap(item => {
+    switch (item.resolution.kind) {
+      case 'answered': return [item.resolution.message]
+      case 'awaiting_user_input': return [item.resolution.interaction.prompt]
+      case 'awaiting_review': return [`${item.request}：已生成待审核建议。`]
+      case 'registered_intent': return [`${item.request}：已登记任务目标，等待确认。`]
+      case 'withdrawn': return [`${item.request}：已按你的要求撤销。`]
+    }
+  })
+  return {
+    kind: 'resolved_items', message: messages.join('\n\n'), items: resolved,
+    reviewPackages: acceptedReviewPackagesFromGenerate(output),
+    completionBasis: { kind: 'resolved_items' }, diagnostic,
+  }
 }

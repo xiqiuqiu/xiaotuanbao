@@ -62,6 +62,7 @@ describe('submitReviewPackage contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
   })
 
@@ -224,6 +225,7 @@ describe('submitReviewPackage contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
@@ -234,6 +236,7 @@ describe('submitReviewPackage contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(capabilitiesForPendingReview(false, true)).toEqual([
       'getTaskContext',
@@ -244,6 +247,7 @@ describe('submitReviewPackage contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(capabilitiesForPendingReview(true, true)).toEqual([
       'getTaskContext',
@@ -254,6 +258,7 @@ describe('submitReviewPackage contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
   })
 

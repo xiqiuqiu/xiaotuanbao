@@ -112,6 +112,8 @@ describe('agent server', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+
+      'routeConversation',
     ])
   })
 
@@ -139,6 +141,8 @@ describe('agent server', () => {
           'getMaterialParseResult',
           'readConversationHistory',
           'readConversationSource',
+
+          'routeConversation',
         ],
       })
     } finally {

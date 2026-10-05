@@ -10,7 +10,7 @@ import {
 } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
@@ -35,7 +35,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -355,14 +355,14 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
   })
 
   it('persists Agent failure as a server-side batch fact and allows a new send', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'failed',
       error: {
         code: 'MODEL_REFUSED',
         message: '模型拒绝回答，请换一种说法或继续使用表单',
         retryable: false,
       },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -378,7 +378,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       ),
     ).toBe(true)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     await sendText(taskId, conversationId, '重试后的说明', `e2e-fail-retry-${taskId}`).expect(201)
     await processor.processDueJobs(5)
     const recovered = await listEvents(taskId, conversationId)

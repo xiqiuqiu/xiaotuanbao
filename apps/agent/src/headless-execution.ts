@@ -166,6 +166,11 @@ export async function handleHeadlessRun(
   const bound = boundIdentitiesFromDelegation(payload)
   if (
     !bound ||
+    bound.requestContext.executionGoal !== parsedRequest.data.executionGoal ||
+    (parsedRequest.data.executionGoal === 'resolve_items' && (
+      payload.pendingItemsSha256 !== createHash('sha256').update(JSON.stringify(parsedRequest.data.pendingItems ?? []), 'utf8').digest('hex') ||
+      payload.currentUserTextSha256 !== createHash('sha256').update(parsedRequest.data.currentUserText ?? '', 'utf8').digest('hex')
+    )) ||
     !identitiesMatch(headlessExecutionIdentitySchema.parse(parsedRequest.data), bound.identity)
   ) {
     json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
@@ -214,7 +219,7 @@ export async function handleHeadlessRun(
   const requestContext = bound.requestContext
 
   try {
-    await runWithAssistRequestContext({ delegationToken, ...requestContext }, () =>
+    await runWithAssistRequestContext({ delegationToken, ...requestContext, pendingItems: parsedRequest.data.pendingItems }, () =>
       writeNdjsonRun(request, response, (signal) =>
         iterateHeadlessFrames(executor, { ...parsedRequest.data, userText }, signal),
       ),

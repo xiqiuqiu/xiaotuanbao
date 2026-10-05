@@ -1,9 +1,11 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Injectable, Inject, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
+  AI_CREATE_SYSTEM_INSTRUCTIONS,
+  WORK_ITEMS_INSTRUCTIONS,
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
   DEPARTURE_CREATION_TASK_TYPE,
@@ -22,6 +24,11 @@ import {
   requestContextSchema,
   TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
+  type HeadlessResolvedItemsResult,
+  type AgentWorkItem,
+  type HeadlessExecutionRequest,
+  agentWorkItemSchema,
+  headlessExecutionResultSchema,
   type AiCreateDraftSnapshot,
   type HeadlessRegisteredIntentResult,
   type RequestContext,
@@ -140,6 +147,7 @@ import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
 const CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES = [
+  'recordWorkItems',
   ...CONVERSATION_RECALL_TOOL_NAMES,
   CONVERSATION_ROUTING_TOOL.name,
 ] as const
@@ -618,6 +626,8 @@ export class AiWorkflowProcessor {
             prepared.attemptId,
             outcome,
             prepared.request.executionGoal,
+            prepared.request.pendingItems,
+            prepared.request.currentUserText,
           )
           return outcome
         }, abort)
@@ -854,19 +864,8 @@ export class AiWorkflowProcessor {
             where: { eventId: job.inputBatch.replyToEventId },
             select: {
               id: true,
-              inputBatch: {
-                select: {
-                  agentAttempts: {
-                    orderBy: { startedAt: 'desc' },
-                    take: 1,
-                    select: {
-                      taskId: true,
-                      agentDefinitionKey: true,
-                      agentDefinitionVersion: true,
-                    },
-                  },
-                },
-              },
+              inputBatchId: true,
+              event: { select: { payload: true } },
             },
           })
         : Promise.resolve(null),
@@ -892,8 +891,17 @@ export class AiWorkflowProcessor {
           },
         })
       : null
-    const interactionAttempt = interaction?.inputBatch.agentAttempts[0]
-    const interactionAssociation = interactionAttempt
+    const originAttemptId = stringField(interaction?.event.payload, 'attemptId')
+    const interactionAttempt = originAttemptId && interaction
+      ? await this.prisma.aiAgentAttempt.findFirst({
+          where: {
+            id: originAttemptId, organizationId: job.organizationId,
+            conversationId: job.conversationId, inputBatchId: interaction.inputBatchId,
+          },
+          select: { taskId: true, agentDefinitionKey: true, agentDefinitionVersion: true },
+        })
+      : null
+    const interactionAssociation = interactionAttempt && interaction
       ? frozenAssociation(interaction.id, interactionAttempt, interactionAttempt.taskId)
       : undefined
     const reviewAssociation = reviewPackage?.attempt
@@ -934,16 +942,7 @@ export class AiWorkflowProcessor {
     route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
     pageAttachment?: ResolvedPageContext,
   ): Promise<{
-    request: {
-      taskId?: string
-      conversationId: string
-      inputBatchId: string
-      attemptId: string
-      contextManifestId: string
-      userText: string
-      userTextSha256: string
-      executionGoal: AgentExecutionGoal
-    }
+    request: HeadlessExecutionRequest
     attemptId: string
     delegationToken: string
     requestContext: RequestContext
@@ -979,6 +978,7 @@ export class AiWorkflowProcessor {
     if (!userText) {
       throw new Error('输入批次缺少 User 原文')
     }
+    const pendingItems = await this.loadPendingItems(job)
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
     const pinnedSources = await this.prisma.inputBatchSource.findMany({
@@ -1055,10 +1055,10 @@ export class AiWorkflowProcessor {
         },
         select: { id: true },
       })
-      const availableToolNames = capabilitiesForPendingReview(
+      const availableToolNames = [...capabilitiesForPendingReview(
         pendingReview != null,
         task.departure != null,
-      )
+      ), 'recordWorkItems']
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -1079,11 +1079,13 @@ export class AiWorkflowProcessor {
           fieldCoverage,
         },
         unresolvedState: {
+          pendingItems,
           hasPendingReview: pendingReview != null,
           reviewPackageId: pendingReview?.id ?? null,
         },
         modelId,
         toolNames: availableToolNames,
+        systemInstructions: `${AI_CREATE_SYSTEM_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
       })
       const modelInput = await resolveModelCurrentInput(tx, {
         organizationId: job.organizationId,
@@ -1096,6 +1098,7 @@ export class AiWorkflowProcessor {
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: availableToolNames,
+        systemInstructions: `${AI_CREATE_SYSTEM_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
         currentUserText: modelInput.currentUserText,
         businessFacts: {
           taskId: task.id,
@@ -1106,6 +1109,7 @@ export class AiWorkflowProcessor {
           fieldCoverage,
         },
         unresolvedState: {
+          pendingItems,
           hasPendingReview: pendingReview != null,
           reviewPackageId: pendingReview?.id ?? null,
         },
@@ -1210,10 +1214,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
-        executionGoal: executionGoalForRoute({
-          route,
-          executionGoal: confirmedReviewContinuation ? 'answer' : undefined,
-        }),
+        executionGoal: executionGoalForRoute({ route }),
         agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
@@ -1275,6 +1276,8 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      pendingItemsSha256: createHash('sha256').update(JSON.stringify(pendingItems)).digest('hex'),
+      currentUserTextSha256: createHash('sha256').update(originalUserText).digest('hex'),
       executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
@@ -1297,6 +1300,8 @@ export class AiWorkflowProcessor {
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
         executionGoal: prepared.requestContext.executionGoal,
+        pendingItems,
+        currentUserText: originalUserText,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1310,16 +1315,7 @@ export class AiWorkflowProcessor {
     route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
     pageAttachment?: ResolvedPageContext,
   ): Promise<{
-    request: {
-      taskId?: string
-      conversationId: string
-      inputBatchId: string
-      attemptId: string
-      contextManifestId: string
-      userText: string
-      userTextSha256: string
-      executionGoal: AgentExecutionGoal
-    }
+    request: HeadlessExecutionRequest
     attemptId: string
     delegationToken: string
     requestContext: RequestContext
@@ -1340,6 +1336,7 @@ export class AiWorkflowProcessor {
       throw new Error('输入批次缺少 User 原文')
     }
     const userText = originalUserText
+    const pendingItems = await this.loadPendingItems(job)
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
     const pinnedSources = await this.prisma.inputBatchSource.findMany({
@@ -1437,12 +1434,13 @@ export class AiWorkflowProcessor {
       })
       const messagePayload = userEvent.payload as Record<string, unknown>
       const unresolvedState = {
+        pendingItems,
         hasPendingReview: pendingReviews.length > 0,
         reviewPackageId: messagePayload.reviewPackageId ?? null,
         expectedPackageVersion: messagePayload.expectedPackageVersion ?? null,
         pendingReviews,
       }
-      const availableToolNames = [...DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES]
+      const availableToolNames = [...DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES, 'recordWorkItems']
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -1458,7 +1456,7 @@ export class AiWorkflowProcessor {
         unresolvedState,
         modelId,
         toolNames: availableToolNames,
-        systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
+        systemInstructions: `${DEPARTURE_COLLABORATION_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
         systemPromptVersion: DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
       })
@@ -1473,7 +1471,7 @@ export class AiWorkflowProcessor {
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: availableToolNames,
-        systemInstructions: DEPARTURE_COLLABORATION_INSTRUCTIONS,
+        systemInstructions: `${DEPARTURE_COLLABORATION_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
         systemPromptVersion: DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION,
         currentUserText: modelInput.currentUserText,
@@ -1578,7 +1576,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
-        executionGoal: executionGoalForRoute({ route, userText }),
+        executionGoal: executionGoalForRoute({ route }),
         agentDefinition: route.agentDefinition,
         entitlementStatus: 'unavailable',
         objectScopes: [
@@ -1636,6 +1634,8 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      pendingItemsSha256: createHash('sha256').update(JSON.stringify(pendingItems)).digest('hex'),
+      currentUserTextSha256: createHash('sha256').update(originalUserText).digest('hex'),
       executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
@@ -1658,6 +1658,8 @@ export class AiWorkflowProcessor {
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
         executionGoal: prepared.requestContext.executionGoal,
+        pendingItems,
+        currentUserText: originalUserText,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1669,15 +1671,7 @@ export class AiWorkflowProcessor {
     job: ClaimedJob,
     pageContext?: ResolvedPageContext,
   ): Promise<{
-    request: {
-      conversationId: string
-      inputBatchId: string
-      attemptId: string
-      contextManifestId: string
-      userText: string
-      userTextSha256: string
-      executionGoal: AgentExecutionGoal
-    }
+    request: HeadlessExecutionRequest
     attemptId: string
     delegationToken: string
     requestContext: RequestContext
@@ -1693,6 +1687,7 @@ export class AiWorkflowProcessor {
     if (!userText) {
       throw new Error('输入批次缺少 User 原文')
     }
+    const pendingItems = await this.loadPendingItems(job)
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
     const historyEvents = await this.prisma.aiConversationEvent.findMany({
@@ -1751,10 +1746,10 @@ export class AiWorkflowProcessor {
         materialTruncationReasons: parseIndex.truncationReasons,
         currentUserText: userText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState: { hasPendingReview: false, reviewPackageId: null, pendingItems },
         modelId,
         toolNames: CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES,
-        systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+        systemInstructions: `${CONVERSATION_GENERAL_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
       })
@@ -1769,12 +1764,12 @@ export class AiWorkflowProcessor {
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES,
-        systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+        systemInstructions: `${CONVERSATION_GENERAL_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
         currentUserText: modelInput.currentUserText,
         businessFacts,
-        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        unresolvedState: { hasPendingReview: false, reviewPackageId: null, pendingItems },
         projection: withSourceIndexTruncation(
           preparedProjection.projection,
           modelInput.truncationReasons,
@@ -1924,6 +1919,8 @@ export class AiWorkflowProcessor {
       inputBatchId: job.inputBatchId,
       attemptId: prepared.attemptId,
       contextManifestId: prepared.contextManifestId,
+      pendingItemsSha256: createHash('sha256').update(JSON.stringify(pendingItems)).digest('hex'),
+      currentUserTextSha256: createHash('sha256').update(userText).digest('hex'),
       executionGoal: prepared.requestContext.executionGoal,
       agentDefinition: prepared.requestContext.agentDefinition,
       grantedCapabilities: prepared.requestContext.grantedCapabilities,
@@ -1944,11 +1941,36 @@ export class AiWorkflowProcessor {
         userText: prepared.userText,
         userTextSha256: prepared.userTextSha256,
         executionGoal: prepared.requestContext.executionGoal,
+        pendingItems,
+        currentUserText: userText,
       },
       attemptId: prepared.attemptId,
       delegationToken,
       requestContext: prepared.requestContext,
     }
+  }
+
+  private async loadPendingItems(job: ClaimedJob): Promise<AgentWorkItem[]> {
+    const previous = await this.prisma.aiAgentAttempt.findFirst({
+      where: { organizationId: job.organizationId, inputBatchId: job.inputBatchId, status: AiAgentAttemptStatus.completed },
+      orderBy: { startedAt: 'desc' }, select: { resultJson: true },
+    })
+    const completed = headlessExecutionResultSchema.safeParse(previous?.resultJson)
+    if (completed.success && completed.data.kind === 'resolved_items') {
+      // The newly created task owns this continuation, even when the batch began as a reply.
+      return completed.data.items.flatMap((item) => item.resolution.kind === 'registered_intent'
+        ? [{ id: item.id, request: item.request, goal: 'propose_change' as const }] : [])
+    }
+    if (!job.inputBatch.replyToEventId) return []
+    const event = await this.prisma.aiConversationEvent.findFirst({ where: {
+      id: job.inputBatch.replyToEventId, organizationId: job.organizationId,
+      conversationId: job.conversationId, sequence: { lte: job.inputBatch.conversationVersion },
+    }, select: { payload: true } })
+    const payload = event?.payload
+    const parsed = agentWorkItemSchema.safeParse(
+      payload && typeof payload === 'object' && !Array.isArray(payload) ? payload.requestItem : null,
+    )
+    return parsed.success ? [parsed.data] : []
   }
 
   private async persistOutcome(
@@ -1958,10 +1980,14 @@ export class AiWorkflowProcessor {
     attemptId: string,
     result: HeadlessExecutionResult,
     executionGoal?: AgentExecutionGoal,
+    pendingItems?: AgentWorkItem[],
+    currentUserText?: string,
   ): Promise<void> {
     result = validateHeadlessOutcomeAgainstGoal({
       executionGoal: executionGoalForRoute({ route, executionGoal }),
       outcome: result,
+      pendingItems,
+      currentUserText,
     })
     if (result.kind === 'failed') {
       const errorCode = result.error.code
@@ -1977,6 +2003,32 @@ export class AiWorkflowProcessor {
       }
       await this.scheduleRetry(job, errorCode, attemptId, result)
       return
+    }
+    if (result.kind === 'resolved_items') {
+      const intents = result.items.flatMap((item) => item.resolution.kind === 'registered_intent'
+        ? [item.resolution.intent] : [])
+      if (intents.length > 1) {
+        await this.persistFailure(job, 'AGENT_OUTCOME_INCOMPLETE', undefined, attemptId)
+        return
+      }
+      if (intents[0]) {
+        const proposal = this.executionRouter.route({
+          ...routingInput, associations: { taskRefs: [] }, registeredIntent: intents[0],
+        })
+        if (proposal.kind !== 'task_creation_proposal') {
+          await this.persistFailure(job, 'INVALID_FORMAT', undefined, attemptId)
+          return
+        }
+        await this.persistTaskCreationProposal(job, route, attemptId, {
+          kind: 'registered_intent', intent: intents[0], message: result.message,
+          completionBasis: { kind: 'governed_action_result' }, diagnostic: result.diagnostic,
+        }, proposal, result)
+        return
+      }
+      if (result.reviewPackages.length && !job.taskId) {
+        await this.persistFailure(job, 'INVALID_FORMAT', undefined, attemptId)
+        return
+      }
     }
     if (result.kind === 'registered_intent') {
       const intentRoute = this.executionRouter.route({
@@ -2037,7 +2089,14 @@ export class AiWorkflowProcessor {
       if (!finalAuthorization.ok) {
         throw AiCollaborationError.fromCode('PERMISSION_DENIED')
       }
-      const batchStatus = batchStatusForResult(result)
+      const projected = result.kind === 'resolved_items'
+        ? await this.projectResolvedItems(tx, job, attemptId, result)
+        : null
+      const batchStatus = projected?.status ?? batchStatusForResult(result)
+      let interactionId: string | null = projected?.interactionIds[0] ?? null
+      let reviewPackageId: string | null = projected?.reviewPackageIds[0] ?? null
+      if (projected) published.push(...projected.eventIds)
+      if (result.kind !== 'resolved_items') {
       const message =
         result.kind === 'answered'
           ? result.message
@@ -2047,7 +2106,7 @@ export class AiWorkflowProcessor {
                 isDepartureCollaborationReviewUnit(result.reviewPackage.confirmationUnit)
               ? '已提交待审核建议，请在右侧审核确认。'
               : '已提交待审核建议，请在中间表单确认。'
-      const interactionId =
+      interactionId =
         result.kind === 'awaiting_user_input' ? randomUUID() : null
       const interactionPayload =
         result.kind === 'awaiting_user_input' && interactionId
@@ -2079,7 +2138,7 @@ export class AiWorkflowProcessor {
           )
         }
       }
-      const reviewPackageId = reviewPackageIds[0] ?? null
+      reviewPackageId = reviewPackageIds[0] ?? null
       const reviewPackageCoordinates = reviewPackageId
         ? await tx.aiReviewPackage.findUniqueOrThrow({
             where: { id: reviewPackageId },
@@ -2139,6 +2198,8 @@ export class AiWorkflowProcessor {
         })
       }
 
+      }
+
       const statusEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -2177,7 +2238,14 @@ export class AiWorkflowProcessor {
       if (job.taskId) {
         const waiting =
           batchStatus === AiInputBatchStatus.awaiting_review ||
-          batchStatus === AiInputBatchStatus.awaiting_user_input
+          batchStatus === AiInputBatchStatus.awaiting_user_input ||
+          await tx.aiReviewPackage.count({ where: {
+            organizationId: job.organizationId, taskId: job.taskId, status: AiReviewPackageStatus.pending,
+          } }) > 0 ||
+          await tx.aiConversationInteraction.count({ where: {
+            organizationId: job.organizationId, status: AiConversationInteractionStatus.pending,
+            inputBatch: { taskLinks: { some: { taskId: job.taskId } } },
+          } }) > 0
         await tx.agentTask.updateMany({
           where: {
             id: job.taskId,
@@ -2222,12 +2290,88 @@ export class AiWorkflowProcessor {
     await this.publishCommittedEvents(job.conversationId, published)
   }
 
+  private async projectResolvedItems(
+    tx: Prisma.TransactionClient,
+    job: ClaimedJob,
+    attemptId: string,
+    result: HeadlessResolvedItemsResult,
+  ) {
+    const eventIds: string[] = []
+    const interactionIds: string[] = []
+    const reviewPackageIds: string[] = []
+    for (const item of result.items) {
+      const resolution = item.resolution
+      // Task creation is committed by persistTaskCreationProposal, then continued in this batch.
+      if (resolution.kind === 'registered_intent') continue
+      const itemReviewIds: string[] = []
+      if (resolution.kind === 'awaiting_review') {
+        for (const [ordinal, index] of resolution.reviewPackageIndexes.entries()) {
+          itemReviewIds.push(await this.projectReviewPackageViaGateway(
+            tx, job, attemptId, result.reviewPackages[index]!, `request:${item.id}:review:${ordinal}`,
+          ))
+        }
+        reviewPackageIds.push(...itemReviewIds)
+      }
+      const coordinates = itemReviewIds[0]
+        ? await tx.aiReviewPackage.findUniqueOrThrow({
+            where: { id: itemReviewIds[0] },
+            select: { payloadSchema: true, confirmationUnit: true, targetId: true },
+          })
+        : null
+      const interaction = resolution.kind === 'awaiting_user_input' ? resolution.interaction : null
+      const interactionId = interaction ? randomUUID() : null
+      const interactionPayload = interaction && interactionId ? {
+        interactionId, type: interaction.type, prompt: interaction.prompt,
+        options: interaction.options ?? [],
+        responseSchema: responseSchemaFor(interaction.type, interaction.options ?? []),
+        status: AiConversationInteractionStatus.pending, version: 1,
+      } : null
+      const message = resolution.kind === 'answered' ? resolution.message
+        : resolution.kind === 'withdrawn' ? `已按你的要求撤回：${item.request}`
+        : interaction ? interaction.prompt
+        : `已提交待审核建议：${item.request}，请审核确认。`
+      const event = await this.conversationService.appendEvent(tx, {
+        organizationId: job.organizationId, conversationId: job.conversationId,
+        kind: AiConversationEventKind.agent_message,
+        payload: {
+          text: message, batchId: job.inputBatchId, attemptId, requestItem: item,
+          ...(job.taskId ? { taskId: job.taskId } : {}),
+          ...(interactionPayload ? { interaction: interactionPayload } : {}),
+          ...(coordinates ? {
+            reviewPackageId: itemReviewIds[0], reviewPackageIds: itemReviewIds,
+            payloadSchema: coordinates.payloadSchema, confirmationUnit: coordinates.confirmationUnit,
+            fieldKeys: resolution.kind === 'awaiting_review' ? resolution.reviewPackageIndexes.flatMap(index => result.reviewPackages[index]!.candidates.map(candidate => candidate.fieldKey)) : [],
+            ...(isDepartureCollaborationReviewUnit(coordinates.confirmationUnit) ? {
+              taskType: DEPARTURE_COLLABORATION_TASK_TYPE, departureId: coordinates.targetId,
+            } : {}),
+          } : {}),
+        } as Prisma.InputJsonValue,
+      })
+      eventIds.push(event.id)
+      if (interaction && interactionId && interactionPayload) {
+        interactionIds.push(interactionId)
+        await tx.aiConversationInteraction.create({ data: {
+          id: interactionId, organizationId: job.organizationId, conversationId: job.conversationId,
+          inputBatchId: job.inputBatchId, eventId: event.id, type: interaction.type,
+          prompt: interaction.prompt, options: interactionPayload.options,
+          responseSchema: interactionPayload.responseSchema as Prisma.InputJsonValue,
+          status: AiConversationInteractionStatus.pending, version: 1,
+        } })
+      }
+    }
+    const status = await this.conversationService.pendingBatchStatus(
+      tx, job.organizationId, job.conversationId, job.inputBatchId,
+    ) ?? AiInputBatchStatus.completed
+    return { eventIds, interactionIds, reviewPackageIds, status }
+  }
+
   private async persistTaskCreationProposal(
     job: ClaimedJob,
     currentRoute: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
     attemptId: string,
     result: HeadlessRegisteredIntentResult,
     proposal: Extract<AgentExecutionRoute, { kind: 'task_creation_proposal' }>,
+    resolvedItems?: HeadlessResolvedItemsResult,
   ): Promise<void> {
     const descriptor =
       registeredTaskDescriptors.findByTaskType(proposal.taskType) ??
@@ -2260,6 +2404,9 @@ export class AiWorkflowProcessor {
 
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
+      if (job.taskId && resolvedItems?.reviewPackages.length) {
+        await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      }
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       if (!(await this.ownsClaimedJob(tx, job.id))) {
         return
@@ -2328,11 +2475,15 @@ export class AiWorkflowProcessor {
           role: InputBatchTaskRole.created,
         },
       })
+      if (resolvedItems) {
+        const projected = await this.projectResolvedItems(tx, job, attemptId, resolvedItems)
+        published.push(...projected.eventIds)
+      }
       await tx.aiAgentAttempt.update({
         where: { id: attemptId },
         data: {
           status: AiAgentAttemptStatus.completed,
-          resultJson: result as unknown as Prisma.InputJsonValue,
+          resultJson: (resolvedItems ?? result) as unknown as Prisma.InputJsonValue,
           ...attemptDiagnosticUpdate(result),
           endedAt: new Date(),
         },

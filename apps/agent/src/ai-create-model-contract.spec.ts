@@ -1,3 +1,5 @@
+import { createRecordWorkItemsTool } from './work-items.tool'
+import { createConversationRoutingTool } from './conversation-routing.tool'
 import { standardSchemaToJSONSchema } from '@mastra/core/schema'
 import {
   AI_CREATE_TOOL_NAMES,
@@ -32,9 +34,11 @@ describe('AI Create actual tool model contract', () => {
       getMaterialParseResult: createGetMaterialParseResultTool(config),
       readConversationHistory: createReadConversationHistoryTool(config),
       readConversationSource: createReadConversationSourceTool(config),
+      routeConversation: createConversationRoutingTool(),
+      recordWorkItems: createRecordWorkItemsTool(),
     }
     const budgeted = JSON.parse(
-      aiCreateModelContractForTools(AI_CREATE_TOOL_NAMES).toolSchemaText,
+      aiCreateModelContractForTools([...AI_CREATE_TOOL_NAMES, 'recordWorkItems']).toolSchemaText,
     ) as unknown
     const actualModelTools = Object.entries(actualTools).map(([name, tool]) => ({
       type: 'function',

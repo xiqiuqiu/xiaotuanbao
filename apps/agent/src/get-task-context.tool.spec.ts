@@ -98,6 +98,8 @@ describe('createGetTaskContextTool', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+
+      'routeConversation',
     ])
   })
 

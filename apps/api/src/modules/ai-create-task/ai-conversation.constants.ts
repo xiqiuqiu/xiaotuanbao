@@ -28,14 +28,14 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v4'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v11'
-export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v10'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v12'
+export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v11'
 /** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
-export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v7'
+export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v8'
 /** 无任务会话向模型暴露会话原文回读工具；Manifest 必须与 recall schema 对齐。 */
-export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-routing-recall/v2'
-export const DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION = 'departure-collaboration/v4'
-export const DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION = 'departure-collaboration-tools/v3'
+export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-routing-recall/v3'
+export const DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION = 'departure-collaboration/v5'
+export const DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION = 'departure-collaboration-tools/v4'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
 export const CONVERSATION_HISTORY_PAGE_SIZE = 20
 export const CONVERSATION_HISTORY_MAX_PAGE_SIZE = 50

@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { AiCollaborationError, type RequestContext } from '@xiaotuanbao/ai-contracts'
+import { AiCollaborationError, type RequestContext, type AgentWorkItem } from '@xiaotuanbao/ai-contracts'
 
 export interface AssistRequestContext extends Partial<RequestContext> {
   delegationToken: string
+  pendingItems?: AgentWorkItem[]
 }
 
 const storage = new AsyncLocalStorage<AssistRequestContext>()

@@ -35,6 +35,7 @@ describe('现有建团 Agent Definition', () => {
       { key: 'departure.material-parse-result.read', version: 1, toolName: 'getMaterialParseResult' },
       { key: 'conversation.history.read', version: 1, toolName: 'readConversationHistory' },
       { key: 'conversation.source.read', version: 1, toolName: 'readConversationSource' },
+      { key: 'conversation.intent.route', version: 1, toolName: 'routeConversation' },
     ])
     for (const capability of AI_CREATE_CAPABILITY_DEFINITIONS) {
       expect(capabilityDefinitionRegistry.get(capability)).toBe(capability)

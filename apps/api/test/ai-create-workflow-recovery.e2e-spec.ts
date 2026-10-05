@@ -7,7 +7,7 @@ import {
 } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
@@ -44,7 +44,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -68,7 +68,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
   })
 
   afterEach(async () => {
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     agent.release()
     ocr.release()
     await prisma.user.update({
@@ -202,14 +202,14 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
   }
 
   it('lets the creator retry a failed Agent batch without sending a new User message', async () => {
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'failed',
       error: {
         code: 'MODEL_REFUSED',
         message: '模型拒绝回答，请换一种说法或继续使用表单',
         retryable: false,
       },
-    })
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -227,7 +227,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
       ),
     ).toBe(true)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     const retried = await retryBatch(taskId, conversationId, batchId, `e2e-retry-${taskId}`).expect(200)
     expect(retried.body.data.batch).toMatchObject({ id: batchId, status: 'ready_for_agent' })
     expect(retried.body.data.events.map((event: { kind: string }) => event.kind)).toEqual([
@@ -270,7 +270,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     await retryBatch(taskId, conversationId, batchId, `e2e-retry-cancelled-${taskId}`).expect(409)
 
     const review = await openSession()
-    agent.setOutcome(reviewOutcome(review.task.draft.version, '请提交审核'))
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(review.task.draft.version, '请提交审核')))
     const reviewing = await sendText(
       review.task.id,
       review.conversation.id,
@@ -349,7 +349,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
 
   it('fails immediately on VERSION_CONFLICT and after permission revoke without calling tools', async () => {
     const conflict = await openSession()
-    agent.setOutcome(reviewOutcome(conflict.task.draft.version + 9, '版本冲突'))
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(conflict.task.draft.version + 9, '版本冲突')))
     await sendText(
       conflict.task.id,
       conflict.conversation.id,
@@ -395,7 +395,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
-    agent.setOutcome(reviewOutcome(opened.task.draft.version, '崩溃后回包'))
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(opened.task.draft.version, '崩溃后回包')))
     const sent = await sendText(taskId, conversationId, '崩溃后回包', `e2e-crash-${taskId}`).expect(201)
     const job = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { taskId, type: 'agent_batch' },

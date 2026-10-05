@@ -152,6 +152,7 @@ function createHarness(options?: {
   }
   const createdEvents: Array<Record<string, unknown>> = []
   const aiConversationEvent = {
+    findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn(async () => createdEvents.at(-1) ?? null),
     create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
       const event = {
@@ -164,6 +165,7 @@ function createHarness(options?: {
     }),
   }
   const aiConversationInteraction = {
+    count: jest.fn().mockResolvedValue(0),
     findFirst: jest.fn().mockResolvedValue(null),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   }
@@ -194,7 +196,7 @@ function createHarness(options?: {
   }
 
   const tx = {
-    aiReviewPackage: { findFirst: jest.fn().mockResolvedValue({ id: 'pkg-1', taskId, version: 2, status: 'pending' }) },
+    aiReviewPackage: { count: jest.fn().mockResolvedValue(0), findFirst: jest.fn().mockResolvedValue({ id: 'pkg-1', taskId, version: 2, status: 'pending' }) },
     $queryRaw: jest.fn().mockResolvedValue([]),
     aiCreateTask,
     aiConversation,
@@ -215,6 +217,7 @@ function createHarness(options?: {
         ...data,
       })),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     conversationTaskLink: {
       findMany: jest.fn().mockResolvedValue([
@@ -241,6 +244,7 @@ function createHarness(options?: {
 
   const prisma = {
     conversationSource,
+    aiConversationInteraction,
     aiCreateIdempotencyRecord: {
       ...aiCreateIdempotencyRecord,
       findUnique: jest.fn().mockResolvedValue(null),
@@ -592,7 +596,7 @@ describe('AiConversationService.sendTasklessText existing departure #447', () =>
 })
 
 describe('AiConversationService.sendText composer draft', () => {
-  it('does not clear the composer draft or bump draftEpoch when answering an interaction card', async () => {
+  it.each([[0, 0, 'completed'], [1, 0, 'awaiting_user_input'], [1, 1, 'awaiting_user_input'], [0, 1, 'awaiting_review']])('preserves draft and sibling waiting items after replying (%s interactions, %s reviews)', async (interactions, reviews, expectedStatus) => {
     const existingDraft = {
       id: 'conversation-draft-1',
       organizationId,
@@ -605,6 +609,9 @@ describe('AiConversationService.sendText composer draft', () => {
       updatedAt: now,
     }
     const { service, tx } = createHarness()
+    tx.aiConversationInteraction.count.mockResolvedValue(interactions)
+    tx.aiConversationEvent.findMany.mockResolvedValue([{ payload: { batchId: 'batch-ask', reviewPackageIds: ['sibling-review'] } }])
+    tx.aiReviewPackage.count.mockResolvedValue(reviews)
     tx.aiConversationDraft.findUnique.mockResolvedValue(existingDraft)
     tx.aiConversationInteraction.findFirst.mockResolvedValue({
       id: 'int-1',
@@ -636,6 +643,10 @@ describe('AiConversationService.sendText composer draft', () => {
       },
     )
 
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith({ where: { id: 'batch-ask' }, data: { status: expectedStatus } })
+    if (interactions === 0) expect(tx.aiReviewPackage.count).toHaveBeenCalledWith({ where: {
+      organizationId, status: 'pending', OR: [{ inputBatchId: 'batch-ask' }, { id: { in: ['sibling-review'] } }],
+    } })
     expect(tx.aiConversationDraft.upsert).not.toHaveBeenCalled()
     expect(tx.aiConversationDraft.findUnique).toHaveBeenCalledWith({
       where: { conversationId_userId: { conversationId, userId } },
@@ -646,4 +657,23 @@ describe('AiConversationService.sendText composer draft', () => {
       revision: 5,
     })
   })
+})
+
+
+describe('AiConversationService.cancelInteraction sibling items', () => {
+  it.each([[1, 0, 'awaiting_user_input'], [0, 1, 'awaiting_review'], [0, 0, 'cancelled']])(
+    'keeps %s clarifications and %s reviews pending', async (interactions, reviews, status) => {
+      const { service, tx } = createHarness()
+      tx.aiConversationInteraction.findFirst.mockResolvedValue({ id: 'int-1', inputBatchId: 'batch-ask', version: 1, status: 'pending' })
+      tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+      tx.aiConversationInteraction.count.mockResolvedValue(interactions)
+      tx.aiReviewPackage.count.mockResolvedValue(reviews)
+      tx.aiInputBatch.findFirst.mockResolvedValue({ id: 'batch-ask', conversationId, status: 'awaiting_user_input' })
+      tx.aiInputBatch.update.mockResolvedValue({ id: 'batch-ask', conversationId, status, conversationVersion: 1 })
+      const result = await service.cancelInteraction(organizationId, userId, taskId, conversationId, 'int-1', 1, 'cancel-1')
+      expect(tx.aiInputBatch.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status } }))
+      expect(result.events[0].payload).toMatchObject({ status, interactionId: 'int-1' })
+      if (status !== 'cancelled') expect(tx.agentTask.updateMany).not.toHaveBeenCalled()
+    },
+  )
 })

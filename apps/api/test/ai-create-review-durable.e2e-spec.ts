@@ -4,7 +4,7 @@ import { DepartureType, PrismaClient } from '@prisma/client'
 import { recoveryFromAttempt } from '../src/modules/ai-create-task/attempt-diagnostic'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
@@ -34,7 +34,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -80,7 +80,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
   })
 
   afterEach(() => {
-    agent.setOutcome(reviewOutcome(1))
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(1)))
     agent.release()
     ocr.release()
   })
@@ -173,7 +173,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
   }
 
   async function submitAwaitingReview(taskId: string, conversationId: string, objectVersion: number) {
-    agent.setOutcome(reviewOutcome(objectVersion))
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(objectVersion)))
     await sendMessage(taskId, conversationId, '请按这个团名建团', `e2e-review-${taskId}`).expect(201)
     await processor.processDueJobs(5)
     await waitFor(async () => {
@@ -341,11 +341,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       `${testPrefix}-修正团名`,
     )
 
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'answered',
       message: CONTINUATION_MESSAGE,
       completionBasis: { kind: 'final_answer' },
-    })
+    }))
     const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
@@ -422,11 +422,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'answered',
       message: CONTINUATION_MESSAGE,
       completionBasis: { kind: 'final_answer' },
-    })
+    }))
     await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
@@ -440,7 +440,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(agent.lastUserText()).toContain('已在中间表单确认')
     expect(agent.lastUserText()).not.toContain(ordinaryText)
 
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
     await processor.processDueJobs(5)
     expect(agent.callCount()).toBe(callsAfterSubmit + 2)
     expect(agent.lastUserText()).toContain(ordinaryText)
@@ -517,11 +517,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
-    agent.setOutcome({
+    agent.setOutcome(resolvedItemOutcome({
       kind: 'answered',
       message: CONTINUATION_MESSAGE,
       completionBasis: { kind: 'final_answer' },
-    })
+    }))
     const body = {
       expectedVersion: opened.task.draft.version,
       expectedPackageVersion: pending.version,

@@ -13,7 +13,7 @@ import { departureObjectVersion } from '../src/modules/ai-create-task/departure-
 import { PrismaService } from '../src/database/prisma/prisma.service'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
-import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicHeadlessAgent, resolvedItemOutcome } from './support/deterministic-headless-agent'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 
@@ -52,7 +52,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
       serviceSecret: AGENT_SECRET,
-      outcome: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } },
+      outcome: resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } }),
     })
     process.env.AGENT_INTERNAL_URL = agent.origin
 
@@ -74,7 +74,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
   })
 
   afterEach(() => {
-    agent.setOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } })
+    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '已记下。' }, completionBasis: { kind: 'persistent_clarification' } }))
     agent.release()
     jest.restoreAllMocks()
   })
@@ -382,7 +382,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 录入客源张三与希尔顿酒店及全程用车`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1) },
         {
           confirmationUnit: 'segment_resource',
@@ -392,7 +392,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
           confirmationUnit: 'departure_resource',
           candidates: departureResourceCandidates(supplier.id, '全程用车', 200_000, text, 1),
         },
-      ]),
+      ])),
     )
 
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-loop`)
@@ -515,13 +515,13 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 幂等客源与酒店`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1, '李四') },
         {
           confirmationUnit: 'segment_resource',
           candidates: segmentResourceCandidates(segmentId, supplier.id, '酒店甲', 80_000, text, 1),
         },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-idem`)
     await processJobs(conversationId)
@@ -586,9 +586,9 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 迟到提案客源`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1, '王五') },
-      ]),
+      ])),
     )
     const { conversationId, batchId } = await openCollaboration(departureId, text, `${testPrefix}-late`)
     const job = await prisma.aiWorkflowJob.findFirstOrThrow({
@@ -635,10 +635,10 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const text = `${testPrefix} 两家同价酒店`
     const same = segmentResourceCandidates(segmentId, supplier.id, '同价酒店', 50_000, text, 1)
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'segment_resource', candidates: same },
         { confirmationUnit: 'segment_resource', candidates: same },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-same`)
     await processJobs(conversationId)
@@ -680,12 +680,12 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 双设备修订酒店`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         {
           confirmationUnit: 'segment_resource',
           candidates: segmentResourceCandidates(segmentId, supplier.id, '原酒店名', 80_000, text, 1),
         },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-devices`)
     await processJobs(conversationId)
@@ -743,7 +743,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 两家酒店`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         {
           confirmationUnit: 'segment_resource',
           candidates: segmentResourceCandidates(segmentId, okSupplier.id, '成功酒店', 50_000, text, 1),
@@ -752,7 +752,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
           confirmationUnit: 'segment_resource',
           candidates: segmentResourceCandidates(segmentId, badSupplier.id, '失败酒店', 60_000, text, 1),
         },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-partial`)
     await processJobs(conversationId)
@@ -806,9 +806,9 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 原子客源名单`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1, '赵六') },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-atomic`)
     await processJobs(conversationId)
@@ -853,9 +853,9 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 账款客源`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1, '孙七') },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-ar`)
     await processJobs(conversationId)
@@ -920,7 +920,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 关闭前两家资源`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         {
           confirmationUnit: 'segment_resource',
           candidates: segmentResourceCandidates(segmentId, supplier.id, '关闭酒店', 70_000, text, 1),
@@ -929,7 +929,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
           confirmationUnit: 'departure_resource',
           candidates: departureResourceCandidates(supplier.id, '关闭用车', 90_000, text, 1),
         },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-closed`)
     await processJobs(conversationId)
@@ -974,9 +974,9 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const version = await objectVersion(departureId)
     const text = `${testPrefix} 撤权客源`
     agent.setOutcome(
-      reviewOutcome(version, [
+      resolvedItemOutcome(reviewOutcome(version, [
         { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, text, 1, '周八') },
-      ]),
+      ])),
     )
     const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-revoke`)
     await processJobs(conversationId)

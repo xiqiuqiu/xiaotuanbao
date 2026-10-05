@@ -23,6 +23,7 @@ describe('searchRouteTemplates contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(SEARCH_ROUTE_TEMPLATES_LIMIT).toBe(5)
   })
@@ -38,6 +39,7 @@ describe('searchRouteTemplates contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
@@ -48,6 +50,7 @@ describe('searchRouteTemplates contract v1', () => {
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',
+      'routeConversation',
     ])
   })
 

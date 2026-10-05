@@ -62,9 +62,9 @@ export function createAgentServer(config: AgentServerConfig) {
         return request.userText.trim()
       },
       stream: (userText, signal) => {
-        const { delegationToken: _delegationToken, ...requestContext } = getAssistRequestContext()
+        const { delegationToken: _delegationToken, pendingItems, ...requestContext } = getAssistRequestContext()
         const trusted = requestContextSchema.parse(requestContext)
-        const attemptMastra = createAiCreateMastra(config, trusted)
+        const attemptMastra = createAiCreateMastra({ ...config, pendingItems }, trusted)
         return attemptMastra.getAgent(AI_CREATE_AGENT_ID).stream(userText, {
           abortSignal: signal,
         })
