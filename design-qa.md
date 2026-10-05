@@ -100,7 +100,7 @@ final result: passed
 ## Comparison history
 
 - Pass 1：发现 P1——中栏顶部关系条重复表达三栏关系并压缩会话工作面。
-- Fix：删除关系条和全部对应 CSS；同步修正 ADR、需求文档、交互模型与 `CONTEXT.md`，避免后续原型再次引入。
+- Fix：删除关系条和全部对应 CSS；同步修正 ADR、需求文档、交互模型与 `GLOSSARY.md`，避免后续原型再次引入。
 - Pass 2：中栏标题后直接进入会话内容，三栏边界和顶部对齐恢复，无剩余 P0/P1/P2。
 
 ## Interaction and runtime checks

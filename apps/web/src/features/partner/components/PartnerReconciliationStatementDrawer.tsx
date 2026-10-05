@@ -33,7 +33,7 @@ import { formatCents } from '@/features/departure/catalog'
 
 type StatementPeriod = [string, string] | null
 
-/** 预览与导出物同构：对外整套使用客户习惯名（豁免仅限确认单，见 CONTEXT.md）。 */
+/** 预览与导出物同构：对外整套使用客户习惯名（豁免仅限确认单，见 GLOSSARY.md）。 */
 const DETAIL_COLUMNS: ColumnsType<PartnerReconciliationStatementRow> = [
   {
     title: '序号',

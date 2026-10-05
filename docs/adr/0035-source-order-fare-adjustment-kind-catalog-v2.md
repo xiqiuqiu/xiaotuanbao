@@ -14,5 +14,5 @@ status: accepted
 ## Consequences
 
 - 取代 ADR-0031 Consequences 中的固定种类清单与「自定义」逃生口描述；ADR-0031 关于「调整与优惠并存、净额展示、金额锁定」的决定仍有效
-- 枚举与校验随新目录替换；`CONTEXT.md` 中 Fare Adjustment Kind / Note 已同步
+- 枚举与校验随新目录替换；`GLOSSARY.md` 中 Fare Adjustment Kind / Note 已同步
 - 客源单抽屉 UI（加宽纵排、锚点 Tab、一行式录入、底部结算预览）在实现规格中落地，不改变收款拆分与生成应收口径

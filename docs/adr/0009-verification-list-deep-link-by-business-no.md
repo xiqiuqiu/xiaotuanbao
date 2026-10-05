@@ -19,4 +19,4 @@ status: accepted
 
 - 路由 search 与跳转方（流水列表、应收/应付列表）改为传业务编号；`VerificationsWorkspace` 去掉 `initialTransactionId` / `initialPaymentScheduleId` 临时条。
 - 列表查询 DTO 增加 `transactionNoMatch` / `scheduleNoMatch`（`exact` | `contains`，默认 `contains`）；精确比较大小写不敏感，与现网 `contains` 一致。
-- 领域词汇见根目录 `CONTEXT.md`（Verification List Deep Link、Verify From Transaction、Payment Schedule List Actions）。
+- 领域词汇见根目录 `GLOSSARY.md`（Verification List Deep Link、Verify From Transaction、Payment Schedule List Actions）。

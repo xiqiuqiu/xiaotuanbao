@@ -218,17 +218,6 @@ export function DepartureCollaborationWorkspace({
     queryKey: ['departure-collaboration', departureId, 'history', conversationId],
     queryFn: () => getDepartureCollaboration(departureId),
   })
-  useEffect(() => {
-    const state = useAgentConversationStore.getState()
-    if (
-      history.isSuccess &&
-      state.view === 'history' &&
-      state.conversationId &&
-      !history.data.conversations.some((entry) => entry.id === state.conversationId)
-    ) {
-      state.startNewConversation(currentPageAttachmentFromLocation(`/departure/${departureId}`))
-    }
-  }, [departureId, history.data, history.isSuccess])
   const collaboration = useQuery({
     queryKey: ['departure-collaboration', departureId, conversationId],
     queryFn: () => getDepartureCollaboration(departureId, conversationId!),

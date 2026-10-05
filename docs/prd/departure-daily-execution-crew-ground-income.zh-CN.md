@@ -2,7 +2,7 @@
 
 **状态**：已定稿（产品决议冻结 2026-07-28；Issue [#199](https://github.com/xiqiuqiu/xiaotuanbao/issues/199)）  
 **Menu Key**：`/departure`（执行安排、概览）；应付侧复用现有资源应付生成；供应商名录复用选司机/导游  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)（重点：Departure、Itinerary Segment、Segment Resource、Resource Kind、Execution Arrangement、Departure Operations Sheet、Cost Total、Other Receivable、Departure Financial Summary）  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)（重点：Departure、Itinerary Segment、Segment Resource、Resource Kind、Execution Arrangement、Departure Operations Sheet、Cost Total、Other Receivable、Departure Financial Summary）  
 **决议来源**：客户纸质「行程日报表」对照；2026-07-28 A/B/C 冻结决议及四条边界补钉。修订语境：CONTEXT 中「第一版不做到每日行程明细 / 不引入每日行程实体 / 执行班组不结构化 / Avoid 行程日报」——本 PRD **仍不引入独立行程日报实体**，但 **升级** 执行安排：按日行程段骨架、发团级资源锚点、票型人数、发团级班组、团上收入台账。
 
 ---

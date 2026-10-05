@@ -182,6 +182,19 @@ describe('agent conversation page locator #371', () => {
     expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
   })
 
+  it('defaults to the current page when the header starts a new conversation', () => {
+    useAgentConversationStore.getState().startNewConversation()
+    useAgentConversationStore.getState().syncDefaultPageAttachment({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
+    })
+
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
+    })
+  })
+
   it('does not restore a dismissed locator until the user captures the page again', () => {
     useAgentConversationStore.getState().startNewConversation({
       kind: 'page_locator',
@@ -296,6 +309,56 @@ describe('agent conversation page locator #371', () => {
     expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual({
       kind: 'page_locator',
       locator: { kind: 'departure', objectId: 'departure-1' },
+    })
+  })
+
+  it('keeps the conversation but clears a stale page attachment after navigation', () => {
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
+    })
+    useAgentConversationStore.getState().persistConversation({
+      id: 'c-1',
+      title: '发团协作',
+    })
+
+    useAgentConversationStore.getState().syncDefaultPageAttachment({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-2', section: 'execution' },
+    })
+
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'c-1',
+      attachedPageAttachment: null,
+    })
+  })
+
+  it('restores an unsent page attachment after reloading the same conversation', () => {
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'execution' },
+    })
+
+    useAgentConversationStore.setState({
+      view: 'page',
+      conversationId: null,
+      title: '新会话',
+      attachedPageAttachment: null,
+      pageContextDismissed: false,
+    })
+    useAgentConversationStore.getState().hydrateFromSession()
+
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      view: 'history',
+      conversationId: 'c-1',
+      attachedPageAttachment: {
+        kind: 'page_locator',
+        locator: { kind: 'departure', objectId: 'departure-1', section: 'execution' },
+      },
     })
   })
 })

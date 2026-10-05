@@ -2,7 +2,7 @@
 
 **状态**：已定案（Grilling 2026-07-07 + ADR-0002；架构拍板 2026-07-07 PM）  
 **Menu Key**：`/departure`（常用路线无独立 Menu Key，嵌在建团与详情流程）  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)  
 **架构决议**：[docs/adr/0002-departure-domain-model.md](../adr/0002-departure-domain-model.md)  
 **产品设计稿**：`ider/` 下 6 份文档（团单列表、新建、详情页头部、客源管理、行程段管理、资源安排）  
 **财务脊柱参考**：dijieshe `product/docs/finance-handover-spec.zh-CN.md`（三层模型、finance-touched、核销规则）
@@ -507,7 +507,7 @@ Issue tracker 已配置：GitHub Issues（`docs/agents/issue-tracker.md`）。PR
 
 ### 权威来源优先级
 
-1. `CONTEXT.md` + ADR-0002  
+1. `GLOSSARY.md` + ADR-0002  
 2. `ider/` 设计稿  
 3. finance-handover-spec（财务规则，适配 Departure 源）  
 4. 已落地 Partner/Supplier 模式（路由、Drawer、E2E）  

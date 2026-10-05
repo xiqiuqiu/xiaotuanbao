@@ -2,7 +2,7 @@
 
 **状态**：已定案（Grilling 2026-07-07）  
 **Menu Key**：`/supplier`  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)  
 **参考规格**：旅易云 `product/docs/prd-supplier-detail-page.zh-CN.md`（字段与五段表单结构对齐；路由与生命周期以小团宝本文为准）
 
 ---

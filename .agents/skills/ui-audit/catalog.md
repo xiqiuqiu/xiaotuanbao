@@ -19,7 +19,7 @@ Reference list skeleton: `apps/web/src/pages/system/EmployeesPage.tsx`.
 | A11 | Tag vs Alert | Tag used for blocking/error feedback | `Alert` (or Modal) for blocking; Tag for category/status labels |
 | A12 | Destructive | Row/page destructive action without DESIGN-appropriate confirm when the flow is blocking | `Popconfirm` / `Modal`; row actions as `link` + `danger` when appropriate |
 | A13 | Surfaces | Extra full-page fake card wrapper; hard-coded layout bg | Rely on layout `colorBgLayout` + container Cards; read tokens |
-| A14 | Copy (optional) | UI strings contradict `CONTEXT.md` terms | Reword to glossary terms |
+| A14 | Copy (optional) | UI strings contradict `GLOSSARY.md` terms | Reword to glossary terms |
 
 ## Severity hints
 

@@ -625,7 +625,8 @@ function useAgentConversationChatController(
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
   const liveAssistant = useAgentConversationRuntimeStore((state) => state.liveAssistant)
-  const draft = useAgentConversationRuntimeStore((state) => state.draft)
+  const runtimeDraft = useAgentConversationRuntimeStore((state) => state.draft)
+  const draft = runtimeDraft || readPendingConversationDraft(conversationId)?.text || ''
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -860,6 +861,7 @@ function useAgentConversationChatController(
           sendIdempotencyKey: null,
         })
         setPendingUploadCount(0)
+        clearPendingConversationDraft(conversationIdRef.current, current.draft)
         clearPendingConversationDraft(result.conversationId, current.draft)
         if (reviewPackageId) onReviewMessageSent?.(reviewPackageId)
         if (!conversationIdRef.current) {
@@ -868,6 +870,7 @@ function useAgentConversationChatController(
             title: outboundText.slice(0, 40),
           })
         }
+        useAgentConversationStore.getState().detachCurrentPage()
       } catch (error) {
         setErrorText(getAssistErrorText(error))
         updateDraft(nextText)

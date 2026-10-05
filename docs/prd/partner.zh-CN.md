@@ -2,7 +2,7 @@
 
 **状态**：已定案（Grilling 2026-07-07）  
 **Menu Key**：`/partner`  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)  
 **参考规格**：旅易云 Partner 目录（双维分类、统计卡、三段表单）；路由、生命周期、列表交互以小团宝 Supplier Epic 1 为准
 
 ---
@@ -330,7 +330,7 @@
 ## Further Notes
 
 - Supplier PRD 曾写「Partner 复用五段表单」——Grilling 已 supersede：Partner 为 **三段轻量表单**。
-- 权威来源：`CONTEXT.md` + 已落地 Supplier > 旅易云线上行为 > 旧 PRD 字面表述。
+- 权威来源：`GLOSSARY.md` + 已落地 Supplier > 旅易云线上行为 > 旧 PRD 字面表述。
 - 实现顺序建议：schema + shared enums → API + E2E → inline directory catalog 抽取（Supplier 回归）→ 前端列表/抽屉/详情。
 
 ---

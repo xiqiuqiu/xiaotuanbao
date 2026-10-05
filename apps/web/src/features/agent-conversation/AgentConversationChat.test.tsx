@@ -412,10 +412,10 @@ describe('AgentConversationChat page locator #371', () => {
   it('shows a removable current-page chip on a new conversation', async () => {
     const user = userEvent.setup()
     renderChat()
-    expect(await screen.findByText('当前合作伙伴往来账款')).toBeInTheDocument()
+    expect(await screen.findByText('当前页：partner-1 · 往来账款')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '移除当前页面' }))
-    expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前页：partner-1 · 往来账款')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
   })
 
@@ -477,7 +477,7 @@ describe('AgentConversationChat page locator #371', () => {
       revision: 1,
     }))
     renderChat()
-    expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前页：partner-1 · 往来账款')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
   })
 
@@ -489,7 +489,7 @@ describe('AgentConversationChat page locator #371', () => {
       lastSequence: 1,
     } as never)
     renderChat()
-    await screen.findByText('当前合作伙伴往来账款')
+    await screen.findByText('当前页：partner-1 · 往来账款')
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '查一下账款')
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenCalledWith(
@@ -501,7 +501,8 @@ describe('AgentConversationChat page locator #371', () => {
       expect.any(String),
     )
 
-    useAgentConversationStore.getState().detachCurrentPage()
+    expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
+    expect(screen.queryByText('当前页：partner-1 · 往来账款')).not.toBeInTheDocument()
     await user.clear(screen.getByRole('textbox', { name: '询问小团宝业务' }))
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '不带页面')
     await user.click(screen.getByRole('button', { name: '发送' }))
@@ -511,7 +512,7 @@ describe('AgentConversationChat page locator #371', () => {
       expect.any(String),
     )
     expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
-    expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前页：partner-1 · 往来账款')).not.toBeInTheDocument()
   })
 
   it('sends a stable review reference and clears it only after acceptance', async () => {
@@ -556,7 +557,7 @@ describe('AgentConversationChat page locator #371', () => {
       expect.any(String),
     )
 
-    await user.click(screen.getByRole('button', { name: '移除当前页面' }))
+    expect(await screen.findByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '不带任务')
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenLastCalledWith(
@@ -605,7 +606,7 @@ describe('AgentConversationChat page locator #371', () => {
       lastSequence: 1,
     } as never)
     renderChat()
-    await screen.findByText('当前合作伙伴往来账款')
+    await screen.findByText('当前页：partner-1 · 往来账款')
     await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '请根据附件回答')
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenCalledWith(

@@ -2,7 +2,7 @@
 
 **状态**：已定稿并落地（原型验证 2026-07-30；父票 [#237](https://github.com/xiqiuqiu/xiaotuanbao/issues/237)；拆除原型挂载 [#243](https://github.com/xiqiuqiu/xiaotuanbao/issues/243)）  
 **Menu Key**：`/departure`（发团详情：导航 + 执行安排）  
-**域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)（重点：Departure、Execution Arrangement、Itinerary Segment、Departure Resource、Segment Resource、Execution Crew、Cost Total、Pending Payable Generation）  
+**域词汇**：见根目录 [GLOSSARY.md](../../GLOSSARY.md)（重点：Departure、Execution Arrangement、Itinerary Segment、Departure Resource、Segment Resource、Execution Crew、Cost Total、Pending Payable Generation）  
 **决议来源**：布局原型 A/B/C/D（PR [#236](https://github.com/xiqiuqiu/xiaotuanbao/pull/236)，分支 `cursor/departure-detail-layout-prototype-c893`）；用户确认 **D 款可落地**。相关能力背景见 [departure-daily-execution-crew-ground-income.zh-CN.md](./departure-daily-execution-crew-ground-income.zh-CN.md)、ADR-0034。  
 **原型指针（primary source，非生产依赖）**：历史布局探索见 PR [#236](https://github.com/xiqiuqiu/xiaotuanbao/pull/236) / 分支 `cursor/departure-detail-layout-prototype-c893`（沙盒曾为 `/prototype/departure-detail-layout?tab=execution&variant=D`，脚本曾为 `pnpm prototype:departure-detail-layout`）。主站生产路径不挂载该沙盒、PrototypeSwitcher 或 `?variant=` 布局切换；只保留方案 D。
 

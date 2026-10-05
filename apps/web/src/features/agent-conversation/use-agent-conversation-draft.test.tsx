@@ -38,3 +38,16 @@ it('clears the local backup only once the server accepts it', async () => {
   expect(readPendingConversationDraft('conv-1')).toBeNull()
   expect(useAgentConversationRuntimeStore.getState().draft).toBe('需保存')
 })
+
+it('restores the browser-only draft of an unsaved new conversation after reload', () => {
+  const first = renderHook(() => useAgentConversationDraft(null))
+  act(() => first.result.current.updateDraft('尚未首次发送'))
+  expect(readPendingConversationDraft(null)?.text).toBe('尚未首次发送')
+
+  first.unmount()
+  useAgentConversationRuntimeStore.getState().clear()
+  renderHook(() => useAgentConversationDraft(null))
+
+  expect(useAgentConversationRuntimeStore.getState().draft).toBe('尚未首次发送')
+  expect(save).not.toHaveBeenCalled()
+})

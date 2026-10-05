@@ -54,6 +54,11 @@ describe('page locator schema #371', () => {
       objectId: 'departure-1',
       section: 'overview',
     })
+    expect(parsePageLocatorFromLocation('/departure/departure-1', '?tab=execution')).toEqual({
+      kind: 'departure',
+      objectId: 'departure-1',
+      section: 'execution',
+    })
     expect(parsePageLocatorFromLocation('/partner')).toBeNull()
     expect(parsePageLocatorFromLocation('/departure/new')).toBeNull()
     expect(parsePageLocatorFromLocation('/agent/conversations/c-1')).toBeNull()

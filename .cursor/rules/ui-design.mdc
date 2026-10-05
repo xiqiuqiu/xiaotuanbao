@@ -14,4 +14,4 @@ alwaysApply: false
 - 一屏一个 `primary` 按钮；间距走 4px 网格（常用 8/16/24）
 - 列表页骨架：页头 + 筛选 Card + 表格 Card + Drawer/Modal
 - 禁止硬编码主色/表面色、平行设计系统、胶囊主按钮、装饰性炫光动画
-- 文案术语遵守 `CONTEXT.md`
+- 文案术语遵守 `GLOSSARY.md`

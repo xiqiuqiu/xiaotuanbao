@@ -25,4 +25,4 @@ ADR-0048 已规定确定性关联优先、登记意图由服务端映射。统�
 
 ## Consequences
 
-第二业务竖切必须等平台执行路由能选择无任务 Definition 之后再加 Partner 映射与能力；不能把路由写进账款适配器。词表见 `CONTEXT.md` 中 Agent 当前页附件、Agent 执行路由、Agent 登记意图、Agent 任务创建提案。
+第二业务竖切必须等平台执行路由能选择无任务 Definition 之后再加 Partner 映射与能力；不能把路由写进账款适配器。词表见 `GLOSSARY.md` 中 Agent 当前页附件、Agent 执行路由、Agent 登记意图、Agent 任务创建提案。

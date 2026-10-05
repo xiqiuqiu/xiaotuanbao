@@ -61,4 +61,4 @@ id, organizationId, createdAt, updatedAt, deletedAt, createdBy, updatedBy
 
 金额字段使用 `Decimal @db.Decimal(12, 2)`。
 
-领域术语见 [CONTEXT.md](../../CONTEXT.md)。
+领域术语见 [GLOSSARY.md](../../GLOSSARY.md)。

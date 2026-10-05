@@ -1,7 +1,7 @@
 # 团内增收记录取代团上收入台账（第一期）
 
 > Spec for agent implementation. Triage: intended `ready-for-agent`.  
-> Domain: ADR-0036、`CONTEXT.md`（Departure Income Record / Company Income / Additional Income Net）。  
+> Domain: ADR-0036、`GLOSSARY.md`（Departure Income Record / Company Income / Additional Income Net）。  
 > UI prototype (throwaway): branch `0729增收记录开发`, `?tab=incomeRecords&variant=A`。  
 > Product draft: `ider/团内增收记录功能_PRD.md`。
 

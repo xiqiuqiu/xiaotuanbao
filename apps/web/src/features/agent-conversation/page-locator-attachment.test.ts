@@ -70,4 +70,14 @@ describe('current page attachment #371 #411', () => {
       primaryTaskId: 'task-1',
     })
   })
+
+  it('identifies the current business object and section in the chip label', () => {
+    expect(
+      currentPageAttachmentLabel({
+        kind: 'page_locator',
+        locator: { kind: 'departure', objectId: 'departure-1', section: 'execution' },
+        objectLabel: 'XTB26090430',
+      }),
+    ).toBe('当前页：XTB26090430 · 执行安排')
+  })
 })

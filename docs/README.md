@@ -52,4 +52,4 @@ docs/
 | `docker-compose.yml` | 全栈部署编排 |
 | `docker-compose.dev.yml` | 本地开发数据库 override |
 | `xiaotuanbao-infrastructure.md` | 完整基础设施设计（原始架构文档） |
-| `CONTEXT.md` | 领域语言与业务术语 |
+| `GLOSSARY.md` | 领域语言与业务术语 |
