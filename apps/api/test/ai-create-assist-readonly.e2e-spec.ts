@@ -162,6 +162,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
             'getMaterialParseResult',
             'readConversationHistory',
             'readConversationSource',
+            'routeConversation',
           ],
           pending: { hasPendingReview: false, reviewPackageId: null },
           fieldCoverage: {

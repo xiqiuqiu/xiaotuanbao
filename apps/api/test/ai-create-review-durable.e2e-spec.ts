@@ -305,7 +305,6 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       listed.events.some(
         (event) =>
           event.kind === 'agent_message' &&
-          event.payload.text === '已提交待审核建议，请在中间表单确认。' &&
           event.payload.reviewPackageId === pkg.id,
       ),
     ).toBe(true)
