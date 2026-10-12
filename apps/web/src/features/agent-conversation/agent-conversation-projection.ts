@@ -333,6 +333,33 @@ export function resolveInteractionStatus(
   return interaction.status
 }
 
+/** 一次扫描判断是否仍有待回答追问；结果与逐条 resolveInteractionStatus 一致。 */
+export function hasPendingInteraction(events: AiConversationEventView[]): boolean {
+  const settled = new Set<string>()
+  for (const event of events) {
+    const interactionId = event.payload.interactionId
+    if (typeof interactionId !== 'string') continue
+    if (
+      event.kind === 'user_message' ||
+      (event.kind === 'batch_status' &&
+        (event.payload.interactionStatus === 'cancelled' ||
+          event.payload.reason === 'interaction_cancelled' ||
+          event.payload.interactionStatus === 'answered'))
+    ) {
+      settled.add(interactionId)
+    }
+  }
+  return events.some((event) => {
+    if (event.kind !== 'agent_message') return false
+    const interaction = interactionFromPayload(event.payload, event.id)
+    return (
+      interaction != null &&
+      interaction.status === 'pending' &&
+      !settled.has(interaction.interactionId)
+    )
+  })
+}
+
 export function latestBatchStatus(
   events: AiConversationEventView[],
   activeBatch: AiInputBatchView | null,

@@ -441,6 +441,23 @@ describe('CreateDepartureStepInfo', () => {
     expect(await screen.findByText('结束日期不能早于出团日期')).toBeInTheDocument()
   })
 
+  it('默认单日团期时手输出团日，结束日跟随出团日', async () => {
+    const user = userEvent.setup()
+    renderStep(
+      { ...initialValues, startDate: '2026-10-12', endDate: '2026-10-12', dayCount: 1 },
+      { mode: 'manual', routeName: '新疆伊犁五日' },
+    )
+
+    const start = screen.getByLabelText('出团日期')
+    await user.click(start)
+    await user.clear(start)
+    await user.type(start, '2026-11-11{Enter}')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('结束日期')).toHaveValue('2026-11-11')
+    })
+  })
+
   it('外部写入出团日后，再改出团日仍按刚写入的日期重算结束日', async () => {
     const user = userEvent.setup()
     const form = renderStep()

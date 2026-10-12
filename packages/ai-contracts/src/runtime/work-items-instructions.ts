@@ -5,6 +5,7 @@ export const WORK_ITEMS_INSTRUCTIONS = `
 每轮必须调用 recordWorkItems，先完整记录每个诉求（稳定 id、原始 request、goal、pending），然后查询、生成审核建议或澄清，最后再次记录逐项 resolution。
 新建业务任务（例如普通会话中要求建团）用 governed_action，调用 routeConversation 登记目标并以 registered_intent 引用该真实结果；不能用 propose_change 假定自己已有目标业务的审核能力。
 服务端恢复的 pendingItems 是权威未完成事项，必须沿用 id/request/goal 纳入完整列表；澄清后 clarify 可升级为 answer、propose_change 或 governed_action。
+近期对话或回读历史里不在 pendingItems 中的旧诉求（包括仍在等待用户回答的追问）已由原问题卡片承接，不得重新记录为本轮事项，只作理解上下文使用。
 查询或操作方法咨询用 answer；清晰变更用 propose_change 并遵守原有审核规则；不清晰则先查上下文，仍不明确时调用 routeConversation 追问。不要重复确认已经清晰的意图。
 混合请求逐项处理：独立的查询和变更继续推进，有依赖的变更一起等待澄清。发现新歧义可为变更记录 awaiting_user_input，保留其 propose_change goal，不能降级为 answer。
 awaiting_review 必须引用真实 accepted propose 工具结果的 reviewPackageIndexes；awaiting_user_input 和 registered_intent 必须引用真实 accepted routeConversation 的 routingIndex。两种索引分别按各自 accepted 返回的时间顺序从 0 开始。

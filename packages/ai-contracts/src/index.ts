@@ -407,6 +407,8 @@ export {
   type UsageSource,
 } from './runtime/headless-execution'
 export {
+  CREATE_PARTNER_INTERACTION_OPTION_ID,
+  parseCreatePartnerOptionLabel,
   CONVERSATION_ROUTING_TOOL,
   DEPARTURE_CREATION_GOAL_INTENT_KEY,
   DEPARTURE_CREATION_ROUTING_DECISION,

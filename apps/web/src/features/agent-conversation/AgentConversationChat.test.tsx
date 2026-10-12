@@ -22,6 +22,12 @@ import {
   stopAgentConversationBatch,
 } from '@/services/agent-conversation.service'
 import { ApiError } from '@/lib/request'
+import {
+  createOrResolvePartnerByName,
+  duplicatePartnerWarningMessage,
+} from '@/features/departure/utils/partner-quick-create'
+import { useAuthStore } from '@/app/store/auth.store'
+import { DirectoryProfileStatus, PARTNER_WRITE_ACTION_KEY } from '@xiaotuanbao/shared'
 
 const routerState = vi.hoisted(() => ({
   location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
@@ -182,6 +188,11 @@ vi.mock('@/services/agent-collaboration.service', () => ({
   }),
   acceptReviewConfirmation: vi.fn(),
   getReviewConfirmation: vi.fn(),
+}))
+
+vi.mock('@/features/departure/utils/partner-quick-create', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/departure/utils/partner-quick-create')>()),
+  createOrResolvePartnerByName: vi.fn(),
 }))
 
 let capturedActivityRenderers: Array<{
@@ -942,6 +953,145 @@ describe('AgentConversationChat task and review activities', () => {
       1,
       expect.any(String),
     )
+  })
+
+  describe('客户未建档追问选「创建」', () => {
+    const hydrateCreatePartnerQuestion = (label = '创建“上海游乐旅行社”') => {
+      useAgentConversationRuntimeStore.getState().clear()
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: 'c-1',
+        events: [
+          {
+            id: 'interaction-event-1',
+            sequence: 1,
+            kind: 'agent_message',
+            payload: {
+              text: '没找到这个客户。',
+              interaction: {
+                interactionId: 'interaction-1',
+                eventId: 'interaction-event-1',
+                type: 'single_choice',
+                prompt: '客户未建档',
+                options: [
+                  { id: 'create_partner', label },
+                  { id: 'other_partner', label: '改用其他客户' },
+                ],
+                version: 1,
+                status: 'pending',
+              },
+            },
+            createdAt: '2026-08-27T00:00:00.000Z',
+          },
+        ],
+      })
+    }
+    const chooseCreate = async (label = '创建“上海游乐旅行社”') => {
+      const user = userEvent.setup()
+      renderChat()
+      expect(await screen.findByText('上方有待回答问题')).toBeInTheDocument()
+      const region = screen.getByRole('region', { name: '追问：客户未建档' })
+      await user.click(within(region).getByRole('radio', { name: label }))
+      await user.click(within(region).getByRole('button', { name: '发送回答' }))
+    }
+
+    beforeEach(() => {
+      useAuthStore.setState({ actionKeys: [PARTNER_WRITE_ACTION_KEY] })
+      vi.mocked(createOrResolvePartnerByName).mockReset()
+      vi.mocked(sendAgentConversationText).mockReset().mockResolvedValue({
+        conversationId: 'c-1',
+        batch: { id: 'reply-batch', status: 'ready_for_agent' },
+        events: [],
+        lastSequence: 2,
+      } as never)
+      vi.mocked(listAgentConversationEvents).mockResolvedValue({
+        conversationId: 'c-1',
+        events: [],
+        lastSequence: 1,
+      })
+    })
+
+    it.each([
+      ['created', '已创建'],
+      ['existing', '已有'],
+    ] as const)('%s 客户先建档再发送回答', async (kind, prefix) => {
+      vi.mocked(createOrResolvePartnerByName).mockResolvedValue({
+        kind,
+        partner: { id: 'partner-new', name: '上海游乐旅行社', status: DirectoryProfileStatus.ACTIVE },
+      } as Awaited<ReturnType<typeof createOrResolvePartnerByName>>)
+      hydrateCreatePartnerQuestion()
+
+      await chooseCreate()
+
+      await waitFor(() =>
+        expect(sendAgentConversationText).toHaveBeenCalledWith(
+          'c-1',
+          expect.objectContaining({
+            text: `${prefix}合作伙伴“上海游乐旅行社”，请继续录入这条客源。`,
+            interactionId: 'interaction-1',
+            selectedOptionId: 'create_partner',
+          }),
+          expect.any(String),
+        ),
+      )
+      expect(createOrResolvePartnerByName).toHaveBeenCalledWith({ name: '上海游乐旅行社' })
+      expect(vi.mocked(createOrResolvePartnerByName).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(sendAgentConversationText).mock.invocationCallOrder[0]!,
+      )
+    })
+
+    it('同名客户已归档时报错且不发送回答', async () => {
+      vi.mocked(createOrResolvePartnerByName).mockResolvedValue({
+        kind: 'existing',
+        partner: { id: 'partner-old', name: '上海游乐旅行社', status: DirectoryProfileStatus.ARCHIVED },
+      } as Awaited<ReturnType<typeof createOrResolvePartnerByName>>)
+      hydrateCreatePartnerQuestion()
+
+      await chooseCreate()
+
+      expect(await screen.findByText(duplicatePartnerWarningMessage())).toBeInTheDocument()
+      expect(sendAgentConversationText).not.toHaveBeenCalled()
+    })
+
+    it('追问已在别处回答时不建档、不发送', async () => {
+      hydrateCreatePartnerQuestion()
+      const user = userEvent.setup()
+      renderChat()
+      const region = await screen.findByRole('region', { name: '追问：客户未建档' })
+      // 挂载时追赶已完成；建档前的实时复查才发现别处已回答。
+      vi.mocked(listAgentConversationEvents).mockResolvedValue({
+        conversationId: 'c-1',
+        events: [
+          {
+            id: 'answer-event',
+            sequence: 2,
+            kind: 'user_message',
+            payload: { text: '改用其他客户', interactionId: 'interaction-1' },
+            createdAt: '2026-08-27T00:00:01.000Z',
+          },
+        ],
+        lastSequence: 2,
+      })
+      await user.click(within(region).getByRole('radio', { name: '创建“上海游乐旅行社”' }))
+      await user.click(within(region).getByRole('button', { name: '发送回答' }))
+
+      expect(await screen.findByText('这个问题已处理，请刷新后查看')).toBeInTheDocument()
+      expect(createOrResolvePartnerByName).not.toHaveBeenCalled()
+      expect(sendAgentConversationText).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['文案无法解析', '创建「上海游乐旅行社」', [PARTNER_WRITE_ACTION_KEY], '无法识别要创建的客户名称'],
+      ['无合作伙伴写权限', '创建“上海游乐旅行社”', [], '你没有创建合作伙伴的权限'],
+    ])('%s时直接提示，不建档不发送', async (_case, label, actionKeys, errorText) => {
+      useAuthStore.setState({ actionKeys })
+      hydrateCreatePartnerQuestion(label)
+
+      await chooseCreate(label)
+
+      expect(await screen.findByText(new RegExp(errorText))).toBeInTheDocument()
+      expect(createOrResolvePartnerByName).not.toHaveBeenCalled()
+      expect(sendAgentConversationText).not.toHaveBeenCalled()
+    })
   })
 
   it('keeps a queued message above the composer until its batch starts', async () => {

@@ -289,7 +289,7 @@ export const DEPARTURE_COLLABORATION_INSTRUCTIONS = [
   '供应商必须调用 searchSuppliers，关键词用材料中的供应商或地接名称，category 与拟提交种类一致；只使用工具返回且名称能在材料中对应的对象。无结果或多结果先询问，不要改种类为其他，也不要选用材料未出现的占位供应商。种类变化后重新搜索校验。',
   'User 明确引用资料时调用 getMaterialParseResult 或 readConversationSource。',
   '对话候选必须引用本轮指令中标明的用户消息 sequence 和原文摘录，evidence.kind=user_message。材料候选使用 material_region，引用真实 materialId、parseResultVersion、pageNumber 和原文。客户匹配、元转分、枚举映射也引用对应用户原文，不要编造 system_derivation 规则。',
-  '客源单客户必须通过 searchPartners 匹配，多个结果、hasMore 或无结果时先核实，不能编造客户 ID。',
+  '客源单客户必须通过 searchPartners 匹配，多个结果或 hasMore 时先核实，不能编造客户 ID。无结果时调用 routeConversation 生成单选追问：创建选项必须使用 id=create_partner、label=创建“用户原话中的客户名称”，另一个选项让用户改用其他客户；用户选择创建后重新搜索并使用真实客户 ID。',
   '客源单只采用已有字段：客户、成人和儿童人数及单价、团款调整、优惠、收款约定、备注及客人名单。金额均为整数分。没有提供的字段保持缺失，不得默认儿童为 0、无调整或无优惠。明确没有调整时 fareAdjustments=[]；优惠只支持 none 或 lump_sum。',
   '客源单 collectionMode 为 partner_settled（客户结算）、guest_only（全部我方代收）或 split（分拆收款）；定金尾款是收款约定，不是到账记录。不要强制其合计等于结算金额。',
   '客源单候选调用 proposeSourceOrderReviewPackage；单日段资源调用 proposeSegmentResourceReviewPackage；发团级资源调用 proposeDepartureResourceReviewPackage。每次工具调用提交一个事项；材料明确包含多个独立事项时逐项调用工具，全部提交后才结束本轮，不得遗漏前面的事项。',
