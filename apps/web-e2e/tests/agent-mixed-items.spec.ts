@@ -62,6 +62,7 @@ test('混合诉求的答复、待审核和澄清共存，刷新保留未完成�
     await expect(clarification.getByRole('textbox', { name: `回答追问：${prompt}` })).toBeVisible()
     await expect(clarification.getByRole('button', { name: '发送回答' })).toBeDisabled()
     await expect(pane.getByText('等待回答', { exact: true })).toBeVisible()
+    await expect(pane.getByText('上方有待回答问题', { exact: true })).toBeVisible()
     await expect(pane.getByText(/^(已完成|全部完成)$/)).toHaveCount(0)
   }
   await expectMixedItems()

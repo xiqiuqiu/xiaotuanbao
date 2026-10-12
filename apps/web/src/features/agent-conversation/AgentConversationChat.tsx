@@ -38,7 +38,9 @@ import {
   AGENT_TASK_ACTIVITY_TYPE,
   INTERACTION_ACTIVITY_TYPE,
   REVIEW_PACKAGE_ACTIVITY_TYPE,
+  interactionFromPayload,
   projectAgentInteraction,
+  resolveInteractionStatus,
   type AgentTaskActivityContent,
   type BatchStatusActivityContent,
   type InteractionActivityContent,
@@ -75,8 +77,15 @@ import {
   MATERIAL_ACCEPT,
   useConversationComposerAttachments,
 } from '@/features/ai-assist/conversation-composer-attachments'
-import { DEPARTURE_COLLABORATION_TASK_TYPE } from '@xiaotuanbao/ai-contracts'
+import {
+  CREATE_PARTNER_INTERACTION_OPTION_ID,
+  DEPARTURE_COLLABORATION_TASK_TYPE,
+} from '@xiaotuanbao/ai-contracts'
 import { useUiStore } from '@/app/store/ui.store'
+import {
+  createOrResolvePartnerByName,
+  parsePartnerQuickCreateOptionLabel,
+} from '@/features/departure/utils/partner-quick-create'
 
 /** CopilotKit runtime 注册名（apps/agent）；不是 conversation-general 领域指令版本。 */
 const COPILOTKIT_RUNTIME_AGENT_ID = 'ai-create-readonly-assist'
@@ -983,18 +992,28 @@ function useAgentConversationChatController(
 
   const replyToInteraction = useCallback(
     (content: InteractionActivityContent, text: string, selectedOptionId?: string) => {
+      const selectedOption = content.options.find((option) => option.id === selectedOptionId)
+      const partnerName =
+        selectedOptionId === CREATE_PARTNER_INTERACTION_OPTION_ID && selectedOption
+          ? parsePartnerQuickCreateOptionLabel(selectedOption.label)
+          : null
       void runInteractionCommand(content.interactionId, (currentConversationId) =>
-        sendAgentConversationText(
-          currentConversationId,
-          {
-            text,
-            replyToEventId: content.eventId,
-            interactionId: content.interactionId,
-            interactionVersion: content.version,
-            selectedOptionId,
-          },
-          crypto.randomUUID(),
-        ),
+        (async () => {
+          const replyText = partnerName
+            ? `已创建合作伙伴“${(await createOrResolvePartnerByName({ name: partnerName })).partner.name}”，请继续录入这条客源。`
+            : text
+          return sendAgentConversationText(
+            currentConversationId,
+            {
+              text: replyText,
+              replyToEventId: content.eventId,
+              interactionId: content.interactionId,
+              interactionVersion: content.version,
+              selectedOptionId,
+            },
+            crypto.randomUUID(),
+          )
+        })(),
       )
     },
     [runInteractionCommand],
@@ -1123,6 +1142,15 @@ function useAgentConversationChatController(
   const isRunning = interaction.isRunning
   const stoppableBatchId = interaction.stoppable
   const queuedMessages = interaction.queued
+  const hasPendingInteraction = useMemo(
+    () =>
+      events.some((event) => {
+        if (event.kind !== 'agent_message') return false
+        const pending = interactionFromPayload(event.payload, event.id)
+        return pending != null && resolveInteractionStatus(events, pending) === 'pending'
+      }),
+    [events],
+  )
   const messageView = useMemo(() => ({ reasoningMessage: AgentReasoningMessage, userMessage: ConversationUserMessage }), [])
   const openAgentTask = useCallback(
     (
@@ -1227,6 +1255,7 @@ function useAgentConversationChatController(
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
+    hasPendingInteraction,
     batchCommandPending,
     retryFailedMaterials,
     retryFailedBatch,
@@ -1359,6 +1388,7 @@ export function AgentConversationChat({
     updateDraft,
     composerEpoch,
     focusedReviewPackageId,
+    hasPendingInteraction,
     batchCommandPending,
     retryFailedMaterials,
     retryFailedBatch,
@@ -1404,6 +1434,14 @@ export function AgentConversationChat({
         : {})}
     >
       {errorText ? <Alert type="error" showIcon title={errorText} /> : null}
+      {hasPendingInteraction ? (
+        <Alert
+          type="info"
+          showIcon
+          title="上方有待回答问题"
+          description="继续该事项请在问题卡片中回答；下方输入框仍可处理其他独立事项。"
+        />
+      ) : null}
       {attachedPageAttachment ? (
         <div className={chatStyles.pageContext}>
           <Tag

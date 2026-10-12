@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { registeredTaskDescriptors } from './task-descriptor'
 
+export const CREATE_PARTNER_INTERACTION_OPTION_ID = 'create_partner'
+
 export {
   DEPARTURE_CREATION_GOAL_INTENT_KEY,
   DEPARTURE_CREATION_ROUTING_DECISION,

@@ -22,6 +22,7 @@ import {
   stopAgentConversationBatch,
 } from '@/services/agent-conversation.service'
 import { ApiError } from '@/lib/request'
+import { createOrResolvePartnerByName } from '@/features/departure/utils/partner-quick-create'
 
 const routerState = vi.hoisted(() => ({
   location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
@@ -182,6 +183,11 @@ vi.mock('@/services/agent-collaboration.service', () => ({
   }),
   acceptReviewConfirmation: vi.fn(),
   getReviewConfirmation: vi.fn(),
+}))
+
+vi.mock('@/features/departure/utils/partner-quick-create', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/departure/utils/partner-quick-create')>()),
+  createOrResolvePartnerByName: vi.fn(),
 }))
 
 let capturedActivityRenderers: Array<{
@@ -942,6 +948,63 @@ describe('AgentConversationChat task and review activities', () => {
       1,
       expect.any(String),
     )
+  })
+
+  it('客户未建档时选「创建」先建合作伙伴再回复追问', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createOrResolvePartnerByName).mockResolvedValue({
+      partner: { id: 'partner-new', name: '上海游乐旅行社' },
+      created: true,
+    } as never)
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-1',
+      batch: { id: 'reply-batch', status: 'ready_for_agent' },
+      events: [],
+      lastSequence: 2,
+    } as never)
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'interaction-event-1',
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '没找到这个客户。',
+            interaction: {
+              interactionId: 'interaction-1',
+              eventId: 'interaction-event-1',
+              type: 'single_choice',
+              prompt: '客户未建档',
+              options: [
+                { id: 'create_partner', label: '创建“上海游乐旅行社”' },
+                { id: 'other_partner', label: '改用其他客户' },
+              ],
+              version: 1,
+              status: 'pending',
+            },
+          },
+          createdAt: '2026-08-27T00:00:00.000Z',
+        },
+      ],
+    })
+
+    renderChat()
+
+    expect(await screen.findByText('上方有待回答问题')).toBeInTheDocument()
+    const region = screen.getByRole('region', { name: '追问：客户未建档' })
+    await user.click(within(region).getByRole('radio', { name: '创建“上海游乐旅行社”' }))
+    await user.click(within(region).getByRole('button', { name: '发送回答' }))
+
+    await waitFor(() =>
+      expect(sendAgentConversationText).toHaveBeenCalledWith(
+        'c-1',
+        expect.objectContaining({ interactionId: 'interaction-1', selectedOptionId: 'create_partner' }),
+        expect.any(String),
+      ),
+    )
+    expect(createOrResolvePartnerByName).toHaveBeenCalledWith({ name: '上海游乐旅行社' })
   })
 
   it('keeps a queued message above the composer until its batch starts', async () => {
