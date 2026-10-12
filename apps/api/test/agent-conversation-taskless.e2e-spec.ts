@@ -19,6 +19,8 @@ import {
 import request from 'supertest'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import {
+  CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+  CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
   PLAINTEXT_SYSTEM_PROMPT_VERSION,
   PLAINTEXT_TOOL_SCHEMA_VERSION,
@@ -359,8 +361,8 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       mastraTraceId: null,
       toolSteps: [],
       contextManifest: {
-        systemPromptVersion: 'conversation-general/v7',
-        toolSchemaVersion: 'conversation-general-routing-recall/v2',
+        systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
       },
     })
     expect(attempt?.contextManifest?.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
@@ -382,11 +384,23 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         },
         message: '正在准备建团任务。',
       }),
-      resolvedItemOutcome({
-        kind: 'awaiting_user_input',
-        interaction: { type: 'free_text', prompt: '已进入建团专长。' },
-        completionBasis: { kind: 'persistent_clarification' },
-      })
+      {
+        kind: 'resolved_items',
+        message: '已进入建团专长。',
+        items: [
+          {
+            id: 'fixture-item',
+            request: '生命周期测试中明确指定的诉求',
+            goal: 'propose_change',
+            resolution: {
+              kind: 'awaiting_user_input',
+              interaction: { type: 'free_text', prompt: '已进入建团专长。' },
+            },
+          },
+        ],
+        reviewPackages: [],
+        completionBasis: { kind: 'resolved_items' },
+      },
     ])
     const beforeWorker = agent.callCount()
     const sent = await sendFirst(
