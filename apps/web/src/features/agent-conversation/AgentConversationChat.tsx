@@ -15,6 +15,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  DirectoryProfileStatus,
   parseConversationStreamFrame,
   type AiConversationEventView,
   type AiConversationView,
@@ -38,7 +39,7 @@ import {
   AGENT_TASK_ACTIVITY_TYPE,
   INTERACTION_ACTIVITY_TYPE,
   REVIEW_PACKAGE_ACTIVITY_TYPE,
-  interactionFromPayload,
+  hasPendingInteraction as hasPendingInteractionEvent,
   projectAgentInteraction,
   resolveInteractionStatus,
   type AgentTaskActivityContent,
@@ -80,11 +81,15 @@ import {
 import {
   CREATE_PARTNER_INTERACTION_OPTION_ID,
   DEPARTURE_COLLABORATION_TASK_TYPE,
+  parseCreatePartnerOptionLabel,
 } from '@xiaotuanbao/ai-contracts'
 import { useUiStore } from '@/app/store/ui.store'
+import { useAuthStore } from '@/app/store/auth.store'
+import { canEditPartner } from '@/features/partner/utils/partner-permission'
+import { ApiError } from '@/lib/request'
 import {
   createOrResolvePartnerByName,
-  parsePartnerQuickCreateOptionLabel,
+  duplicatePartnerWarningMessage,
 } from '@/features/departure/utils/partner-quick-create'
 
 /** CopilotKit runtime 注册名（apps/agent）；不是 conversation-general 领域指令版本。 */
@@ -992,20 +997,40 @@ function useAgentConversationChatController(
 
   const replyToInteraction = useCallback(
     (content: InteractionActivityContent, text: string, selectedOptionId?: string) => {
-      const selectedOption = content.options.find((option) => option.id === selectedOptionId)
-      const partnerName =
-        selectedOptionId === CREATE_PARTNER_INTERACTION_OPTION_ID && selectedOption
-          ? parsePartnerQuickCreateOptionLabel(selectedOption.label)
-          : null
-      void runInteractionCommand(content.interactionId, (currentConversationId) =>
-        (async () => {
-          const replyText = partnerName
-            ? `已创建合作伙伴“${(await createOrResolvePartnerByName({ name: partnerName })).partner.name}”，请继续录入这条客源。`
-            : text
+      const createPartnerOption =
+        selectedOptionId === CREATE_PARTNER_INTERACTION_OPTION_ID
+          ? content.options.find((option) => option.id === selectedOptionId)
+          : undefined
+      if (createPartnerOption) {
+        const partnerName = parseCreatePartnerOptionLabel(createPartnerOption.label)
+        const message = !partnerName
+          ? '无法识别要创建的客户名称，请取消本次等待后在输入框说明客户名称'
+          : !canEditPartner(useAuthStore.getState().actionKeys)
+            ? '你没有创建合作伙伴的权限，请联系管理员建档或改用其他客户'
+            : null
+        if (message || !partnerName) {
+          setErrorText(message)
+          return
+        }
+        void runInteractionCommand(content.interactionId, async (currentConversationId) => {
+          // 先确认追问仍在等待（未被别处回答/取消），再写客户档案，避免回复被拒后留下孤立档案。
+          const latest = await listAgentConversationEvents(
+            currentConversationId,
+            lastSequenceRef.current,
+          )
+          const known = mergeEvents(useAgentConversationRuntimeStore.getState().events, latest.events)
+          if (resolveInteractionStatus(known, content) !== 'pending') {
+            // 400 让 getAssistErrorText 原样展示文案
+            throw new ApiError('这个问题已处理，请刷新后查看', 400)
+          }
+          const { kind, partner } = await createOrResolvePartnerByName({ name: partnerName })
+          if (partner.status !== DirectoryProfileStatus.ACTIVE) {
+            throw new ApiError(duplicatePartnerWarningMessage(), 400)
+          }
           return sendAgentConversationText(
             currentConversationId,
             {
-              text: replyText,
+              text: `${kind === 'created' ? '已创建' : '已有'}合作伙伴“${partner.name}”，请继续录入这条客源。`,
               replyToEventId: content.eventId,
               interactionId: content.interactionId,
               interactionVersion: content.version,
@@ -1013,10 +1038,24 @@ function useAgentConversationChatController(
             },
             crypto.randomUUID(),
           )
-        })(),
+        })
+        return
+      }
+      void runInteractionCommand(content.interactionId, (currentConversationId) =>
+        sendAgentConversationText(
+          currentConversationId,
+          {
+            text,
+            replyToEventId: content.eventId,
+            interactionId: content.interactionId,
+            interactionVersion: content.version,
+            selectedOptionId,
+          },
+          crypto.randomUUID(),
+        ),
       )
     },
-    [runInteractionCommand],
+    [lastSequenceRef, runInteractionCommand],
   )
 
   const cancelInteraction = useCallback(
@@ -1142,15 +1181,7 @@ function useAgentConversationChatController(
   const isRunning = interaction.isRunning
   const stoppableBatchId = interaction.stoppable
   const queuedMessages = interaction.queued
-  const hasPendingInteraction = useMemo(
-    () =>
-      events.some((event) => {
-        if (event.kind !== 'agent_message') return false
-        const pending = interactionFromPayload(event.payload, event.id)
-        return pending != null && resolveInteractionStatus(events, pending) === 'pending'
-      }),
-    [events],
-  )
+  const hasPendingInteraction = useMemo(() => hasPendingInteractionEvent(events), [events])
   const messageView = useMemo(() => ({ reasoningMessage: AgentReasoningMessage, userMessage: ConversationUserMessage }), [])
   const openAgentTask = useCallback(
     (

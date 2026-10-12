@@ -5,9 +5,26 @@ import {
 import {
   conversationRoutingInputSchema,
   conversationRoutingOutputSchema,
+  parseCreatePartnerOptionLabel,
 } from './conversation-routing'
 
 describe('conversation routing schema #439', () => {
+  it('create_partner 选项必须携带可解析的客户名', () => {
+    const clarify = (label: string) =>
+      conversationRoutingInputSchema.safeParse({
+        decision: 'request_clarification',
+        prompt: '没找到该客户',
+        options: [
+          { id: 'create_partner', label },
+          { id: 'other_partner', label: '改用其他客户' },
+        ],
+      }).success
+    expect(clarify('创建“上海游乐旅行社”')).toBe(true)
+    expect(clarify('创建「上海游乐旅行社」')).toBe(false)
+    expect(parseCreatePartnerOptionLabel(' 创建“上海游乐旅行社” ')).toBe('上海游乐旅行社')
+    expect(parseCreatePartnerOptionLabel('改用其他客户')).toBeNull()
+  })
+
   it('accepts registered Task Descriptor creation decisions and rejects unregistered ones', () => {
     expect(
       conversationRoutingInputSchema.parse({

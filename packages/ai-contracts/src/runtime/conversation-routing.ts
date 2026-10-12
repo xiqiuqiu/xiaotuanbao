@@ -3,6 +3,11 @@ import { registeredTaskDescriptors } from './task-descriptor'
 
 export const CREATE_PARTNER_INTERACTION_OPTION_ID = 'create_partner'
 
+/** 「创建“客户名”」选项文案 → 客户名；模型改写文案时返回 null。 */
+export function parseCreatePartnerOptionLabel(label: string): string | null {
+  return /^创建“(.+)”$/.exec(label.trim())?.[1]?.trim() || null
+}
+
 export {
   DEPARTURE_CREATION_GOAL_INTENT_KEY,
   DEPARTURE_CREATION_ROUTING_DECISION,
@@ -29,6 +34,12 @@ const clarificationOptionSchema = z
     label: z.string().min(1).max(120),
   })
   .strict()
+  .refine(
+    (option) =>
+      option.id !== CREATE_PARTNER_INTERACTION_OPTION_ID ||
+      parseCreatePartnerOptionLabel(option.label) != null,
+    { message: 'create_partner 选项 label 必须为：创建“客户名称”' },
+  )
 
 export const conversationRoutingInputSchema = z.union([
   z

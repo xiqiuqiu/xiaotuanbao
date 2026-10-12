@@ -16,10 +16,6 @@ export function formatPartnerQuickCreateOptionLabel(name: string): string {
   return `创建“${name.trim()}”`
 }
 
-export function parsePartnerQuickCreateOptionLabel(label: string): string | null {
-  return /^创建“(.+)”$/.exec(label.trim())?.[1]?.trim() || null
-}
-
 export function findPartnerByExactName(
   partners: readonly Pick<PartnerSummary, 'id' | 'name'>[],
   name: string,

@@ -6,7 +6,6 @@ import {
   SOURCE_ORDER_PARTNER_QUICK_CREATE_DEFAULTS,
   createOrResolvePartnerByName,
   findPartnerByExactName,
-  parsePartnerQuickCreateOptionLabel,
   shouldShowPartnerQuickCreateOption,
 } from './partner-quick-create'
 
@@ -19,11 +18,6 @@ vi.mock('@/services/partner.service', () => ({
 describe('partner-quick-create', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('reads the partner name from an explicit conversation create option', () => {
-    expect(parsePartnerQuickCreateOptionLabel('创建“上海游乐旅行社”')).toBe('上海游乐旅行社')
-    expect(parsePartnerQuickCreateOptionLabel('换一个客户')).toBeNull()
   })
 
   it('defaults source-order create to 组团社 + 客户方', () => {
