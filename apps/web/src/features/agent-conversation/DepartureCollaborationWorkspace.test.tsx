@@ -25,6 +25,10 @@ const getCollaboration = vi.fn()
 vi.mock('@/services/agent-collaboration.service', () => ({
   getDepartureCollaboration: (...args: unknown[]) => getCollaboration(...args),
 }))
+const listSegments = vi.fn()
+vi.mock('@/services/segment.service', () => ({
+  listSegments: (...args: unknown[]) => listSegments(...args),
+}))
 vi.mock('@/features/departure/components/DepartureSourceOrderReview', () => ({
   DepartureSourceOrderReview: ({ packageId }: { packageId: string }) => (
     <div>客源审核 {packageId}</div>
@@ -142,6 +146,13 @@ beforeEach(() => {
           ],
     confirmations: [],
   }))
+  listSegments.mockResolvedValue({
+    items: [
+      { id: 'seg-proposed', name: '候选行程段' },
+      { id: 'seg-submitted', name: '已提交行程段' },
+    ],
+    total: 2,
+  })
 })
 afterEach(async () => {
   await Promise.all(queryClients.map((client) => client.cancelQueries()))
@@ -471,6 +482,7 @@ it('opens a confirmed segment resource on the submitted itinerary segment, not t
     ],
   }))
   render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
+  expect(await screen.findByText('已提交行程段')).toBeVisible()
   fireEvent.click(await screen.findByRole('button', { name: '查看正式资源' }))
   expect(navigate).toHaveBeenCalledWith({
     to: '/departure/$departureId',
