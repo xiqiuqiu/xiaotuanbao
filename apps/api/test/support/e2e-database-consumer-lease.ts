@@ -6,6 +6,15 @@ const globalState = globalThis as typeof globalThis & {
 }
 
 export default async function startE2eDatabaseConsumerLease(): Promise<void> {
+  const isDemoSeed = process.argv.some((value) =>
+    value.includes('seed-demo-business-loop.e2e-spec.ts'),
+  )
+  if (
+    process.env.XIAOTUANBAO_E2E_SHARED_DATABASE_MODE === 'seed-demo-loop' &&
+    isDemoSeed
+  ) {
+    return
+  }
   const databaseUrl = process.env.DATABASE_URL
   const runId = process.env.XIAOTUANBAO_E2E_RUN_ID
   if (!databaseUrl || !runId) {

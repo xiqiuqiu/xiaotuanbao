@@ -201,6 +201,16 @@ export async function dropE2eDatabase(
   activeLeases.delete(runId)
   await keeper?.end()
   await withDatabaseClient(databaseUrl, async (client) => {
+    const consumers = await client.query(
+      `SELECT 1
+       FROM pg_stat_activity
+       WHERE application_name = $1
+       LIMIT 1`,
+      [`${E2E_CONSUMER_APPLICATION_PREFIX}${runId}`],
+    )
+    if (consumers.rowCount !== 0) {
+      throw new Error(`Refusing to drop E2E schema with an active Jest consumer: ${schema}`)
+    }
     const result = await client.query<{ comment: string | null }>(
       `SELECT obj_description(oid, 'pg_namespace') AS comment
        FROM pg_namespace

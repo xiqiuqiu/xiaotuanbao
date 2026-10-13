@@ -81,17 +81,31 @@ describe('API E2E database isolation', () => {
       )
 
       expect(await cleanupStaleE2eSchemas(databaseUrl)).toEqual([])
+      await expect(
+        dropE2eDatabase(databaseUrl, abandoned.schema, abandoned.runId),
+      ).rejects.toThrow('active Jest consumer')
       await consumer.end()
       consumer = undefined
       expect(await cleanupStaleE2eSchemas(databaseUrl)).toEqual([abandoned.schema])
       expect(await prisma.user.count({ where: { username: 'wangjie' } })).toBe(1)
     } finally {
-      await consumer?.end()
+      const failures: unknown[] = []
+      const settle = async (operation: Promise<unknown> | undefined) => {
+        try {
+          await operation
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      await settle(consumer?.end())
       if (active) {
-        await dropE2eDatabase(databaseUrl, active.schema, active.runId)
+        await settle(dropE2eDatabase(databaseUrl, active.schema, active.runId))
       }
       if (abandoned) {
-        await dropE2eDatabase(databaseUrl, abandoned.schema, abandoned.runId)
+        await settle(dropE2eDatabase(databaseUrl, abandoned.schema, abandoned.runId))
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'E2E database isolation teardown failed')
       }
     }
   })
