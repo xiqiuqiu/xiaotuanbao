@@ -141,7 +141,7 @@ const TASK_WITH_PENDING_INCLUDE = {
               status: AiReviewPackageStatus.conflict,
               OR: [
                 { inputBatchId: null },
-                { inputBatch: { status: AiInputBatchStatus.awaiting_review } },
+                { inputBatch: { status: { not: AiInputBatchStatus.cancelled } } },
               ],
             },
           ],
