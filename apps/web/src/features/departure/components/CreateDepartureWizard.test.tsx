@@ -2319,6 +2319,98 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('does not autosave the review baseline over an external same-field update before confirm', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const baseline = {
+      mode: 'manual' as const,
+      routeName: '喀纳斯阿勒泰10日线',
+      name: null,
+      startDate: '2026-08-01',
+      endDate: '2026-08-10',
+      ownerUserId: 'user-1',
+    }
+    const pending = mockPendingReview({
+      baseObjectVersion: 1,
+      baselineSnapshot: baseline,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: 'AI 候选团名',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫 AI 候选团名' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: { ...baseline, name: '外部同字段更新' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    const autosaved = {
+      ...restored,
+      draft: {
+        version: 3,
+        snapshot: { ...restored.draft.snapshot, notes: '本地备注' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    }
+    const conflict = {
+      ...autosaved,
+      pendingReview: null,
+      reviewConflicts: [{ ...pending, status: 'conflict' as const }],
+      reviewConflict: { status: 'stale_target_version' as const, conflictFields: ['name'] },
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(saveDepartureCreationDraft).mockResolvedValue(autosaved)
+    vi.mocked(confirmAiReviewPackage).mockRejectedValue(
+      new ApiError('审核目标版本已变化', 409, conflict),
+    )
+
+    renderWizard()
+    await user.type(await screen.findByLabelText('备注'), '本地备注')
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalledWith(
+        {
+          taskId: 'task-1',
+          expectedVersion: 2,
+          draft: expect.objectContaining({ name: '外部同字段更新', notes: '本地备注' }),
+        },
+        { silentError: true },
+      )
+    })
+    fireEvent.change(await screen.findByLabelText('团名候选'), {
+      target: { value: '用户本地修正' },
+    })
+    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
+
+    await waitFor(() => {
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        {
+          expectedVersion: 3,
+          expectedPackageVersion: 1,
+          corrections: { name: '用户本地修正' },
+        },
+        expect.stringMatching(/\S+/),
+      )
+    })
+    expect(saveDepartureCreationDraft).toHaveBeenCalledTimes(1)
+  })
+
   it('confirms with the local autosaved draft version instead of the stale task query cache', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }
@@ -2409,7 +2501,7 @@ describe('CreateDepartureWizard', () => {
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
   })
 
-  it('flushes a user-edited endDate before confirm even when pending review restored an empty routeName', async () => {
+  it('flushes the current form state before confirm without restoring the review baseline', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }
     const baseline = {
@@ -2500,13 +2592,18 @@ describe('CreateDepartureWizard', () => {
     })
     const flushed = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
     expect(flushed?.endDate).toBe('2026-10-01')
-    expect(flushed?.startDate ?? null).toBeNull()
+    expect(flushed?.startDate).toBeTruthy()
     await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenCalled()
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        expect.objectContaining({ expectedVersion: 2 }),
+        expect.stringMatching(/\S+/),
+      )
     })
   })
 
-  it('does not persist auto-derived 团名 when filling 路线名称 over a pending name candidate', async () => {
+  it('preserves an auto-derived 团名 so a pending name candidate conflicts instead of overwriting it', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }
     const baseline = {
@@ -2606,7 +2703,7 @@ describe('CreateDepartureWizard', () => {
 
     const lastDraft = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
     expect(lastDraft?.routeName).toBe('西北大环线')
-    expect(lastDraft?.name ?? null).toBeNull()
+    expect(lastDraft?.name).toBe('2026年8月18日')
     expect(
       evaluateReviewConfirmMerge({
         baselineSnapshot: baseline,
@@ -2618,15 +2715,10 @@ describe('CreateDepartureWizard', () => {
           expectedGuestCountHint: 12,
         },
       }).status,
-    ).toBe('ok')
-
-    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
-    await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenCalled()
-    })
+    ).toBe('conflict')
   })
 
-  it('restores a previously auto-saved 团名 back to the review baseline before confirm', async () => {
+  it('does not restore a previously auto-saved 团名 back to the review baseline before confirm', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }
     const baseline = {
@@ -2672,32 +2764,31 @@ describe('CreateDepartureWizard', () => {
       pendingReview: pending,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
-    vi.mocked(saveDepartureCreationDraft).mockImplementation(async (payload) => ({
-      ...restored,
-      draft: {
-        version: (payload.expectedVersion ?? 0) + 1,
-        snapshot: payload.draft,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-      pendingReview: pending,
-    }))
-    vi.mocked(confirmAiReviewPackage).mockResolvedValue({
+    const conflict = {
       ...restored,
       pendingReview: null,
-    })
+      reviewConflicts: [{ ...pending, status: 'conflict' as const }],
+      reviewConflict: { status: 'stale_target_version' as const, conflictFields: ['name'] },
+    }
+    vi.mocked(confirmAiReviewPackage).mockRejectedValue(
+      new ApiError('审核目标版本已变化', 409, conflict),
+    )
 
     renderWizard()
     await user.click(await screen.findByRole('button', { name: '确认写入草稿' }))
 
     await waitFor(() => {
-      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        {
+          expectedVersion: 6,
+          expectedPackageVersion: 1,
+        },
+        expect.stringMatching(/\S+/),
+      )
     })
-    const flushed = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
-    expect(flushed?.routeName).toBe('西北大环线')
-    expect(flushed?.name ?? null).toBeNull()
-    await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenCalled()
-    })
+    expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
   })
 
   it('patches candidate corrections without autosaving them into the draft snapshot', async () => {

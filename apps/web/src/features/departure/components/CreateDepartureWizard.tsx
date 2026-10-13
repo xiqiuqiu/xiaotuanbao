@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { App, Button, Card, Drawer, Form, Spin, Typography, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
-import { pendingCandidateSnapshotDrift, preservePendingCandidateBaseline } from '@xiaotuanbao/ai-contracts'
 import type {
   AiCreateAssistTaskStatus,
   AiCreateTaskSummary,
@@ -216,16 +215,11 @@ function useCreateDepartureWizardController() {
       await taskClaimInFlightRef.current
     }
 
-    const info = infoForm.getFieldsValue(true)
     const openReview = pendingReviewRef.current
-    const pending = openReview?.status === 'pending' ? openReview : null
-    const draft = pending?.baselineSnapshot
-      ? preservePendingCandidateBaseline({
-          draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
-          baselineSnapshot: pending.baselineSnapshot,
-          candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
-        })
-      : buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
+    const draft = buildDepartureCreationDraftSnapshot(
+      routeValuesRef.current,
+      infoForm.getFieldsValue(true),
+    )
     if (
       !shouldPersistDepartureCreationDraft(draft, {
         hasExistingTask: Boolean(taskIdRef.current),
@@ -333,27 +327,9 @@ function useCreateDepartureWizardController() {
     schedulePersistedAutosave()
   }, [schedulePersistedAutosave])
 
-  const flushDraft = useCallback(async (options?: { restorePendingBaseline?: boolean }) => {
-    if (options?.restorePendingBaseline) {
-      const pending = pendingReviewRef.current
-      if (pending?.status === 'pending' && pending.baselineSnapshot && pending.candidates.length > 0) {
-        const draft = buildDepartureCreationDraftSnapshot(
-          routeValuesRef.current,
-          infoForm.getFieldsValue(true),
-        )
-        if (
-          pendingCandidateSnapshotDrift({
-            draft,
-            baselineSnapshot: pending.baselineSnapshot,
-            candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
-          })
-        ) {
-          dirtyRef.current = true
-        }
-      }
-    }
+  const flushDraft = useCallback(async () => {
     await flush()
-  }, [flush, infoForm])
+  }, [flush])
 
   const loadDepartureNo = useCallback(async () => {
     const result = await previewDepartureNo()
@@ -873,7 +849,7 @@ function useCreateDepartureWizardController() {
         clearTimeout(correctTimerRef.current)
         correctTimerRef.current = null
       }
-      await flushDraft({ restorePendingBaseline: true })
+      await flushDraft()
       const currentVersion = draftVersionRef.current
       if (currentVersion == null) {
         throw new Error('没有待确认的审核包')
