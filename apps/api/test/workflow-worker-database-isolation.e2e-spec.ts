@@ -122,6 +122,8 @@ describe('workflow worker database isolation', () => {
     }
   }
 
+  // Each assertion boots a real one-shot Nest/Jest consumer; cold CI runners can
+  // exceed the suite-wide 30s default even though the processor calls are bounded.
   it('lets a same-schema consumer claim the queued job but hides it from another schema', async () => {
     const opened = await authRequest(app, coordinatorToken)
       .post('/api/agent/tasks/departure-creation/sessions')
@@ -172,5 +174,5 @@ describe('workflow worker database isolation', () => {
       }),
     ).toBe(0)
     expect(agent.callCount()).toBe(1)
-  })
+  }, 60_000)
 })
