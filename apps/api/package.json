@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "lint": "pnpm typecheck",
     "test": "jest --config jest.config.js",
-    "test:e2e": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand",
-    "test:e2e:ci": "NODE_OPTIONS='--max-old-space-size=4096' dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand --testPathIgnorePatterns=seed-demo-business-loop",
-    "test:permission-matrix": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand test/permission-matrix.e2e-spec.ts",
-    "test:permission-matrix:update": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand -u test/permission-matrix.e2e-spec.ts",
+    "test:e2e": "dotenv -e ../../.env -- tsx test/run-e2e-isolated.ts",
+    "test:e2e:ci": "NODE_OPTIONS='--max-old-space-size=4096' dotenv -e ../../.env -- tsx test/run-e2e-isolated.ts --testPathIgnorePatterns=seed-demo-business-loop",
+    "test:permission-matrix": "dotenv -e ../../.env -- tsx test/run-e2e-isolated.ts test/permission-matrix.e2e-spec.ts",
+    "test:permission-matrix:update": "dotenv -e ../../.env -- tsx test/run-e2e-isolated.ts -u test/permission-matrix.e2e-spec.ts",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
@@ -25,7 +25,7 @@
     "db:clear-business-data": "dotenv -e ../../.env -- tsx scripts/clear-business-data.ts",
     "db:reset-agent-run-data": "dotenv -e ../../.env -- tsx scripts/reset-agent-run-data.ts",
     "finance:integrity-check": "dotenv -e ../../.env -- tsx scripts/finance-integrity-check.ts",
-    "db:seed-demo-loop": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand test/seed-demo-business-loop.e2e-spec.ts",
+    "db:seed-demo-loop": "XIAOTUANBAO_E2E_SHARED_DATABASE_MODE=seed-demo-loop dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand test/seed-demo-business-loop.e2e-spec.ts",
     "db:seed-workbench-display": "dotenv -e ../../.env -- tsx scripts/seed-workbench-display-boundary.ts"
   },
   "dependencies": {

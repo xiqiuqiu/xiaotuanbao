@@ -6,6 +6,7 @@ module.exports = {
   testRegex: '.(e2e|integration)-spec.ts$',
   // Concurrent finance / allocation suites exceed Jest's 5s default on CI runners.
   testTimeout: 30_000,
+  setupFiles: ['<rootDir>/test/support/require-isolated-e2e-database.ts'],
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
