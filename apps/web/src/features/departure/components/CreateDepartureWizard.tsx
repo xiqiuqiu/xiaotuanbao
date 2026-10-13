@@ -29,6 +29,7 @@ import {
   getAiCreateAssistTaskState,
   getAiCreateTask,
   patchAiReviewPackage,
+  regenerateAiReviewPackage,
   rejectAiReviewPackage,
   saveDepartureCreationDraft,
 } from '@/services/ai-create-task.service'
@@ -84,8 +85,12 @@ function newConfirmIdempotencyKey(taskId: string): string {
     : `confirm-${taskId}-${Date.now()}`
 }
 
-function hasPendingReview(summary: AiCreateTaskSummary): boolean {
-  return Boolean(summary.pendingReview) || (summary.pendingReviews?.length ?? 0) > 0
+function hasOpenReview(summary: AiCreateTaskSummary): boolean {
+  return (
+    Boolean(summary.pendingReview) ||
+    (summary.pendingReviews?.length ?? 0) > 0 ||
+    (summary.reviewConflicts?.length ?? 0) > 0
+  )
 }
 
 function useCreateDepartureWizardController() {
@@ -123,6 +128,7 @@ function useCreateDepartureWizardController() {
   const dirtyRef = useRef(false)
   const taskClaimInFlightRef = useRef<Promise<void> | null>(null)
   const confirmIdempotencyKeyRef = useRef<string | null>(null)
+  const confirmReviewInFlightRef = useRef(false)
   const taskIdRef = useRef(taskId)
   const draftVersionRef = useRef(draftVersion)
   const routeValuesRef = useRef(routeValues)
@@ -211,7 +217,8 @@ function useCreateDepartureWizardController() {
     }
 
     const info = infoForm.getFieldsValue(true)
-    const pending = pendingReviewRef.current
+    const openReview = pendingReviewRef.current
+    const pending = openReview?.status === 'pending' ? openReview : null
     const draft = pending?.baselineSnapshot
       ? preservePendingCandidateBaseline({
           draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
@@ -222,7 +229,7 @@ function useCreateDepartureWizardController() {
     if (
       !shouldPersistDepartureCreationDraft(draft, {
         hasExistingTask: Boolean(taskIdRef.current),
-        hasPendingReview: Boolean(pending),
+        hasPendingReview: Boolean(openReview),
       })
     ) {
       return
@@ -329,7 +336,7 @@ function useCreateDepartureWizardController() {
   const flushDraft = useCallback(async (options?: { restorePendingBaseline?: boolean }) => {
     if (options?.restorePendingBaseline) {
       const pending = pendingReviewRef.current
-      if (pending?.baselineSnapshot && pending.candidates.length > 0) {
+      if (pending?.status === 'pending' && pending.baselineSnapshot && pending.candidates.length > 0) {
         const draft = buildDepartureCreationDraftSnapshot(
           routeValuesRef.current,
           infoForm.getFieldsValue(true),
@@ -439,7 +446,8 @@ function useCreateDepartureWizardController() {
         dirtyRef.current = false
         const restoreConversationId =
           task.pendingReview?.conversationId ??
-          task.pendingReviews?.find((pkg) => pkg.conversationId)?.conversationId
+          task.pendingReviews?.find((pkg) => pkg.conversationId)?.conversationId ??
+          task.reviewConflicts?.find((pkg) => pkg.conversationId)?.conversationId
         if (restoreConversationId && !useAgentConversationStore.getState().conversationId) {
           openHistoricalConversation({ id: restoreConversationId, title: '历史会话' })
         }
@@ -523,9 +531,9 @@ function useCreateDepartureWizardController() {
       }
 
       const previousDefaultName = buildDefaultDepartureName(previous.routeName, startDate)
-      const pendingNameCandidate = pendingReviewRef.current?.candidates.some(
-        (candidate) => candidate.fieldKey === 'name',
-      )
+      const pendingNameCandidate =
+        pendingReviewRef.current?.status === 'pending' &&
+        pendingReviewRef.current.candidates.some((candidate) => candidate.fieldKey === 'name')
       if (
         !pendingNameCandidate &&
         startDate &&
@@ -644,7 +652,7 @@ function useCreateDepartureWizardController() {
           if (conflict) {
             queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
             applySavedDraft(conflict, { keepDirty: true })
-            if (!hasPendingReview(conflict)) {
+            if (!hasOpenReview(conflict)) {
               pendingReviewRef.current = null
             } else {
               throw error
@@ -774,12 +782,20 @@ function useCreateDepartureWizardController() {
       }),
     refetchIntervalInBackground: false,
   })
+  const openReviews = [
+    ...(taskReview?.pendingReviews ?? []),
+    ...(taskReview?.reviewConflicts ?? []),
+  ]
+  if (
+    taskReview?.pendingReview &&
+    !openReviews.some((reviewPackage) => reviewPackage.id === taskReview.pendingReview?.id)
+  ) {
+    openReviews.unshift(taskReview.pendingReview)
+  }
   const pendingReview = conversationId
-    ? ((taskReview?.pendingReviews ?? []).find((pkg) => pkg.conversationId === conversationId) ??
-      (taskReview?.pendingReview?.conversationId === conversationId
-        ? taskReview.pendingReview
-        : null))
-    : (taskReview?.pendingReview ?? null)
+    ? (openReviews.find((pkg) => pkg.conversationId === conversationId) ?? null)
+    : (taskReview?.pendingReview ??
+      (taskReview?.reviewConflicts?.length === 1 ? taskReview.reviewConflicts[0] : null))
   useEffect(() => {
     pendingReviewRef.current = pendingReview
   }, [pendingReview])
@@ -815,7 +831,7 @@ function useCreateDepartureWizardController() {
   const correctTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleCorrectCandidate = useCallback(
     (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => {
-      if (!taskId || !pendingReview) return
+      if (!taskId || !pendingReview || pendingReview.status !== 'pending') return
       pendingCorrectionsRef.current = { ...pendingCorrectionsRef.current, [fieldKey]: value }
       if (correctTimerRef.current) {
         clearTimeout(correctTimerRef.current)
@@ -850,7 +866,7 @@ function useCreateDepartureWizardController() {
 
   const confirmReviewMutation = useMutation({
     mutationFn: async () => {
-      if (!taskId || !pendingReview) {
+      if (!taskId || !pendingReview || pendingReview.status !== 'pending') {
         throw new Error('没有待确认的审核包')
       }
       if (correctTimerRef.current) {
@@ -863,7 +879,6 @@ function useCreateDepartureWizardController() {
         throw new Error('没有待确认的审核包')
       }
       const corrections = pendingCorrectionsRef.current
-      pendingCorrectionsRef.current = {}
       return confirmAiReviewPackage(
         taskId,
         pendingReview.id,
@@ -876,6 +891,7 @@ function useCreateDepartureWizardController() {
       )
     },
     onSuccess: (summary) => {
+      pendingCorrectionsRef.current = {}
       queryClient.setQueryData(['ai-create-task', summary.id], summary)
       applyConfirmedTask(summary)
       message.success('已将确认值写入发团创建草稿')
@@ -907,6 +923,62 @@ function useCreateDepartureWizardController() {
         return
       }
       message.error(caught instanceof Error ? caught.message : '确认审核包失败')
+    },
+  })
+
+  const handleConfirmReview = useCallback(() => {
+    if (confirmReviewInFlightRef.current) return
+    confirmReviewInFlightRef.current = true
+    confirmReviewMutation.mutate(undefined, {
+      onSettled: () => {
+        confirmReviewInFlightRef.current = false
+      },
+    })
+  }, [confirmReviewMutation])
+
+  const regenerateReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!taskId || !pendingReview || pendingReview.status !== 'conflict') {
+        throw new Error('没有需重新生成的审核包')
+      }
+      return regenerateAiReviewPackage(taskId, pendingReview.id)
+    },
+    onSuccess: (summary) => {
+      pendingCorrectionsRef.current = {}
+      queryClient.setQueryData(['ai-create-task', summary.id], summary)
+      applySavedDraft(summary)
+      message.success('已基于最新草稿开始重新生成审核建议')
+    },
+    onError: (caught) => {
+      message.error(caught instanceof Error ? caught.message : '重新生成审核建议失败')
+    },
+  })
+
+  const exitConflictMutation = useMutation({
+    mutationFn: async () => {
+      if (!taskId || !pendingReview || pendingReview.status !== 'conflict') {
+        throw new Error('没有可退出的审核等待')
+      }
+      return cancelAiReviewPackage(
+        taskId,
+        pendingReview.id,
+        { expectedPackageVersion: pendingReview.version },
+        { silentError: true },
+      )
+    },
+    onSuccess: (summary) => {
+      pendingCorrectionsRef.current = {}
+      queryClient.setQueryData(['ai-create-task', summary.id], summary)
+      applySavedDraft(summary)
+      message.success('已退出本次审核等待，可继续手工编辑草稿')
+    },
+    onError: (caught) => {
+      const conflict = readAiCreateTaskConflict(caught)
+      if (conflict) {
+        queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
+        applyConfirmedTask(conflict)
+      }
+      message.error(caught instanceof Error ? caught.message : '退出审核等待失败')
     },
   })
 
@@ -975,7 +1047,10 @@ function useCreateDepartureWizardController() {
     pendingReview,
     draftVersion,
     confirmReviewMutation,
+    handleConfirmReview,
     rejectReviewMutation,
+    regenerateReviewMutation,
+    exitConflictMutation,
     stepEnterKey,
     showCopyBootstrap,
     showRestoreFailure,
@@ -1016,7 +1091,10 @@ function CreateDepartureWizardView({
   pendingReview,
   draftVersion,
   confirmReviewMutation,
+  handleConfirmReview,
   rejectReviewMutation,
+  regenerateReviewMutation,
+  exitConflictMutation,
   stepEnterKey,
   showCopyBootstrap,
   showRestoreFailure,
@@ -1088,8 +1166,12 @@ function CreateDepartureWizardView({
                 pendingReview={pendingReview}
                 confirming={confirmReviewMutation.isPending}
                 rejecting={rejectReviewMutation.isPending}
-                onConfirm={() => confirmReviewMutation.mutate()}
+                regenerating={regenerateReviewMutation.isPending}
+                cancelling={exitConflictMutation.isPending}
+                onConfirm={handleConfirmReview}
                 onReject={() => rejectReviewMutation.mutate()}
+                onRegenerate={() => regenerateReviewMutation.mutate()}
+                onCancel={() => exitConflictMutation.mutate()}
               />
             ) : null}
             <div key={stepEnterKey} className={styles.stepEnter}>
@@ -1117,7 +1199,7 @@ function CreateDepartureWizardView({
                   onRouteChange={handleRouteChange}
                   onOpenTemplatePicker={() => setTemplatePickerOpen(true)}
                   templatePickerOpen={templatePickerOpen}
-                  pendingReview={pendingReview}
+                  pendingReview={pendingReview?.status === 'pending' ? pendingReview : null}
                   onCorrectCandidate={handleCorrectCandidate}
                 />
               )}

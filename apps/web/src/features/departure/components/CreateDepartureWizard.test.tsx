@@ -117,6 +117,7 @@ vi.mock('@/services/ai-create-task.service', () => ({
   }),
   confirmAiReviewPackage: vi.fn(),
   rejectAiReviewPackage: vi.fn(),
+  regenerateAiReviewPackage: vi.fn(),
 }))
 
 vi.mock('@/services/segment.service', () => ({
@@ -161,6 +162,7 @@ import {
   getAiCreateAssistTaskState,
   getAiCreateTask,
   patchAiReviewPackage,
+  regenerateAiReviewPackage,
   rejectAiReviewPackage,
   saveDepartureCreationDraft,
 } from '@/services/ai-create-task.service'
@@ -1682,6 +1684,172 @@ describe('CreateDepartureWizard', () => {
       expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
     })
     expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
+  })
+
+  it('coalesces a double-click and retries a timed-out review confirmation with a new command key', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({ baseObjectVersion: 2 })
+    const restored = {
+      id: 'task-1', status: 'in_progress' as const, currentPhase: 'basic_info' as const,
+      departureId: null, creatorUserId: 'user-1', createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const, routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团', startDate: '2026-08-01',
+          endDate: '2026-08-10', ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    let rejectFirst!: (reason: unknown) => void
+    const firstCall = new Promise<never>((_resolve, reject) => { rejectFirst = reject })
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(confirmAiReviewPackage)
+      .mockImplementationOnce(() => firstCall)
+      .mockResolvedValueOnce({
+        ...restored,
+        draft: { ...restored.draft, version: 3 },
+        pendingReview: null,
+      })
+
+    renderWizard()
+    const confirm = await screen.findByRole('button', { name: '确认写入草稿' })
+    await user.dblClick(confirm)
+    expect(confirmAiReviewPackage).toHaveBeenCalledTimes(1)
+    expect(confirm).toBeDisabled()
+
+    rejectFirst(new ApiError('请求超时，请重试', 504))
+    await waitFor(() => expect(confirm).toBeEnabled())
+    await user.click(confirm)
+    await waitFor(() => expect(confirmAiReviewPackage).toHaveBeenCalledTimes(2))
+    const calls = vi.mocked(confirmAiReviewPackage).mock.calls
+    expect(calls[1]?.[3]).not.toBe(calls[0]?.[3])
+  })
+
+  it('recovers a committed confirmation after its response is lost without writing twice', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({ baseObjectVersion: 2 })
+    const restored = {
+      id: 'task-1', status: 'in_progress' as const, currentPhase: 'basic_info' as const,
+      departureId: null, creatorUserId: 'user-1', createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const, routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团', startDate: '2026-08-01',
+          endDate: '2026-08-10', ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    const committed = {
+      ...restored,
+      draft: {
+        ...restored.draft,
+        version: 3,
+        snapshot: { ...restored.draft.snapshot, name: '八月川西团' },
+      },
+      pendingReview: null,
+      pendingReviews: [],
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(confirmAiReviewPackage)
+      .mockRejectedValueOnce(new ApiError('请求超时，请重试', 504))
+      .mockRejectedValueOnce(new ApiError('该审核包已处理，请刷新查看最新状态', 409, committed))
+
+    renderWizard()
+    const confirm = await screen.findByRole('button', { name: '确认写入草稿' })
+    await user.click(confirm)
+    await waitFor(() => expect(confirm).toBeEnabled())
+    await user.click(confirm)
+
+    await waitFor(() => expect(confirmAiReviewPackage).toHaveBeenCalledTimes(2))
+    const calls = vi.mocked(confirmAiReviewPackage).mock.calls
+    expect(calls[1]?.[3]).not.toBe(calls[0]?.[3])
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
+    })
+    expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
+  })
+
+  it('restores a conflicted review and lets the user regenerate from the latest draft', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const conflicted = mockPendingReview({ status: 'conflict', version: 2 })
+    const restored = {
+      id: 'task-1', status: 'in_progress' as const, currentPhase: 'basic_info' as const,
+      departureId: null, creatorUserId: 'user-1', createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: { ...conflicted.baselineSnapshot, name: '其他设备已改团名' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+      pendingReviews: [],
+      reviewConflicts: [conflicted],
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(regenerateAiReviewPackage).mockResolvedValue({
+      ...restored,
+      reviewConflicts: [],
+    })
+
+    renderWizard()
+    expect(await screen.findByText('AI 建议已过期')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '基于最新草稿重新生成' }))
+
+    await waitFor(() => {
+      expect(regenerateAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1')
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('lets the user exit waiting from a conflicted review without creating a departure', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const conflicted = mockPendingReview({ status: 'conflict', version: 2 })
+    const restored = {
+      id: 'task-1', status: 'in_progress' as const, currentPhase: 'basic_info' as const,
+      departureId: null, creatorUserId: 'user-1', createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: conflicted.baselineSnapshot,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+      pendingReviews: [],
+      reviewConflicts: [conflicted],
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(cancelAiReviewPackage).mockResolvedValue({
+      ...restored,
+      reviewConflicts: [],
+    })
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: '退出等待' }))
+
+    await waitFor(() => {
+      expect(cancelAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        { expectedPackageVersion: 2 },
+        { silentError: true },
+      )
+    })
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
+    expect(createDeparture).not.toHaveBeenCalled()
   })
 
   it('confirms the open conversation package instead of the newest pendingReview alias', async () => {

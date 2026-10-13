@@ -445,6 +445,76 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(agent.lastUserText()).toContain(ordinaryText)
   })
 
+  it('待审核时短回复“对”不确认，取消后追加信息也不复活审核项', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
+    const pending = (
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
+    ).body.data.pendingReview as { id: string; version: number }
+
+    agent.setOutcome(
+      resolvedItemOutcome({
+        kind: 'answered',
+        message: '收到这条独立消息，但不会代替审核确认。',
+        completionBasis: { kind: 'final_answer' },
+      }),
+    )
+    await sendMessage(
+      taskId,
+      conversationId,
+      '对',
+      `e2e-review-short-ordinary-${taskId}`,
+    ).expect(201)
+    await processor.processDueJobs(5)
+
+    const stillPending = await authRequest(app, coordinatorToken)
+      .get(`/api/agent/tasks/${taskId}`)
+      .expect(200)
+    expect(stillPending.body.data.pendingReview).toMatchObject({
+      id: pending.id,
+      status: 'pending',
+      version: pending.version,
+    })
+    expect(stillPending.body.data.draft).toMatchObject({
+      version: opened.task.draft.version,
+      snapshot: { name: `${testPrefix}-原团名` },
+    })
+    expect(
+      await prisma.aiReviewRecord.count({
+        where: { packageId: pending.id, action: 'confirm' },
+      }),
+    ).toBe(0)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${pending.id}/cancel`)
+      .send({ expectedPackageVersion: pending.version })
+      .expect(200)
+    await sendMessage(
+      taskId,
+      conversationId,
+      '取消后补充说明，但不要恢复刚才的建议',
+      `e2e-review-after-cancel-${taskId}`,
+    ).expect(201)
+    await processor.processDueJobs(5)
+
+    const after = await authRequest(app, coordinatorToken)
+      .get(`/api/agent/tasks/${taskId}`)
+      .expect(200)
+    expect(after.body.data.pendingReview).toBeNull()
+    expect(after.body.data.draft).toMatchObject({
+      version: opened.task.draft.version,
+      snapshot: { name: `${testPrefix}-原团名` },
+    })
+    expect(
+      await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: pending.id } }),
+    ).toMatchObject({ status: 'cancelled' })
+    expect(
+      await prisma.aiCreateTask.findUniqueOrThrow({ where: { id: taskId } }),
+    ).toMatchObject({ departureId: null })
+  })
+
   it('rejects without mutating the draft or enqueueing a continuation', async () => {
     const opened = await openSession()
     const taskId = opened.task.id

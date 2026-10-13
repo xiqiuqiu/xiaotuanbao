@@ -373,6 +373,68 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     ).toBe(1)
   })
 
+  it('短回复“对”只有显式绑定追问卡片时才回答，不会被当成提交授权', async () => {
+    agent.setOutcome(
+      resolvedItemOutcome({
+        kind: 'awaiting_user_input',
+        completionBasis: { kind: 'persistent_clarification' },
+        interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
+      }),
+    )
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendMessage(
+      taskId,
+      conversationId,
+      { text: '日期还需要确认' },
+      `e2e-short-reply-ask-${taskId}`,
+    ).expect(201)
+    await processOwnedDueJobs(5)
+    const asked = await listEvents(taskId, conversationId)
+    expect(asked.pendingInteraction).toMatchObject({
+      type: 'free_text',
+      status: 'pending',
+      version: 1,
+    })
+
+    const ordinary = await sendMessage(
+      taskId,
+      conversationId,
+      { text: '对' },
+      `e2e-short-reply-ordinary-${taskId}`,
+    ).expect(201)
+    const stillWaiting = await listEvents(taskId, conversationId)
+    expect(stillWaiting.pendingInteraction?.id).toBe(asked.pendingInteraction?.id)
+    expect(ordinary.body.data.batch).toMatchObject({ status: 'ready_for_agent' })
+
+    const explicitReply = await sendMessage(
+      taskId,
+      conversationId,
+      {
+        text: '对',
+        replyToEventId: asked.pendingInteraction?.eventId,
+        interactionId: asked.pendingInteraction?.id,
+        interactionVersion: 1,
+      },
+      `e2e-short-reply-explicit-${taskId}`,
+    ).expect(201)
+    expect(explicitReply.body.data.batch.replyToEventId).toBe(asked.pendingInteraction?.eventId)
+
+    const afterReply = await listEvents(taskId, conversationId)
+    expect(afterReply.pendingInteraction).toBeNull()
+    expect(
+      await prisma.aiConversationInteraction.findUniqueOrThrow({
+        where: { id: asked.pendingInteraction?.id },
+      }),
+    ).toMatchObject({ status: 'answered', responseJson: { text: '对' } })
+    expect(await prisma.aiReviewPackage.count({ where: { taskId } })).toBe(0)
+    expect(
+      await prisma.aiCreateTask.findUniqueOrThrow({ where: { id: taskId } }),
+    ).toMatchObject({ departureId: null })
+  })
+
   it('keeps the composer draft when answering an interaction card', async () => {
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',

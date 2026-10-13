@@ -54,10 +54,21 @@ test.describe('AI create basic_info smoke', () => {
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect(page.getByText('等待审核')).toBeVisible({ timeout: 45_000 })
-    await expect(page.getByRole('button', { name: '确认写入草稿' })).toBeVisible()
-    await page.getByRole('button', { name: '确认写入草稿' }).click()
+    const confirmRequests: string[] = []
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        /\/api\/agent\/review-packages\/[^/]+\/confirm$/.test(request.url())
+      ) {
+        confirmRequests.push(request.url())
+      }
+    })
+    const confirmButton = page.getByRole('button', { name: '确认写入草稿' })
+    await expect(confirmButton).toBeVisible()
+    await confirmButton.dblclick()
 
     await expect(page.getByLabel('团名')).toHaveValue(expectedName, { timeout: 15_000 })
+    expect(confirmRequests).toHaveLength(1)
 
     await page.reload()
     await expect(page.getByLabel('团名')).toHaveValue(expectedName)

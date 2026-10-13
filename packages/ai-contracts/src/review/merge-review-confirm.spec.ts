@@ -51,6 +51,50 @@ describe('evaluateReviewConfirmMerge', () => {
     })
   })
 
+  it('accepts a same-value replay but does not treat a different same-field edit as replay', () => {
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, name: '八月川西团' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, name: '八月川西团' },
+    })
+
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, name: '其他设备改名' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({ status: 'conflict', conflictFields: ['name'] })
+  })
+
+  it('distinguishes omitted fields from explicit null or empty clears', () => {
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, notes: '其他设备备注' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, notes: '其他设备备注', name: '八月川西团' },
+    })
+
+    const cleared = evaluateReviewConfirmMerge({
+      baselineSnapshot: { ...baseline, notes: '旧备注' },
+      currentSnapshot: { ...baseline, notes: null },
+      submissions: { notes: '' },
+    })
+    expect(cleared).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, notes: null },
+    })
+  })
+
   it('keeps a user-edited endDate when only startDate is submitted', () => {
     const result = evaluateReviewConfirmMerge({
       baselineSnapshot: baseline,
@@ -120,7 +164,7 @@ describe('evaluateReviewConfirmMerge', () => {
     }
   })
 
-  it.each([null, '', 'foobar', 1])(
+  it.each([null, '', 'foobar', 1, [], {}])(
     'rejects an invalid departureType correction: %p',
     (departureType) => {
       expect(

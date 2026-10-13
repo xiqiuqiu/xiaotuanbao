@@ -860,6 +860,8 @@ export interface AiCreateTaskSummary {
    */
   pendingReview: AiReviewPackageView | null
   pendingReviews?: AiReviewPackageView[]
+  /** 因目标版本变化而不能继续确认、需重新生成或取消的审核包。 */
+  reviewConflicts?: AiReviewPackageView[]
 }
 
 export interface SaveDepartureCreationDraftDto {
