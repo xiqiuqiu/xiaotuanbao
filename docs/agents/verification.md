@@ -75,7 +75,7 @@ Do **not** add path filters that skip e2e for “docs-only” or “web-only” 
 - Job writes a throwaway `.env` from `.env.example` defaults + CI `DATABASE_URL`
 - CI `DATABASE_URL` sets `connection_limit=20&pool_timeout=60` so concurrent e2e (8-way) does not starve Prisma's default tiny pool on Actions runners
 - Every `test:e2e`, `test:e2e:ci`, and permission-matrix invocation creates a unique `e2e_jest_*` schema, runs migrations and seed there, then drops only that owned schema.
-- A keeper connection marks live runs. The next invocation removes interrupted schemas only when their ownership marker exists and their keeper is gone; similarly named unowned schemas are never removed.
+- Runner and Jest consumer connections mark live runs. The next invocation removes interrupted schemas only when their ownership marker matches the schema name and both leases are gone; similarly named unowned schemas are never removed.
 - `jest-e2e.config.js` refuses to start on `public` or another shared schema. Run focused tests through the package script so the guard and lifecycle always apply:
 
 ```bash

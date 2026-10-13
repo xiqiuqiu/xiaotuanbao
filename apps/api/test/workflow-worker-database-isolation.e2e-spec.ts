@@ -59,15 +59,28 @@ describe('workflow worker database isolation', () => {
   })
 
   afterAll(async () => {
-    await prisma.$disconnect()
-    await app.close()
-    await agent.close()
+    const failures: unknown[] = []
+    const settle = async (operation: Promise<unknown> | undefined) => {
+      try {
+        await operation
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    await settle(prisma?.$disconnect())
+    await settle(app?.close())
+    await settle(agent?.close())
     if (emptyWorkerDatabase) {
-      await dropE2eDatabase(
-        process.env.DATABASE_URL!,
-        emptyWorkerDatabase.schema,
-        emptyWorkerDatabase.runId,
+      await settle(
+        dropE2eDatabase(
+          process.env.DATABASE_URL!,
+          emptyWorkerDatabase.schema,
+          emptyWorkerDatabase.runId,
+        ),
       )
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'workflow worker isolation teardown failed')
     }
   })
 

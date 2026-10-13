@@ -6,6 +6,7 @@ export const E2E_SCHEMA_PREFIX = 'e2e_jest_'
 const E2E_SCHEMA_PATTERN = /^e2e_jest_[a-z0-9_]+$/
 const E2E_SCHEMA_COMMENT_PREFIX = 'xiaotuanbao-e2e:'
 const E2E_KEEPER_APPLICATION_PREFIX = 'xiaotuanbao-e2e-keeper:'
+export const E2E_CONSUMER_APPLICATION_PREFIX = 'xiaotuanbao-e2e-consumer:'
 const activeLeases = new Map<string, Client>()
 
 interface SchemaComment {
@@ -68,6 +69,20 @@ function parseSchemaComment(comment: string | null): SchemaComment | null {
   return { runId, createdAtMs }
 }
 
+export function ownedE2eSchemaRunId(
+  schema: string,
+  comment: string | null,
+): string | null {
+  if (!E2E_SCHEMA_PATTERN.test(schema)) {
+    return null
+  }
+  const marker = parseSchemaComment(comment)
+  if (!marker || schema !== `${E2E_SCHEMA_PREFIX}${marker.runId}`) {
+    return null
+  }
+  return marker.runId
+}
+
 function baseDatabaseUrl(databaseUrl: string): string {
   const parsed = assertPostgresUrl(databaseUrl)
   parsed.searchParams.delete('schema')
@@ -114,6 +129,7 @@ export async function cleanupStaleE2eSchemas(
         SELECT application_name AS "applicationName"
         FROM pg_stat_activity
         WHERE application_name LIKE '${E2E_KEEPER_APPLICATION_PREFIX}%'
+           OR application_name LIKE '${E2E_CONSUMER_APPLICATION_PREFIX}%'
       `),
     ])
     const activeApplications = new Set(activities.rows.map((row) => row.applicationName))
@@ -122,10 +138,11 @@ export async function cleanupStaleE2eSchemas(
       if (!E2E_SCHEMA_PATTERN.test(row.schema)) {
         continue
       }
-      const marker = parseSchemaComment(row.comment)
+      const runId = ownedE2eSchemaRunId(row.schema, row.comment)
       if (
-        !marker ||
-        activeApplications.has(`${E2E_KEEPER_APPLICATION_PREFIX}${marker.runId}`)
+        !runId ||
+        activeApplications.has(`${E2E_KEEPER_APPLICATION_PREFIX}${runId}`) ||
+        activeApplications.has(`${E2E_CONSUMER_APPLICATION_PREFIX}${runId}`)
       ) {
         continue
       }
@@ -193,8 +210,8 @@ export async function dropE2eDatabase(
     if (result.rowCount === 0) {
       return
     }
-    const marker = parseSchemaComment(result.rows[0]?.comment ?? null)
-    if (!marker || marker.runId !== runId) {
+    const ownedRunId = ownedE2eSchemaRunId(schema, result.rows[0]?.comment ?? null)
+    if (ownedRunId !== runId) {
       throw new Error(`Refusing to drop E2E schema without matching ownership marker: ${schema}`)
     }
     await client.query(`DROP SCHEMA ${quoteSchema(schema)} CASCADE`)
