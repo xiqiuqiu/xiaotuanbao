@@ -1,8 +1,4 @@
-import {
-  evaluateReviewConfirmMerge,
-  preservePendingCandidateBaseline,
-  pendingCandidateSnapshotDrift,
-} from './merge-review-confirm'
+import { evaluateReviewConfirmMerge } from './merge-review-confirm'
 import type { AiCreateDraftSnapshot } from '../context/classify-draft-fields'
 
 const baseline: AiCreateDraftSnapshot = {
@@ -48,6 +44,50 @@ describe('evaluateReviewConfirmMerge', () => {
     expect(nameConflict).toEqual({
       status: 'conflict',
       conflictFields: ['name'],
+    })
+  })
+
+  it('accepts a same-value replay but does not treat a different same-field edit as replay', () => {
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, name: '八月川西团' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, name: '八月川西团' },
+    })
+
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, name: '其他设备改名' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({ status: 'conflict', conflictFields: ['name'] })
+  })
+
+  it('distinguishes omitted fields from explicit null or empty clears', () => {
+    expect(
+      evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: { ...baseline, notes: '其他设备备注' },
+        submissions: { name: '八月川西团' },
+      }),
+    ).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, notes: '其他设备备注', name: '八月川西团' },
+    })
+
+    const cleared = evaluateReviewConfirmMerge({
+      baselineSnapshot: { ...baseline, notes: '旧备注' },
+      currentSnapshot: { ...baseline, notes: null },
+      submissions: { notes: '' },
+    })
+    expect(cleared).toEqual({
+      status: 'ok',
+      nextSnapshot: { ...baseline, notes: null },
     })
   })
 
@@ -120,7 +160,7 @@ describe('evaluateReviewConfirmMerge', () => {
     }
   })
 
-  it.each([null, '', 'foobar', 1])(
+  it.each([null, '', 'foobar', 1, [], {}])(
     'rejects an invalid departureType correction: %p',
     (departureType) => {
       expect(
@@ -210,7 +250,7 @@ describe('evaluateReviewConfirmMerge', () => {
     })
   })
 
-  it('keeps unrelated route edits and restores auto-derived 团名 so confirm can proceed', () => {
+  it('keeps a same-field auto-derived 团名 change visible as a conflict', () => {
     const emptyNameBaseline: AiCreateDraftSnapshot = {
       mode: 'manual',
       routeName: '',
@@ -225,82 +265,21 @@ describe('evaluateReviewConfirmMerge', () => {
       routeName: '西北大环线',
       name: '2026年8月18日 西',
     }
-    const submissions = {
-      name: '2026年8月13号西北大环线10日游',
-      startDate: '2026-08-13',
-      endDate: '2026-08-22',
-      expectedGuestCountHint: 12,
-    }
-
     expect(
       evaluateReviewConfirmMerge({
         baselineSnapshot: emptyNameBaseline,
         currentSnapshot: afterTypingRoute,
-        submissions,
+        submissions: {
+          name: '2026年8月13号西北大环线10日游',
+          startDate: '2026-08-13',
+          endDate: '2026-08-22',
+          expectedGuestCountHint: 12,
+        },
       }),
     ).toEqual({
       status: 'conflict',
       conflictFields: ['name'],
     })
-
-    const preserved = preservePendingCandidateBaseline({
-      draft: afterTypingRoute,
-      baselineSnapshot: emptyNameBaseline,
-      candidateFields: ['name', 'startDate', 'endDate', 'expectedGuestCountHint'],
-    })
-    expect(preserved.routeName).toBe('西北大环线')
-    expect(preserved.name).toBeNull()
-    expect(
-      pendingCandidateSnapshotDrift({
-        draft: afterTypingRoute,
-        baselineSnapshot: emptyNameBaseline,
-        candidateFields: ['name', 'startDate', 'endDate', 'expectedGuestCountHint'],
-      }),
-    ).toBe(true)
-    expect(
-      pendingCandidateSnapshotDrift({
-        draft: preserved,
-        baselineSnapshot: emptyNameBaseline,
-        candidateFields: ['name', 'startDate', 'endDate', 'expectedGuestCountHint'],
-      }),
-    ).toBe(false)
-    expect(
-      evaluateReviewConfirmMerge({
-        baselineSnapshot: emptyNameBaseline,
-        currentSnapshot: preserved,
-        submissions,
-      }),
-    ).toEqual({
-      status: 'ok',
-      nextSnapshot: {
-        ...preserved,
-        name: '2026年8月13号西北大环线10日游',
-        startDate: '2026-08-13',
-        endDate: '2026-08-22',
-        expectedGuestCountHint: 12,
-      },
-    })
-  })
-
-  it('does not restore an unsubmitted endDate back to the review baseline', () => {
-    const draft = {
-      ...baseline,
-      endDate: '2026-09-29',
-    }
-    expect(
-      preservePendingCandidateBaseline({
-        draft,
-        baselineSnapshot: baseline,
-        candidateFields: ['startDate'],
-      }),
-    ).toEqual(draft)
-    expect(
-      pendingCandidateSnapshotDrift({
-        draft,
-        baselineSnapshot: baseline,
-        candidateFields: ['startDate'],
-      }),
-    ).toBe(false)
   })
 
   it('writes explicit null submissions for dates and expectedGuestCountHint', () => {

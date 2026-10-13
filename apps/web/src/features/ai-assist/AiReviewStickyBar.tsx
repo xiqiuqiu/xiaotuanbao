@@ -11,8 +11,12 @@ export interface AiReviewStickyBarProps {
   pendingReview: AiReviewPackageView
   confirming?: boolean
   rejecting?: boolean
+  regenerating?: boolean
+  cancelling?: boolean
   onConfirm: () => void
   onReject: () => void
+  onRegenerate?: () => void
+  onCancel?: () => void
 }
 
 function reviewRiskLabels(
@@ -32,8 +36,12 @@ export function AiReviewStickyBar({
   pendingReview,
   confirming,
   rejecting,
+  regenerating,
+  cancelling,
   onConfirm,
   onReject,
+  onRegenerate,
+  onCancel,
 }: AiReviewStickyBarProps) {
   const { token } = theme.useToken()
   const registered = registeredReviewSchemas.findByPayloadSchema(pendingReview.payloadSchema)
@@ -47,6 +55,7 @@ export function AiReviewStickyBar({
     pendingReview.confirmationUnit,
   )
   const riskLabels = reviewRiskLabels(unit, pendingReview.candidates)
+  const conflicted = pendingReview.status === 'conflict'
 
   return (
     <div
@@ -60,8 +69,15 @@ export function AiReviewStickyBar({
       }}
     >
       <div className={styles.copy}>
-        <Typography.Text strong>待确认 AI 建议</Typography.Text>
-        {schemaSupported ? (
+        <Typography.Text strong>{conflicted ? 'AI 建议已过期' : '待确认 AI 建议'}</Typography.Text>
+        {conflicted ? (
+          <Alert
+            type="warning"
+            showIcon
+            title="草稿在建议生成后已变更"
+            description="可基于最新草稿重新生成审核建议，或退出本次等待并继续手工编辑。"
+          />
+        ) : schemaSupported ? (
           <>
             <Typography.Text type="secondary">
               已建议修改{fieldList}。确认后写入{unit?.targetLabel}，拒绝后保留当前已保存值。
@@ -76,12 +92,35 @@ export function AiReviewStickyBar({
         )}
       </div>
       <Space className={styles.actions}>
-        <Button onClick={onReject} loading={rejecting} disabled={confirming}>
-          拒绝建议
-        </Button>
-        <Button type="primary" onClick={onConfirm} loading={confirming} disabled={rejecting || !schemaSupported}>
-          确认写入草稿
-        </Button>
+        {conflicted ? (
+          <>
+            <Button onClick={onCancel} loading={cancelling} disabled={regenerating}>
+              退出等待
+            </Button>
+            <Button
+              type="primary"
+              onClick={onRegenerate}
+              loading={regenerating}
+              disabled={cancelling}
+            >
+              基于最新草稿重新生成
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={onReject} loading={rejecting} disabled={confirming}>
+              拒绝建议
+            </Button>
+            <Button
+              type="primary"
+              onClick={onConfirm}
+              loading={confirming}
+              disabled={confirming || rejecting || !schemaSupported}
+            >
+              确认写入草稿
+            </Button>
+          </>
+        )}
       </Space>
     </div>
   )

@@ -46,6 +46,26 @@ function sameValue(left: string | number | null, right: string | number | null):
   return left === right
 }
 
+const NO_EFFECTIVE_SUBMISSION = Symbol('no-effective-submission')
+
+function submittedSnapshotValue(
+  submissions: ReviewConfirmSubmission,
+  field: AiReviewableBasicInfoField,
+): string | number | null | typeof NO_EFFECTIVE_SUBMISSION {
+  const value = submissions[field]
+  if (value === undefined) return NO_EFFECTIVE_SUBMISSION
+  if (field === 'expectedGuestCountHint') {
+    return value === null || value === '' ? null : Number(value)
+  }
+  if (field === 'templateId') {
+    if (typeof value !== 'string') return NO_EFFECTIVE_SUBMISSION
+    const text = value.trim()
+    return text.length > 0 ? text : NO_EFFECTIVE_SUBMISSION
+  }
+  const text = value == null ? '' : String(value).trim()
+  return text.length > 0 ? text : null
+}
+
 function fieldsToGuard(
   submittedFields: AiReviewableBasicInfoField[],
 ): Set<AiReviewableBasicInfoField> {
@@ -81,54 +101,6 @@ function adoptingTemplateId(submissions: ReviewConfirmSubmission): string | null
   return text.length > 0 ? text : null
 }
 
-export function preservePendingCandidateBaseline(args: {
-  draft: AiCreateDraftSnapshot
-  baselineSnapshot: AiCreateDraftSnapshot
-  candidateFields: readonly string[]
-}): AiCreateDraftSnapshot {
-  const submittedFields = args.candidateFields.filter(
-    (field): field is AiReviewableBasicInfoField =>
-      (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
-  )
-  const guarded = fieldsToGuard(submittedFields)
-  if (guarded.size === 0) return args.draft
-
-  const next: AiCreateDraftSnapshot = { ...args.draft }
-  for (const field of guarded) {
-    const value = snapshotValue(args.baselineSnapshot, field)
-    if (field === 'expectedGuestCountHint') {
-      next.expectedGuestCountHint = value == null ? null : Number(value)
-      continue
-    }
-    if (field === 'templateId') {
-      next.templateId = typeof value === 'string' ? value : null
-      continue
-    }
-    if (field === 'routeName') {
-      next.routeName = typeof value === 'string' ? value : ''
-      continue
-    }
-    next[field] = typeof value === 'string' || value == null ? value : String(value)
-  }
-  return next
-}
-
-export function pendingCandidateSnapshotDrift(args: {
-  draft: AiCreateDraftSnapshot
-  baselineSnapshot: AiCreateDraftSnapshot
-  candidateFields: readonly string[]
-}): boolean {
-  const submittedFields = args.candidateFields.filter(
-    (field): field is AiReviewableBasicInfoField =>
-      (AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(field),
-  )
-  const guarded = fieldsToGuard(submittedFields)
-  return [...guarded].some(
-    (field) =>
-      !sameValue(snapshotValue(args.draft, field), snapshotValue(args.baselineSnapshot, field)),
-  )
-}
-
 export function evaluateReviewConfirmMerge(args: {
   baselineSnapshot: AiCreateDraftSnapshot
   currentSnapshot: AiCreateDraftSnapshot
@@ -144,9 +116,15 @@ export function evaluateReviewConfirmMerge(args: {
     return { status: 'invalid', invalidFields: ['departureType'] }
   }
   const guarded = fieldsToGuard(submittedFields)
-  const conflictFields = [...guarded].filter(
-    (field) => !sameValue(snapshotValue(args.baselineSnapshot, field), snapshotValue(args.currentSnapshot, field)),
-  )
+  const conflictFields = [...guarded].filter((field) => {
+    const baselineValue = snapshotValue(args.baselineSnapshot, field)
+    const currentValue = snapshotValue(args.currentSnapshot, field)
+    if (sameValue(baselineValue, currentValue)) return false
+    const submittedValue = submittedSnapshotValue(args.submissions, field)
+    return (
+      submittedValue === NO_EFFECTIVE_SUBMISSION || !sameValue(currentValue, submittedValue)
+    )
+  })
 
   if (conflictFields.length > 0) {
     return { status: 'conflict', conflictFields }

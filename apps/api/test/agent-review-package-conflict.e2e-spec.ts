@@ -318,28 +318,30 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     expect(stillPending.status).toBe('pending')
 
     const key = `e2e-367-confirm-${submitted.body.data.reviewPackageId}`
-    const first = await authRequest(app, coordinatorToken)
-      .post(
-        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
-      )
-      .set('Idempotency-Key', key)
-      .send({
-        expectedVersion: opened.version,
-        expectedPackageVersion: 1,
-        decisionCommandId: key,
-      })
-      .expect(200)
-    const second = await authRequest(app, coordinatorToken)
-      .post(
-        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
-      )
-      .set('Idempotency-Key', key)
-      .send({
-        expectedVersion: opened.version,
-        expectedPackageVersion: 1,
-        decisionCommandId: key,
-      })
-      .expect(200)
+    const [first, second] = await Promise.all([
+      authRequest(app, coordinatorToken)
+        .post(
+          `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        )
+        .set('Idempotency-Key', key)
+        .send({
+          expectedVersion: opened.version,
+          expectedPackageVersion: 1,
+          decisionCommandId: key,
+        })
+        .expect(200),
+      authRequest(app, coordinatorToken)
+        .post(
+          `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        )
+        .set('Idempotency-Key', key)
+        .send({
+          expectedVersion: opened.version,
+          expectedPackageVersion: 1,
+          decisionCommandId: key,
+        })
+        .expect(200),
+    ])
     expect(second.body.data.draft.version).toBe(first.body.data.draft.version)
     expect(second.body.data.draft.snapshot.name).toBe(`${testPrefix}-幂等`)
 
@@ -350,6 +352,37 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       },
     })
     expect(records).toHaveLength(1)
+    expect(
+      await prisma.aiCreateIdempotencyRecord.count({
+        where: { idempotencyKey: key },
+      }),
+    ).toBe(1)
+
+    const retryAfterLostResponseKey = `${key}-new-command`
+    const retryAfterLostResponse = await authRequest(app, coordinatorToken)
+      .post(
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+      )
+      .set('Idempotency-Key', retryAfterLostResponseKey)
+      .send({
+        expectedVersion: opened.version,
+        expectedPackageVersion: 1,
+        decisionCommandId: retryAfterLostResponseKey,
+      })
+      .expect(409)
+    expect(retryAfterLostResponse.body.message).toContain('已处理')
+    expect(retryAfterLostResponse.body.data.draft.version).toBe(
+      first.body.data.draft.version,
+    )
+    expect(
+      await prisma.aiReviewRecord.count({
+        where: {
+          packageId: submitted.body.data.reviewPackageId,
+          action: 'confirm',
+          writeResult: 'success',
+        },
+      }),
+    ).toBe(1)
 
     const cancelled = await agentSubmit(opened.mintedB.delegationToken, {
       taskId: opened.taskId,
@@ -376,6 +409,47 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     expect(taskAfter.status).not.toBe('closed')
     expect(conversation.status).toBe('open')
     expect(taskAfter.id).toBe(taskBefore.id)
+  })
+
+  it('serializes two different confirm commands for one package without duplicate writes', async () => {
+    const opened = await openLinkedConversations()
+    const submitted = await agentSubmit(opened.mintedA.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.mintedA.runId,
+      objectVersion: opened.version,
+      candidates: [
+        nameCandidate(`${testPrefix}-双击确认`, opened.mintedA.userMessageSequence),
+      ],
+    }).expect(200)
+    const packageId = submitted.body.data.reviewPackageId as string
+    const request = (key: string) =>
+      authRequest(app, coordinatorToken)
+        .post(`/api/agent/review-packages/${packageId}/confirm`)
+        .set('Idempotency-Key', key)
+        .send({
+          expectedVersion: opened.version,
+          expectedPackageVersion: 1,
+          decisionCommandId: key,
+        })
+
+    const [first, second] = await Promise.all([
+      request(`e2e-367-double-a-${packageId}`),
+      request(`e2e-367-double-b-${packageId}`),
+    ])
+    expect([first.status, second.status].sort()).toEqual([200, 409])
+    expect(
+      await prisma.aiReviewRecord.count({
+        where: { packageId, action: 'confirm', writeResult: 'success' },
+      }),
+    ).toBe(1)
+    expect(
+      await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: packageId } }),
+    ).toMatchObject({ status: 'confirmed' })
+    expect(
+      await prisma.departureCreationDraft.findUniqueOrThrow({
+        where: { taskId: opened.taskId },
+      }),
+    ).toMatchObject({ version: opened.version + 1 })
   })
 
   it('does not apply a missing template and leaves the original package pending', async () => {

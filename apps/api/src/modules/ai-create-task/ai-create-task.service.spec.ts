@@ -265,11 +265,17 @@ describe('AiCreateTaskService review disposition #440', () => {
     options?: {
       siblings?: Record<string, unknown>[]
       taskSnapshot?: Record<string, unknown>
+      draftVersion?: number
     },
   ) {
-    const currentTask = options?.taskSnapshot
-      ? { ...task, draft: { ...task.draft, snapshot: options.taskSnapshot } }
-      : task
+    const currentTask = {
+      ...task,
+      draft: {
+        ...task.draft,
+        ...(options?.taskSnapshot ? { snapshot: options.taskSnapshot } : {}),
+        ...(options?.draftVersion ? { version: options.draftVersion } : {}),
+      },
+    }
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
       agentTask: {
@@ -530,6 +536,119 @@ describe('AiCreateTaskService review disposition #440', () => {
     expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }) }),
     )
+  })
+
+  it('merges an explicit user correction after an unrelated autosave advanced the draft version', async () => {
+    const modelCandidate = {
+      fieldKey: 'name' as const,
+      proposedValue: '确认后的川西团',
+      clarity: 'clear' as const,
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名叫确认后的川西团' }],
+    }
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-safe-autosave',
+      payloadSchema: 'departure.basic_info_draft@v1',
+      proposalHash: departureReviewProposalHash({
+        objectVersion: 1,
+        confirmationUnit: 'basic_info_draft',
+        candidates: [modelCandidate],
+      }),
+      candidates: [{ ...modelCandidate, status: 'pending' }],
+    }
+    const autosaved = { ...snapshot, notes: '集合时间提前' }
+    const { service, tx } = createService(pkg, {
+      taskSnapshot: autosaved,
+      draftVersion: 2,
+    })
+
+    await expect(
+      service.confirmDepartureReviewPackage(
+        'org-1',
+        'user-1',
+        'task-1',
+        pkg.id,
+        {
+          expectedVersion: 2,
+          expectedPackageVersion: 1,
+          corrections: { name: '用户修正后的川西团' },
+        },
+        'decision-safe-autosave',
+      ),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.departureCreationDraft.update).toHaveBeenCalledWith({
+      where: { id: 'draft-1' },
+      data: expect.objectContaining({
+        version: 3,
+        snapshot: expect.objectContaining({
+          name: '用户修正后的川西团',
+          notes: '集合时间提前',
+        }),
+      }),
+    })
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: AiReviewPackageStatus.confirmed }),
+      }),
+    )
+  })
+
+  it('allows a conflicted review package to exit waiting without writing the draft', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-conflict-cancel',
+      status: AiReviewPackageStatus.conflict,
+      payloadSchema: 'departure.basic_info_draft@v1',
+      candidates: [],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.cancelReviewPackage('org-1', 'user-1', 'task-1', pkg.id, {
+        expectedPackageVersion: 1,
+      }),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: pkg.id,
+        status: { in: [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict] },
+        version: 1,
+      },
+      data: {
+        status: AiReviewPackageStatus.cancelled,
+        version: { increment: 1 },
+      },
+    })
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
+  })
+
+  it('allows rejecting a conflicted review package without writing the draft', async () => {
+    const pkg = {
+      ...unsupportedPackage,
+      id: 'pkg-conflict-reject',
+      status: AiReviewPackageStatus.conflict,
+      payloadSchema: 'departure.basic_info_draft@v1',
+      candidates: [],
+    }
+    const { service, tx } = createService(pkg)
+
+    await expect(
+      service.rejectReviewPackage('org-1', 'user-1', 'task-1', pkg.id, {
+        expectedPackageVersion: 1,
+      }),
+    ).resolves.toMatchObject({ id: 'task-1' })
+    expect(tx.aiReviewPackage.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: pkg.id,
+        status: { in: [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict] },
+        version: 1,
+      },
+      data: {
+        status: AiReviewPackageStatus.rejected,
+        version: { increment: 1 },
+      },
+    })
+    expect(tx.departureCreationDraft.update).not.toHaveBeenCalled()
   })
 
   it('rejects a null departureType correction before writing the draft', async () => {
@@ -1304,7 +1423,7 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
     expect(result.pendingReview).toBeNull()
   })
 
-  it('keeps pendingReview when only one conversation is awaiting review', async () => {
+  it('separates one pending review from a conflicted review that needs recovery', async () => {
     const pending = {
       id: 'pkg-only',
       organizationId,
@@ -1332,6 +1451,15 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
       createdAt: now,
       updatedAt: now,
     }
+    const conflicted = {
+      ...pending,
+      id: 'pkg-conflicted',
+      runId: 'run-conflicted',
+      conversationId: 'conv-conflicted',
+      inputBatchId: 'batch-conflicted',
+      status: AiReviewPackageStatus.conflict,
+      version: 2,
+    }
     const findFirst = jest.fn().mockResolvedValue({
       id: taskId,
       currentPhase: AiCreatePhase.BASIC_INFO,
@@ -1357,7 +1485,7 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
         statusVersion: 2,
         createdAt: now,
         updatedAt: now,
-        reviewPackages: [pending],
+        reviewPackages: [conflicted, pending],
       },
     })
     const service = new AiCreateTaskService(
@@ -1374,6 +1502,9 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
 
     expect(result.pendingReview).toMatchObject({ id: 'pkg-only' })
     expect(result.pendingReviews).toHaveLength(1)
+    expect(result.reviewConflicts).toEqual([
+      expect.objectContaining({ id: 'pkg-conflicted', status: 'conflict' }),
+    ])
   })
 })
 

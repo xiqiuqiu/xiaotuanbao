@@ -54,7 +54,6 @@ import {
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   DEPARTURE_REVIEW_TARGET_KIND,
   registeredReviewSchemas,
-  isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
   type GetTaskContextOutput,
@@ -68,7 +67,7 @@ import {
   type SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, Departure, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiInputBatchStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, DirectoryProfileStatus, TaskActivityKind, UserStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
@@ -135,7 +134,18 @@ const TASK_WITH_PENDING_INCLUDE = {
   agentTask: {
     include: {
       reviewPackages: {
-        where: { status: AiReviewPackageStatus.pending },
+        where: {
+          OR: [
+            { status: AiReviewPackageStatus.pending },
+            {
+              status: AiReviewPackageStatus.conflict,
+              OR: [
+                { inputBatchId: null },
+                { inputBatch: { status: { not: AiInputBatchStatus.cancelled } } },
+              ],
+            },
+          ],
+        },
         orderBy: { createdAt: 'desc' as const },
       },
     },
@@ -1303,6 +1313,7 @@ export class AiCreateTaskService {
         taskId,
         packageId,
         dto.expectedPackageVersion,
+        [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict],
       )
       const candidates = this.dispositionCandidates(pkg).map((candidate) => ({
         ...candidate,
@@ -1311,7 +1322,7 @@ export class AiCreateTaskService {
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
-          status: AiReviewPackageStatus.pending,
+          status: { in: [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict] },
           version: dto.expectedPackageVersion,
         },
         data: {
@@ -1372,11 +1383,12 @@ export class AiCreateTaskService {
         taskId,
         packageId,
         dto.expectedPackageVersion,
+        [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict],
       )
       const claimed = await tx.aiReviewPackage.updateMany({
         where: {
           id: pkg.id,
-          status: AiReviewPackageStatus.pending,
+          status: { in: [AiReviewPackageStatus.pending, AiReviewPackageStatus.conflict] },
           version: dto.expectedPackageVersion,
         },
         data: {
@@ -1541,16 +1553,22 @@ export class AiCreateTaskService {
       const baseline = this.parseSnapshot(pkg.baselineSnapshot)
       const current = this.parseSnapshot(task.draft.snapshot)
 
-      if (
-        task.draft.version !== dto.expectedVersion ||
-        isTargetVersionStale(pkg.baseObjectVersion, task.draft.version)
-      ) {
-        const changeSummary = reviewConflictChangeSummary({
+      const merge = evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: current,
+        submissions,
+      })
+      if (task.draft.version !== dto.expectedVersion || merge.status === 'conflict') {
+        const detectedChanges = reviewConflictChangeSummary({
           baseVersion: pkg.baseObjectVersion,
           currentVersion: task.draft.version,
           baseline,
           current,
         })
+        const changeSummary =
+          merge.status === 'conflict'
+            ? { ...detectedChanges, changedFieldKeys: merge.conflictFields }
+            : detectedChanges
         const events = await this.markPackageConflict(tx, {
           organizationId,
           userId,
@@ -1582,14 +1600,6 @@ export class AiCreateTaskService {
         return { kind: 'conflict' as const, summary, events, changeSummary }
       }
 
-      const merge = evaluateReviewConfirmMerge({
-        baselineSnapshot: current,
-        currentSnapshot: current,
-        submissions,
-      })
-      if (merge.status === 'conflict') {
-        throw new BadRequestException('审核提案无法应用到当前草稿')
-      }
       if (merge.status === 'invalid') {
         throw new BadRequestException('审核修正值无效：发团类型')
       }
@@ -2761,11 +2771,15 @@ export class AiCreateTaskService {
     const snapshot = task.departure
       ? toFormalDepartureSnapshot(task.departure, draftSnapshot.expectedGuestCountHint)
       : draftSnapshot
-    const pendingReviews = (task.agentTask.reviewPackages ?? []).map((pending) =>
+    const openReviews = (task.agentTask.reviewPackages ?? []).map((reviewPackage) =>
       toReviewPackageView({
-        ...pending,
-        baselineSnapshot: this.parseSnapshot(pending.baselineSnapshot),
+        ...reviewPackage,
+        baselineSnapshot: this.parseSnapshot(reviewPackage.baselineSnapshot),
       }),
+    )
+    const pendingReviews = openReviews.filter((reviewPackage) => reviewPackage.status === 'pending')
+    const reviewConflicts = openReviews.filter(
+      (reviewPackage) => reviewPackage.status === 'conflict',
     )
     return {
       id: task.id,
@@ -2789,6 +2803,7 @@ export class AiCreateTaskService {
       },
       pendingReview: pendingReviews.length === 1 ? pendingReviews[0] : null,
       pendingReviews,
+      reviewConflicts,
     }
   }
 

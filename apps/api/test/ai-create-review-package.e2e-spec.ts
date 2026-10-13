@@ -242,6 +242,17 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       `${testPrefix}-修正团名`,
     )
 
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
+      .send({
+        expectedVersion: opened.version,
+        expectedPackageVersion: 1,
+      })
+      .expect(409)
+    expect(
+      await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: packageId } }),
+    ).toMatchObject({ status: 'pending', version: patched.body.data.pendingReview.version })
+
     const rejectedOpened = await openTask()
     const rejectedSubmit = await agentSubmit(rejectedOpened.delegationToken, {
       taskId: rejectedOpened.taskId,
@@ -288,6 +299,58 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       writeResult: 'success',
       operatorUserId: ownerUserId,
     })
+  })
+
+  it('merges review corrections after an unrelated draft autosave without creating a departure', async () => {
+    const opened = await openTask()
+    const submitted = await agentSubmit(opened.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.runId,
+      objectVersion: opened.version,
+      candidates: [nameCandidate(opened.userMessageSequence)],
+    }).expect(200)
+    const packageId = submitted.body.data.reviewPackageId as string
+
+    const saved = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({
+        taskId: opened.taskId,
+        expectedVersion: opened.version,
+        draft: {
+          mode: 'manual',
+          routeName: `${testPrefix}-路线`,
+          name: `${testPrefix}-原团名`,
+          startDate: '2026-09-01',
+          endDate: '2026-09-05',
+          ownerUserId,
+          departureType: DepartureType.combined,
+          expectedGuestCountHint: 8,
+          notes: '集合时间提前',
+        },
+      })
+      .expect(200)
+
+    const confirmed = await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
+      .send({
+        expectedVersion: saved.body.data.draft.version,
+        expectedPackageVersion: 1,
+        corrections: { name: `${testPrefix}-页面修正团名` },
+      })
+      .expect(200)
+
+    expect(confirmed.body.data.departureId).toBeNull()
+    expect(confirmed.body.data.pendingReview).toBeNull()
+    expect(confirmed.body.data.draft.version).toBe(saved.body.data.draft.version + 1)
+    expect(confirmed.body.data.draft.snapshot).toMatchObject({
+      name: `${testPrefix}-页面修正团名`,
+      notes: '集合时间提前',
+    })
+    expect(
+      await prisma.aiReviewRecord.count({
+        where: { packageId, action: 'confirm', writeResult: 'success' },
+      }),
+    ).toBe(1)
   })
 
   it('lets the user clear a date and guest-count candidate through patch and confirm', async () => {
@@ -389,6 +452,16 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .expect(200)
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
     expect(after.body.data.pendingReview).toBeNull()
+    expect(after.body.data.reviewConflicts).toEqual([
+      expect.objectContaining({ id: packageId, status: 'conflict', version: 2 }),
+    ])
+
+    const cancelled = await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${packageId}/cancel`)
+      .send({ expectedPackageVersion: 2 })
+      .expect(200)
+    expect(cancelled.body.data.departureId).toBeNull()
+    expect(cancelled.body.data.reviewConflicts).toEqual([])
   })
 
   it('forbids finance, rejects agent confirm, and does not write owner or type', async () => {

@@ -156,6 +156,30 @@ describe('AiReviewStickyBar', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
+  it('offers regeneration or a zero-write exit for a conflicted package', async () => {
+    const user = userEvent.setup()
+    const onRegenerate = vi.fn()
+    const onCancel = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <AiReviewStickyBar
+          pendingReview={{ ...pendingReview, status: 'conflict' }}
+          onConfirm={vi.fn()}
+          onReject={vi.fn()}
+          onRegenerate={onRegenerate}
+          onCancel={onCancel}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByText('AI 建议已过期')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认写入草稿' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '基于最新草稿重新生成' }))
+    await user.click(screen.getByRole('button', { name: '退出等待' }))
+    expect(onRegenerate).toHaveBeenCalledTimes(1)
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps mobile review actions at least 44px high', () => {
     const css = readFileSync(resolve(__dirname, './AiReviewStickyBar.module.css'), 'utf8')
     expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*\.actions[^}]*\{[^}]*min-height:\s*44px/)

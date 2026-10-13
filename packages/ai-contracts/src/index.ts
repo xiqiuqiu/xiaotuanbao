@@ -210,8 +210,6 @@ export {
   DATE_CONSISTENCY_GROUP,
   ROUTE_CONSISTENCY_GROUP,
   evaluateReviewConfirmMerge,
-  preservePendingCandidateBaseline,
-  pendingCandidateSnapshotDrift,
   type ReviewConfirmSubmission,
   type ReviewConfirmMergeResult,
 } from './review/merge-review-confirm'
