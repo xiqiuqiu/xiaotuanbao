@@ -1,6 +1,4 @@
 import type { AddressInfo } from 'node:net'
-import { execFileSync } from 'node:child_process'
-import { resolve } from 'node:path'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
@@ -26,36 +24,14 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   let agent: Awaited<ReturnType<typeof startDeterministicHeadlessAgent>>
   let ocr: Awaited<ReturnType<typeof startDeterministicParseWorker>>
   const testPrefix = `e2e-ai-hitl-${Date.now()}`
-  const testSchema = `e2e_hitl_${process.pid}_${Date.now()}`
   const createdTaskIds = new Set<string>()
   const createdConversationIds = new Set<string>()
   const activeProcessorRuns = new Set<Promise<number>>()
-  let originalDatabaseUrl: string | undefined
-  let schemaProvisionAttempted = false
 
   beforeAll(async () => {
     let apiBaseUrl = ''
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
-    originalDatabaseUrl = process.env.DATABASE_URL ?? ''
-    if (!originalDatabaseUrl) {
-      throw new Error('HITL E2E 需要 DATABASE_URL')
-    }
-    const isolatedUrl = new URL(originalDatabaseUrl)
-    isolatedUrl.searchParams.set('schema', testSchema)
-    process.env.DATABASE_URL = isolatedUrl.toString()
-    const apiRoot = resolve(__dirname, '..')
-    schemaProvisionAttempted = true
-    execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
-      cwd: apiRoot,
-      env: process.env,
-      stdio: 'pipe',
-    })
-    execFileSync('pnpm', ['exec', 'tsx', 'prisma/seed.ts'], {
-      cwd: apiRoot,
-      env: process.env,
-      stdio: 'pipe',
-    })
 
     ocr = await startDeterministicParseWorker({ text: '出团日期 2026-10-01' })
     process.env.OCR_BASE_URL = ocr.origin
@@ -101,19 +77,6 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await settle((agent as typeof agent | undefined)?.close())
     await settle((ocr as typeof ocr | undefined)?.close())
     await settle((app as INestApplication | undefined)?.close())
-
-    if (originalDatabaseUrl === undefined) {
-      delete process.env.DATABASE_URL
-    } else {
-      process.env.DATABASE_URL = originalDatabaseUrl
-    }
-    if (schemaProvisionAttempted && originalDatabaseUrl) {
-      const cleanup = new PrismaClient({ datasources: { db: { url: originalDatabaseUrl } } })
-      await settle(
-        cleanup.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`),
-      )
-      await settle(cleanup.$disconnect())
-    }
     if (failures.length > 0) {
       throw new AggregateError(failures, 'HITL E2E teardown failed')
     }

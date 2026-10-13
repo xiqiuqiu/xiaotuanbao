@@ -52,7 +52,7 @@ Jobs / checks (names must match branch protection):
 
 1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
 2. **`unit-tests`** — 聚合门禁：shared、AI contracts、Agent、API 单测始终执行；仅当 `apps/web`、Web 直接依赖或测试配置变化时，4 路并行执行 Web 单元/回归测试
-3. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
+3. **`api-e2e`** — empty Postgres (Actions service) → `pnpm test:e2e:ci` provisions a private schema → migrate → seed → test → drop schema
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
 
@@ -69,12 +69,21 @@ CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local N
 
 Do **not** add path filters that skip e2e for “docs-only” or “web-only” PRs (cross-package breakage).
 
-### CI database (I1)
+### Isolated API E2E database (I1)
 
 - `postgres:16` service container
 - Job writes a throwaway `.env` from `.env.example` defaults + CI `DATABASE_URL`
 - CI `DATABASE_URL` sets `connection_limit=20&pool_timeout=60` so concurrent e2e (8-way) does not starve Prisma's default tiny pool on Actions runners
-- `prisma migrate deploy` + `prisma:db:seed` on a fresh DB each run
+- Every `test:e2e`, `test:e2e:ci`, and permission-matrix invocation creates a unique `e2e_jest_*` schema, runs migrations and seed there, then drops only that owned schema.
+- Runner and Jest consumer connections mark live runs. The next invocation removes interrupted schemas only when their ownership marker matches the schema name and both leases are gone; similarly named unowned schemas are never removed.
+- `jest-e2e.config.js` refuses to start on `public` or another shared schema. Run focused tests through the package script so the guard and lifecycle always apply:
+
+```bash
+pnpm --filter api test:e2e -- test/departure-collaboration-recovery.e2e-spec.ts \
+  -t 'covers material → review → revision → confirm → formal records without leftover collaboration data reset'
+```
+
+- `db:seed-demo-loop` is the explicit exception: it intentionally rewrites local demo business data and is excluded from the E2E gate. Do not use it as a test runner.
 
 ### CI object storage (FileStore / #156)
 

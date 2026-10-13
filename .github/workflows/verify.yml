@@ -234,15 +234,12 @@ jobs:
       - name: Prisma generate
         run: pnpm --filter api prisma:generate
 
-      - name: Migrate
-        run: pnpm --filter api prisma:migrate:deploy
-
-      - name: Seed
-        run: pnpm --filter api prisma:db:seed
-
       - name: API e2e (CI scope)
         env:
           # Jest --runInBand keeps the whole suite in one process. After #366 the
           # default ~2GB heap OOMs on ubuntu-latest even when every spec passed.
           NODE_OPTIONS: --max-old-space-size=4096
+          # test:e2e:ci provisions, migrates, seeds, and drops a private schema.
+          # A local development worker on the same PostgreSQL database therefore
+          # cannot claim CI/Jest workflow jobs.
         run: pnpm test:e2e:ci
