@@ -119,6 +119,14 @@ import { PageLocatorResolver } from './page-locator.resolver'
 import { reviewBatchFollowUp } from './review-batch-disposition'
 import { ensureDepartureCollaborationTaskInTx } from './ensure-departure-collaboration-task'
 
+/** 还没结束、会挡住下一条排队消息的状态。不含 ready_for_agent：那是排队消息自己的状态。 */
+const OPEN_TURN_BLOCKING_STATUSES: AiInputBatchStatus[] = [
+  AiInputBatchStatus.preparing_context,
+  AiInputBatchStatus.agent_running,
+  AiInputBatchStatus.awaiting_user_input,
+  AiInputBatchStatus.awaiting_review,
+]
+
 const TASK_INCLUDE = {
   draft: true,
   agentTask: true,
@@ -2751,7 +2759,13 @@ export class AiConversationService {
     tx: Prisma.TransactionClient,
     conversationId: string,
   ): Promise<AiConversationEvent[]> {
-    if (await this.hasBlockingBatch(tx, conversationId)) {
+    // 不能用 hasBlockingBatch：它把 ready_for_agent 也算阻塞，而排队的消息自己就是这个状态，
+    // 那样卡片关掉后这条消息会把自己挡住，永远放不出来。
+    const blocking = await tx.aiInputBatch.findFirst({
+      where: { conversationId, status: { in: OPEN_TURN_BLOCKING_STATUSES } },
+      select: { id: true },
+    })
+    if (blocking) {
       return []
     }
     const waiting = await tx.aiInputBatch.findMany({

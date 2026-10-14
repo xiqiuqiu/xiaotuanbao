@@ -841,6 +841,57 @@ describe('AiConversationService.sendTasklessText while the model is still writin
 })
 
 describe('AiConversationService.cancelInteraction sibling items', () => {
+  it('releases the free text queued behind the card once the card is cancelled', async () => {
+    const { service, tx } = createHarness()
+    const queued = {
+      id: 'batch-queued',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.ready_for_agent,
+      conversationVersion: 6,
+      userMessageEvent: { sequence: 5 },
+    }
+    tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-1', inputBatchId: 'batch-ask', version: 1, status: 'pending',
+    })
+    tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+    tx.aiInputBatch.update.mockImplementation(
+      async ({ where, data }: { where: { id: string }; data: { status: string } }) => ({
+        id: where.id, conversationId, status: data.status, conversationVersion: 1,
+        sources: [], taskLinks: [],
+      }),
+    )
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { id?: unknown; status?: { in?: string[] } } }) => {
+        if (where.status == null) {
+          return { id: 'batch-ask', conversationId, status: 'awaiting_user_input', sources: [], taskLinks: [] }
+        }
+        const statuses = where.status?.in ?? []
+        if (statuses.includes(AiInputBatchStatus.ready_for_agent)) return queued
+        if (statuses.includes(AiInputBatchStatus.awaiting_user_input)) return null
+        return null
+      },
+    )
+    tx.aiInputBatch.findMany.mockImplementation(
+      async ({ where }: { where: { status?: string } }) =>
+        where.status === AiInputBatchStatus.ready_for_agent ? [queued] : [],
+    )
+
+    const result = await service.cancelInteraction(
+      organizationId, userId, taskId, conversationId, 'int-1', 1, 'cancel-releases-queue',
+    )
+
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ batchId: 'batch-ask', status: 'cancelled', reason: 'interaction_cancelled' }),
+        expect.objectContaining({ batchId: 'batch-queued', queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ inputBatchId: 'batch-queued', type: 'agent_batch', status: 'pending' }),
+    })
+  })
+
   it.each([[1, 0, 'awaiting_user_input'], [0, 1, 'awaiting_review'], [0, 0, 'cancelled']])(
     'keeps %s clarifications and %s reviews pending', async (interactions, reviews, status) => {
       const { service, tx } = createHarness()
