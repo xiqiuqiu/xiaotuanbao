@@ -237,6 +237,7 @@ export function batchStatusLabel(
   if (status === 'cancelled') {
     if (extra?.reason === 'interaction_cancelled') return '已取消等待'
     if (extra?.reason === 'user_stop') return '已停止当前处理'
+    if (extra?.reason === 'superseded_by_user_message') return null
     return '已放弃本批'
   }
   return null

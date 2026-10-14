@@ -51,6 +51,24 @@ describe('discardLiveOutputAfterUserStop', () => {
     expect(await live.getCurrent(snapshot.conversationId)).toBeNull()
   })
 
+  it('clears the interrupted Attempt when a newer message supersedes the running turn', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    await live.publish(snapshot)
+
+    await discardLiveOutputAfterUserStop(live, snapshot.conversationId, [
+      {
+        payload: {
+          status: 'cancelled',
+          reason: 'superseded_by_user_message',
+          attemptId: snapshot.attemptId,
+          batchId: snapshot.batchId,
+        },
+      },
+    ])
+
+    expect(await live.getCurrent(snapshot.conversationId)).toBeNull()
+  })
+
   it('does not clear a newer Attempt when the stop result has no events', async () => {
     const live = new InMemoryAgentLiveOutput()
     await live.publish({

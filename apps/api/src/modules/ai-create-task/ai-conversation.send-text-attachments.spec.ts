@@ -169,6 +169,10 @@ function createHarness(options?: {
     findFirst: jest.fn().mockResolvedValue(null),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   }
+  const aiAgentAttempt = {
+    findFirst: jest.fn().mockResolvedValue({ id: 'attempt-running' }),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  }
   const aiWorkflowJob = {
     findFirst: jest.fn().mockResolvedValue(null),
     upsert: jest.fn(async ({ create }: { create: Record<string, unknown> }) => ({
@@ -207,6 +211,7 @@ function createHarness(options?: {
     conversationSource,
     conversationSourceParseRun,
     aiWorkflowJob,
+    aiAgentAttempt,
     aiConversationDraft,
     taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
     agentTask: {
@@ -293,7 +298,11 @@ function createHarness(options?: {
         ? { locator: options.pageLocator, objectVersion: 1, facts: {} }
         : undefined,
     ) } as never,
-    { observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }), getCurrent: async () => null } as never,
+    {
+      observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }),
+      getCurrent: async () => null,
+      clear: jest.fn().mockResolvedValue(undefined),
+    } as never,
   )
 
   return { service, storedObjectService, callOrder, prisma, tx }
@@ -659,6 +668,63 @@ describe('AiConversationService.sendText composer draft', () => {
   })
 })
 
+
+describe('AiConversationService.sendTasklessText while the model is still writing', () => {
+  it('interrupts the running turn and reruns immediately with the new text', async () => {
+    const { service, tx } = createHarness()
+    const running = {
+      id: 'batch-running',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.agent_running,
+      conversationVersion: 4,
+      sources: [],
+      taskLinks: [],
+    }
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { status?: { in?: string[] } } }) =>
+        where.status?.in?.includes(AiInputBatchStatus.agent_running) ? running : null,
+    )
+
+    const result = await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '改成两间房',
+      'steer-while-running',
+    )
+
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'batch-running' },
+        data: { status: AiInputBatchStatus.cancelled },
+      }),
+    )
+    expect(tx.aiConversationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'batch_status',
+          payload: expect.objectContaining({
+            batchId: 'batch-running',
+            status: 'cancelled',
+            reason: 'superseded_by_user_message',
+          }),
+        }),
+      }),
+    )
+    expect(result.batch).toMatchObject({
+      status: AiInputBatchStatus.ready_for_agent,
+      replyToEventId: undefined,
+    })
+    expect(result.batch.id).not.toBe('batch-running')
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: '改成两间房' }),
+        expect.objectContaining({ queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+  })
+})
 
 describe('AiConversationService.cancelInteraction sibling items', () => {
   it.each([[1, 0, 'awaiting_user_input'], [0, 1, 'awaiting_review'], [0, 0, 'cancelled']])(

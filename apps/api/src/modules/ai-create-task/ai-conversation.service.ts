@@ -394,7 +394,10 @@ export class AiConversationService {
       }
 
       const answering = isReplyAttempt(reply)
-      if (!answering) {
+      const steered = answering
+        ? null
+        : await this.supersedeRunningBatch(tx, conversation.id)
+      if (!answering && !steered) {
         await this.assertProcessingBatchCapacity(tx, {
           organizationId,
           userId,
@@ -410,7 +413,8 @@ export class AiConversationService {
           })
         : null
       const messageText = replyResult?.text ?? trimmed
-      const queued = !replyResult && (await this.hasBlockingBatch(tx, conversation.id))
+      const queued =
+        !replyResult && !steered && (await this.hasBlockingBatch(tx, conversation.id))
       const lastEvent = await tx.aiConversationEvent.findFirst({
         where: { conversationId: conversation.id },
         orderBy: { sequence: 'desc' },
@@ -609,6 +613,7 @@ export class AiConversationService {
             },
           })
       const events = [
+        ...(steered?.events ?? []).map(toEventView),
         ...(replyResult?.events ?? []).map(toEventView),
         toEventView(userEvent),
         toEventView(statusEvent),
@@ -638,6 +643,7 @@ export class AiConversationService {
     for (const event of published) {
       this.eventHub.publish(result.conversationId, event)
     }
+    await discardLiveOutputAfterUserStop(this.liveOutput, result.conversationId, result.events)
     return result
     } catch (error) {
       if (!committed) {
@@ -2893,10 +2899,31 @@ export class AiConversationService {
     })
   }
 
+  private async supersedeRunningBatch(
+    tx: Prisma.TransactionClient,
+    conversationId: string,
+  ): Promise<{ events: AiConversationEvent[] } | null> {
+    const running = await tx.aiInputBatch.findFirst({
+      where: {
+        conversationId,
+        status: {
+          in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context],
+        },
+      },
+      include: BATCH_MATERIAL_INCLUDE,
+      orderBy: { conversationVersion: 'asc' },
+    })
+    if (!running) {
+      return null
+    }
+    const cancelled = await this.cancelRunningBatch(tx, running, 'superseded_by_user_message')
+    return { events: cancelled.events }
+  }
+
   private async cancelRunningBatch(
     tx: Prisma.TransactionClient,
     batch: BatchWithMaterials,
-    reason: 'user_stop',
+    reason: 'user_stop' | 'superseded_by_user_message',
   ): Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }> {
     if (batch.status === AiInputBatchStatus.cancelled) {
       return { batch, events: [] }

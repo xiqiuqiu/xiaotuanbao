@@ -4,10 +4,14 @@ type StopEvent = {
   payload?: Record<string, unknown>
 }
 
+function isLiveClearingStop(reason: unknown): boolean {
+  return reason === 'user_stop' || reason === 'superseded_by_user_message'
+}
+
 function stoppedAttemptId(events: StopEvent[]): string | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const payload = events[index]?.payload
-    if (payload?.status !== 'cancelled' || payload.reason !== 'user_stop') {
+    if (payload?.status !== 'cancelled' || !isLiveClearingStop(payload.reason)) {
       continue
     }
     return typeof payload.attemptId === 'string' ? payload.attemptId : null
@@ -18,7 +22,7 @@ function stoppedAttemptId(events: StopEvent[]): string | null {
 function stoppedBatchId(events: StopEvent[]): string | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const payload = events[index]?.payload
-    if (payload?.status !== 'cancelled' || payload.reason !== 'user_stop') {
+    if (payload?.status !== 'cancelled' || !isLiveClearingStop(payload.reason)) {
       continue
     }
     return typeof payload.batchId === 'string' ? payload.batchId : null
