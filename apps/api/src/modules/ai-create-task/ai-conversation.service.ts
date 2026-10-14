@@ -557,7 +557,7 @@ export class AiConversationService {
           })
         }
       }
-      if (batchStatus === AiInputBatchStatus.ready_for_agent) {
+      if (batchStatus === AiInputBatchStatus.ready_for_agent && !queued) {
         await tx.aiWorkflowJob.create({
           data: {
             organizationId,
@@ -1370,7 +1370,7 @@ export class AiConversationService {
           },
         })
 
-        if (batchStatus === AiInputBatchStatus.ready_for_agent) {
+        if (batchStatus === AiInputBatchStatus.ready_for_agent && !queued) {
           await tx.aiWorkflowJob.create({
             data: {
               organizationId,
@@ -1949,7 +1949,8 @@ export class AiConversationService {
             interactionId: interaction.id,
           },
         })
-        return { batch: updated, events: [statusEvent] }
+        const released = await this.releaseNextQueuedBatch(tx, conversationId)
+        return { batch: updated, events: [statusEvent, ...released] }
       },
     })
   }
@@ -2192,7 +2193,7 @@ export class AiConversationService {
         ...reviewPayload,
       },
     })
-    const events = [statusEvent]
+    const events = [statusEvent, ...(await this.releaseNextQueuedBatch(tx, batch.conversationId))]
     if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected || taskPendingInteractions > 0) {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
@@ -2363,11 +2364,12 @@ export class AiConversationService {
         reviewPackageId: params.reviewPackageId,
       },
     })
+    const released = await this.releaseNextQueuedBatch(tx, conversationId)
     await tx.aiConversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },
     })
-    return [statusEvent]
+    return [statusEvent, ...released]
   }
 
   async startReviewRegenerate(
@@ -2731,13 +2733,71 @@ export class AiConversationService {
         interactionStatus: AiConversationInteractionStatus.answered,
       },
     })
+    const released = await this.releaseNextQueuedBatch(tx, params.conversationId)
     return {
       replyToEventId: interaction.eventId,
       interactionId: interaction.id,
       text: resolved.text,
       selectedOptionId: resolved.selectedOptionId,
-      events: [statusEvent],
+      events: [statusEvent, ...released],
     }
+  }
+
+  /**
+   * 追问或审核卡关掉后，把排在它后面、发送时没有入队的下一条消息补上作业。
+   * 只放行最早的一条：更后面的仍由认领侧的前序批次挡住，轮到时再放。
+   */
+  private async releaseNextQueuedBatch(
+    tx: Prisma.TransactionClient,
+    conversationId: string,
+  ): Promise<AiConversationEvent[]> {
+    if (await this.hasBlockingBatch(tx, conversationId)) {
+      return []
+    }
+    const waiting = await tx.aiInputBatch.findMany({
+      where: { conversationId, status: AiInputBatchStatus.ready_for_agent },
+      include: { userMessageEvent: { select: { sequence: true } } },
+      orderBy: { conversationVersion: 'asc' },
+    })
+    const next = waiting.sort(
+      (left, right) => left.userMessageEvent.sequence - right.userMessageEvent.sequence,
+    )[0]
+    if (!next) {
+      return []
+    }
+    const existingJob = await tx.aiWorkflowJob.findFirst({
+      where: { inputBatchId: next.id, type: AiWorkflowJobType.agent_batch },
+      select: { id: true },
+    })
+    if (existingJob) {
+      return []
+    }
+    const primaryLink = await tx.inputBatchTaskLink.findFirst({
+      where: { inputBatchId: next.id, role: InputBatchTaskRole.primary },
+      select: { taskId: true },
+    })
+    await tx.aiWorkflowJob.create({
+      data: {
+        organizationId: next.organizationId,
+        taskId: primaryLink?.taskId,
+        conversationId: next.conversationId,
+        inputBatchId: next.id,
+        type: AiWorkflowJobType.agent_batch,
+        jobKey: agentBatchJobKey(next.id),
+        status: AiWorkflowJobStatus.pending,
+      },
+    })
+    const readyEvent = await this.appendEvent(tx, {
+      organizationId: next.organizationId,
+      conversationId: next.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: next.id,
+        status: AiInputBatchStatus.ready_for_agent,
+        queued: false,
+      },
+    })
+    return [readyEvent]
   }
 
   private async hasBlockingBatch(
@@ -2753,6 +2813,8 @@ export class AiConversationService {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
+            AiInputBatchStatus.awaiting_user_input,
+            AiInputBatchStatus.awaiting_review,
           ],
         },
       },

@@ -131,6 +131,7 @@ function createHarness(options?: {
           conversationVersion: 1,
           createdAt: now,
           updatedAt: now,
+          userMessageEvent: { sequence: 1 },
           ...data,
           sources: (data.sources?.create ?? []).map((row, index) => ({
             id: `dep-${index}`,
@@ -143,6 +144,7 @@ function createHarness(options?: {
         return createdBatch
       },
     ),
+    findMany: jest.fn().mockResolvedValue([]),
     findUniqueOrThrow: jest.fn(async () => {
       if (!createdBatch) {
         throw new Error('aiInputBatch not created')
@@ -223,6 +225,9 @@ function createHarness(options?: {
       })),
       update: jest.fn(),
       updateMany: jest.fn(),
+    },
+    inputBatchTaskLink: {
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     conversationTaskLink: {
       findMany: jest.fn().mockResolvedValue([
@@ -666,8 +671,114 @@ describe('AiConversationService.sendText composer draft', () => {
       revision: 5,
     })
   })
+
+  it('releases the free text queued behind the card once the reply closes it', async () => {
+    const { service, tx } = createHarness()
+    const queued = {
+      id: 'batch-queued',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.ready_for_agent,
+      conversationVersion: 6,
+      userMessageEvent: { sequence: 5 },
+    }
+    tx.aiInputBatch.findMany.mockImplementation(
+      async ({ where }: { where: { status?: string; id?: { in?: string[] } } }) =>
+        where.status === AiInputBatchStatus.ready_for_agent ? [queued] : [],
+    )
+    tx.inputBatchTaskLink.findFirst.mockResolvedValue({ taskId })
+    tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-1',
+      organizationId,
+      conversationId,
+      inputBatchId: 'batch-ask',
+      eventId: 'event-q',
+      type: AiConversationInteractionType.free_text,
+      prompt: '出团日期是哪一天？',
+      options: null,
+      responseSchema: { type: 'string', minLength: 1, maxLength: 8000 },
+      status: AiConversationInteractionStatus.pending,
+      version: 1,
+    })
+    tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.sendText(
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      '2026-10-01',
+      'idem-reply-releases-queue',
+      [],
+      {
+        replyToEventId: 'event-q',
+        interactionId: 'int-1',
+        interactionVersion: 1,
+      },
+    )
+
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith({
+      where: { id: 'batch-ask' },
+      data: { status: AiInputBatchStatus.completed },
+    })
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inputBatchId: 'batch-queued',
+        type: 'agent_batch',
+        jobKey: 'agent_batch:batch-queued',
+        taskId,
+        status: 'pending',
+      }),
+    })
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ batchId: 'batch-queued', queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+  })
 })
 
+
+describe('AiConversationService.sendTasklessText while a follow-up card is open', () => {
+  it('queues the new free text behind the open card instead of starting another turn', async () => {
+    const { service, tx } = createHarness()
+    const waiting = {
+      id: 'batch-ask',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.awaiting_user_input,
+      conversationVersion: 4,
+      sources: [],
+      taskLinks: [],
+    }
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { status?: { in?: string[] } } }) =>
+        where.status?.in?.includes(AiInputBatchStatus.awaiting_user_input)
+          ? waiting
+          : null,
+    )
+
+    const result = await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '这个团几间房',
+      'queue-behind-open-card',
+    )
+
+    expect(result.batch).toMatchObject({
+      status: AiInputBatchStatus.ready_for_agent,
+      replyToEventId: undefined,
+    })
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: '这个团几间房' }),
+        expect.objectContaining({ queued: true, status: 'ready_for_agent' }),
+      ]),
+    )
+    expect(tx.aiWorkflowJob.create).not.toHaveBeenCalled()
+  })
+})
 
 describe('AiConversationService.sendTasklessText while the model is still writing', () => {
   it('interrupts the running turn and reruns immediately with the new text', async () => {
@@ -683,7 +794,10 @@ describe('AiConversationService.sendTasklessText while the model is still writin
     }
     tx.aiInputBatch.findFirst.mockImplementation(
       async ({ where }: { where: { status?: { in?: string[] } } }) =>
-        where.status?.in?.includes(AiInputBatchStatus.agent_running) ? running : null,
+        where.status?.in?.length === 2 &&
+        where.status.in.includes(AiInputBatchStatus.agent_running)
+          ? running
+          : null,
     )
 
     const result = await service.sendTasklessText(
