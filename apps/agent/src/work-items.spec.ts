@@ -28,6 +28,18 @@ describe('Agent interpreted work items', () => {
   it('requires an item ledger instead of accepting conversational completion', async () => {
     expect((await run([])).kind).toBe('failed')
   })
+  it('keeps the turn when the model recorded the request and called one tool but stopped before resolving it', async () => {
+    const result = await run([
+      record([{ ...change, resolution: { kind: 'pending' } }], 'first'),
+      { toolName: 'searchPartners', toolCallId: 'search', result: { status: 'accepted', matches: [] } },
+    ])
+    expect(result.kind).toBe('resolved_items')
+    if (result.kind !== 'resolved_items') throw new Error('expected resolved_items')
+    expect(result.items).toEqual([
+      { ...change, resolution: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: expect.any(String) } } },
+    ])
+    expect(result.message).not.toContain('全部完成')
+  })
   it('rejects answering an already identified change or deleting it across a continuation', async () => {
     expect(preservesWorkItems([change], [{ ...change, goal: 'answer' }])).toBe(false)
     expect((await run([record([{ ...question, resolution: { kind: 'answered', message: '旧团名' } }])], [change])).kind).toBe('failed')
