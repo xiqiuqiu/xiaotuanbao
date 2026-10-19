@@ -231,6 +231,11 @@ describe('Conversation sources and formal attachments (e2e) #368', () => {
   })
 
   it('keeps prior conversation sources visible to a later text-only follow-up in the same conversation', async () => {
+    agent.setOutcome(resolvedItemOutcome({
+      kind: 'answered',
+      message: COMPLETED_MESSAGE,
+      completionBasis: { kind: 'final_answer' },
+    }))
     const first = await authRequest(app, coordinatorToken)
       .post('/api/agent/conversations/messages')
       .set('Idempotency-Key', `${testPrefix}-follow-up-source`)

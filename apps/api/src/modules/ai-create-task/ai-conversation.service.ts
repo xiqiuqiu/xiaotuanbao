@@ -565,7 +565,7 @@ export class AiConversationService {
           })
         }
       }
-      if (batchStatus === AiInputBatchStatus.ready_for_agent && !queued) {
+      if (batchStatus === AiInputBatchStatus.ready_for_agent) {
         await tx.aiWorkflowJob.create({
           data: {
             organizationId,
@@ -1378,7 +1378,7 @@ export class AiConversationService {
           },
         })
 
-        if (batchStatus === AiInputBatchStatus.ready_for_agent && !queued) {
+        if (batchStatus === AiInputBatchStatus.ready_for_agent) {
           await tx.aiWorkflowJob.create({
             data: {
               organizationId,
@@ -2752,7 +2752,7 @@ export class AiConversationService {
   }
 
   /**
-   * 追问或审核卡关掉后，把排在它后面、发送时没有入队的下一条消息补上作业。
+   * 追问或审核卡关掉后，为尚未创建作业的排队批次补齐作业。
    * 只放行最早的一条：更后面的仍由认领侧的前序批次挡住，轮到时再放。
    */
   private async releaseNextQueuedBatch(

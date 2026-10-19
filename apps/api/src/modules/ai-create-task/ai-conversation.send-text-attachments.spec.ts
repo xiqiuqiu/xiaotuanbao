@@ -776,7 +776,13 @@ describe('AiConversationService.sendTasklessText while a follow-up card is open'
         expect.objectContaining({ queued: true, status: 'ready_for_agent' }),
       ]),
     )
-    expect(tx.aiWorkflowJob.create).not.toHaveBeenCalled()
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inputBatchId: result.batch.id,
+        type: 'agent_batch',
+        status: 'pending',
+      }),
+    })
   })
 })
 
