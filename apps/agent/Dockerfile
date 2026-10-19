@@ -7,6 +7,7 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/agent/package.json ./apps/agent/
 COPY packages/ai-contracts/package.json ./packages/ai-contracts/
+COPY packages/shared/package.json ./packages/shared/
 COPY packages/config/package.json ./packages/config/
 RUN pnpm install --frozen-lockfile --filter agent...
 
@@ -14,8 +15,9 @@ FROM base AS build
 COPY --from=deps /app/ ./
 COPY apps/agent ./apps/agent
 COPY packages/ai-contracts ./packages/ai-contracts
+COPY packages/shared ./packages/shared
 COPY packages/config ./packages/config
-RUN pnpm --filter @xiaotuanbao/ai-contracts build
+RUN pnpm --filter @xiaotuanbao/shared build && pnpm --filter @xiaotuanbao/ai-contracts build
 
 FROM build AS deploy
 WORKDIR /app
