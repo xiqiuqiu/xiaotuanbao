@@ -131,6 +131,7 @@ function createHarness(options?: {
           conversationVersion: 1,
           createdAt: now,
           updatedAt: now,
+          userMessageEvent: { sequence: 1 },
           ...data,
           sources: (data.sources?.create ?? []).map((row, index) => ({
             id: `dep-${index}`,
@@ -143,6 +144,7 @@ function createHarness(options?: {
         return createdBatch
       },
     ),
+    findMany: jest.fn().mockResolvedValue([]),
     findUniqueOrThrow: jest.fn(async () => {
       if (!createdBatch) {
         throw new Error('aiInputBatch not created')
@@ -168,6 +170,10 @@ function createHarness(options?: {
     count: jest.fn().mockResolvedValue(0),
     findFirst: jest.fn().mockResolvedValue(null),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  }
+  const aiAgentAttempt = {
+    findFirst: jest.fn().mockResolvedValue({ id: 'attempt-running' }),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   }
   const aiWorkflowJob = {
     findFirst: jest.fn().mockResolvedValue(null),
@@ -207,6 +213,7 @@ function createHarness(options?: {
     conversationSource,
     conversationSourceParseRun,
     aiWorkflowJob,
+    aiAgentAttempt,
     aiConversationDraft,
     taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
     agentTask: {
@@ -218,6 +225,9 @@ function createHarness(options?: {
       })),
       update: jest.fn(),
       updateMany: jest.fn(),
+    },
+    inputBatchTaskLink: {
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     conversationTaskLink: {
       findMany: jest.fn().mockResolvedValue([
@@ -293,7 +303,11 @@ function createHarness(options?: {
         ? { locator: options.pageLocator, objectVersion: 1, facts: {} }
         : undefined,
     ) } as never,
-    { observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }), getCurrent: async () => null } as never,
+    {
+      observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }),
+      getCurrent: async () => null,
+      clear: jest.fn().mockResolvedValue(undefined),
+    } as never,
   )
 
   return { service, storedObjectService, callOrder, prisma, tx }
@@ -657,10 +671,233 @@ describe('AiConversationService.sendText composer draft', () => {
       revision: 5,
     })
   })
+
+  it('releases the free text queued behind the card once the reply closes it', async () => {
+    const { service, tx } = createHarness()
+    const queued = {
+      id: 'batch-queued',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.ready_for_agent,
+      conversationVersion: 6,
+      userMessageEvent: { sequence: 5 },
+    }
+    tx.aiInputBatch.findMany.mockImplementation(
+      async ({ where }: { where: { status?: string; id?: { in?: string[] } } }) =>
+        where.status === AiInputBatchStatus.ready_for_agent ? [queued] : [],
+    )
+    tx.inputBatchTaskLink.findFirst.mockResolvedValue({ taskId })
+    tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-1',
+      organizationId,
+      conversationId,
+      inputBatchId: 'batch-ask',
+      eventId: 'event-q',
+      type: AiConversationInteractionType.free_text,
+      prompt: '出团日期是哪一天？',
+      options: null,
+      responseSchema: { type: 'string', minLength: 1, maxLength: 8000 },
+      status: AiConversationInteractionStatus.pending,
+      version: 1,
+    })
+    tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.sendText(
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      '2026-10-01',
+      'idem-reply-releases-queue',
+      [],
+      {
+        replyToEventId: 'event-q',
+        interactionId: 'int-1',
+        interactionVersion: 1,
+      },
+    )
+
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith({
+      where: { id: 'batch-ask' },
+      data: { status: AiInputBatchStatus.completed },
+    })
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inputBatchId: 'batch-queued',
+        type: 'agent_batch',
+        jobKey: 'agent_batch:batch-queued',
+        taskId,
+        status: 'pending',
+      }),
+    })
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ batchId: 'batch-queued', queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+  })
 })
 
 
+describe('AiConversationService.sendTasklessText while a follow-up card is open', () => {
+  it('queues the new free text behind the open card instead of starting another turn', async () => {
+    const { service, tx } = createHarness()
+    const waiting = {
+      id: 'batch-ask',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.awaiting_user_input,
+      conversationVersion: 4,
+      sources: [],
+      taskLinks: [],
+    }
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { status?: { in?: string[] } } }) =>
+        where.status?.in?.includes(AiInputBatchStatus.awaiting_user_input)
+          ? waiting
+          : null,
+    )
+
+    const result = await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '这个团几间房',
+      'queue-behind-open-card',
+    )
+
+    expect(result.batch).toMatchObject({
+      status: AiInputBatchStatus.ready_for_agent,
+      replyToEventId: undefined,
+    })
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: '这个团几间房' }),
+        expect.objectContaining({ queued: true, status: 'ready_for_agent' }),
+      ]),
+    )
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inputBatchId: result.batch.id,
+        type: 'agent_batch',
+        status: 'pending',
+      }),
+    })
+  })
+})
+
+describe('AiConversationService.sendTasklessText while the model is still writing', () => {
+  it('interrupts the running turn and reruns immediately with the new text', async () => {
+    const { service, tx } = createHarness()
+    const running = {
+      id: 'batch-running',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.agent_running,
+      conversationVersion: 4,
+      sources: [],
+      taskLinks: [],
+    }
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { status?: { in?: string[] } } }) =>
+        where.status?.in?.length === 2 &&
+        where.status.in.includes(AiInputBatchStatus.agent_running)
+          ? running
+          : null,
+    )
+
+    const result = await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '改成两间房',
+      'steer-while-running',
+    )
+
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'batch-running' },
+        data: { status: AiInputBatchStatus.cancelled },
+      }),
+    )
+    expect(tx.aiConversationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'batch_status',
+          payload: expect.objectContaining({
+            batchId: 'batch-running',
+            status: 'cancelled',
+            reason: 'superseded_by_user_message',
+          }),
+        }),
+      }),
+    )
+    expect(result.batch).toMatchObject({
+      status: AiInputBatchStatus.ready_for_agent,
+      replyToEventId: undefined,
+    })
+    expect(result.batch.id).not.toBe('batch-running')
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: '改成两间房' }),
+        expect.objectContaining({ queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+  })
+})
+
 describe('AiConversationService.cancelInteraction sibling items', () => {
+  it('releases the free text queued behind the card once the card is cancelled', async () => {
+    const { service, tx } = createHarness()
+    const queued = {
+      id: 'batch-queued',
+      organizationId,
+      conversationId,
+      status: AiInputBatchStatus.ready_for_agent,
+      conversationVersion: 6,
+      userMessageEvent: { sequence: 5 },
+    }
+    tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-1', inputBatchId: 'batch-ask', version: 1, status: 'pending',
+    })
+    tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+    tx.aiInputBatch.update.mockImplementation(
+      async ({ where, data }: { where: { id: string }; data: { status: string } }) => ({
+        id: where.id, conversationId, status: data.status, conversationVersion: 1,
+        sources: [], taskLinks: [],
+      }),
+    )
+    tx.aiInputBatch.findFirst.mockImplementation(
+      async ({ where }: { where: { id?: unknown; status?: { in?: string[] } } }) => {
+        if (where.status == null) {
+          return { id: 'batch-ask', conversationId, status: 'awaiting_user_input', sources: [], taskLinks: [] }
+        }
+        const statuses = where.status?.in ?? []
+        if (statuses.includes(AiInputBatchStatus.ready_for_agent)) return queued
+        if (statuses.includes(AiInputBatchStatus.awaiting_user_input)) return null
+        return null
+      },
+    )
+    tx.aiInputBatch.findMany.mockImplementation(
+      async ({ where }: { where: { status?: string } }) =>
+        where.status === AiInputBatchStatus.ready_for_agent ? [queued] : [],
+    )
+
+    const result = await service.cancelInteraction(
+      organizationId, userId, taskId, conversationId, 'int-1', 1, 'cancel-releases-queue',
+    )
+
+    expect(result.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ batchId: 'batch-ask', status: 'cancelled', reason: 'interaction_cancelled' }),
+        expect.objectContaining({ batchId: 'batch-queued', queued: false, status: 'ready_for_agent' }),
+      ]),
+    )
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ inputBatchId: 'batch-queued', type: 'agent_batch', status: 'pending' }),
+    })
+  })
+
   it.each([[1, 0, 'awaiting_user_input'], [0, 1, 'awaiting_review'], [0, 0, 'cancelled']])(
     'keeps %s clarifications and %s reviews pending', async (interactions, reviews, status) => {
       const { service, tx } = createHarness()

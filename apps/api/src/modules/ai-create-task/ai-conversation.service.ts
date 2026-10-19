@@ -119,6 +119,14 @@ import { PageLocatorResolver } from './page-locator.resolver'
 import { reviewBatchFollowUp } from './review-batch-disposition'
 import { ensureDepartureCollaborationTaskInTx } from './ensure-departure-collaboration-task'
 
+/** 还没结束、会挡住下一条排队消息的状态。不含 ready_for_agent：那是排队消息自己的状态。 */
+const OPEN_TURN_BLOCKING_STATUSES: AiInputBatchStatus[] = [
+  AiInputBatchStatus.preparing_context,
+  AiInputBatchStatus.agent_running,
+  AiInputBatchStatus.awaiting_user_input,
+  AiInputBatchStatus.awaiting_review,
+]
+
 const TASK_INCLUDE = {
   draft: true,
   agentTask: true,
@@ -394,7 +402,10 @@ export class AiConversationService {
       }
 
       const answering = isReplyAttempt(reply)
-      if (!answering) {
+      const steered = answering
+        ? null
+        : await this.supersedeRunningBatch(tx, conversation.id)
+      if (!answering && !steered) {
         await this.assertProcessingBatchCapacity(tx, {
           organizationId,
           userId,
@@ -410,7 +421,8 @@ export class AiConversationService {
           })
         : null
       const messageText = replyResult?.text ?? trimmed
-      const queued = !replyResult && (await this.hasBlockingBatch(tx, conversation.id))
+      const queued =
+        !replyResult && !steered && (await this.hasBlockingBatch(tx, conversation.id))
       const lastEvent = await tx.aiConversationEvent.findFirst({
         where: { conversationId: conversation.id },
         orderBy: { sequence: 'desc' },
@@ -609,6 +621,7 @@ export class AiConversationService {
             },
           })
       const events = [
+        ...(steered?.events ?? []).map(toEventView),
         ...(replyResult?.events ?? []).map(toEventView),
         toEventView(userEvent),
         toEventView(statusEvent),
@@ -638,6 +651,7 @@ export class AiConversationService {
     for (const event of published) {
       this.eventHub.publish(result.conversationId, event)
     }
+    await discardLiveOutputAfterUserStop(this.liveOutput, result.conversationId, result.events)
     return result
     } catch (error) {
       if (!committed) {
@@ -1943,7 +1957,8 @@ export class AiConversationService {
             interactionId: interaction.id,
           },
         })
-        return { batch: updated, events: [statusEvent] }
+        const released = await this.releaseNextQueuedBatch(tx, conversationId)
+        return { batch: updated, events: [statusEvent, ...released] }
       },
     })
   }
@@ -2186,7 +2201,7 @@ export class AiConversationService {
         ...reviewPayload,
       },
     })
-    const events = [statusEvent]
+    const events = [statusEvent, ...(await this.releaseNextQueuedBatch(tx, batch.conversationId))]
     if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected || taskPendingInteractions > 0) {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
@@ -2357,11 +2372,12 @@ export class AiConversationService {
         reviewPackageId: params.reviewPackageId,
       },
     })
+    const released = await this.releaseNextQueuedBatch(tx, conversationId)
     await tx.aiConversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },
     })
-    return [statusEvent]
+    return [statusEvent, ...released]
   }
 
   async startReviewRegenerate(
@@ -2725,13 +2741,77 @@ export class AiConversationService {
         interactionStatus: AiConversationInteractionStatus.answered,
       },
     })
+    const released = await this.releaseNextQueuedBatch(tx, params.conversationId)
     return {
       replyToEventId: interaction.eventId,
       interactionId: interaction.id,
       text: resolved.text,
       selectedOptionId: resolved.selectedOptionId,
-      events: [statusEvent],
+      events: [statusEvent, ...released],
     }
+  }
+
+  /**
+   * 追问或审核卡关掉后，为尚未创建作业的排队批次补齐作业。
+   * 只放行最早的一条：更后面的仍由认领侧的前序批次挡住，轮到时再放。
+   */
+  private async releaseNextQueuedBatch(
+    tx: Prisma.TransactionClient,
+    conversationId: string,
+  ): Promise<AiConversationEvent[]> {
+    // 不能用 hasBlockingBatch：它把 ready_for_agent 也算阻塞，而排队的消息自己就是这个状态，
+    // 那样卡片关掉后这条消息会把自己挡住，永远放不出来。
+    const blocking = await tx.aiInputBatch.findFirst({
+      where: { conversationId, status: { in: OPEN_TURN_BLOCKING_STATUSES } },
+      select: { id: true },
+    })
+    if (blocking) {
+      return []
+    }
+    const waiting = await tx.aiInputBatch.findMany({
+      where: { conversationId, status: AiInputBatchStatus.ready_for_agent },
+      include: { userMessageEvent: { select: { sequence: true } } },
+      orderBy: { conversationVersion: 'asc' },
+    })
+    const next = waiting.sort(
+      (left, right) => left.userMessageEvent.sequence - right.userMessageEvent.sequence,
+    )[0]
+    if (!next) {
+      return []
+    }
+    const existingJob = await tx.aiWorkflowJob.findFirst({
+      where: { inputBatchId: next.id, type: AiWorkflowJobType.agent_batch },
+      select: { id: true },
+    })
+    if (existingJob) {
+      return []
+    }
+    const primaryLink = await tx.inputBatchTaskLink.findFirst({
+      where: { inputBatchId: next.id, role: InputBatchTaskRole.primary },
+      select: { taskId: true },
+    })
+    await tx.aiWorkflowJob.create({
+      data: {
+        organizationId: next.organizationId,
+        taskId: primaryLink?.taskId,
+        conversationId: next.conversationId,
+        inputBatchId: next.id,
+        type: AiWorkflowJobType.agent_batch,
+        jobKey: agentBatchJobKey(next.id),
+        status: AiWorkflowJobStatus.pending,
+      },
+    })
+    const readyEvent = await this.appendEvent(tx, {
+      organizationId: next.organizationId,
+      conversationId: next.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: next.id,
+        status: AiInputBatchStatus.ready_for_agent,
+        queued: false,
+      },
+    })
+    return [readyEvent]
   }
 
   private async hasBlockingBatch(
@@ -2747,6 +2827,8 @@ export class AiConversationService {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
+            AiInputBatchStatus.awaiting_user_input,
+            AiInputBatchStatus.awaiting_review,
           ],
         },
       },
@@ -2893,10 +2975,31 @@ export class AiConversationService {
     })
   }
 
+  private async supersedeRunningBatch(
+    tx: Prisma.TransactionClient,
+    conversationId: string,
+  ): Promise<{ events: AiConversationEvent[] } | null> {
+    const running = await tx.aiInputBatch.findFirst({
+      where: {
+        conversationId,
+        status: {
+          in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context],
+        },
+      },
+      include: BATCH_MATERIAL_INCLUDE,
+      orderBy: { conversationVersion: 'asc' },
+    })
+    if (!running) {
+      return null
+    }
+    const cancelled = await this.cancelRunningBatch(tx, running, 'superseded_by_user_message')
+    return { events: cancelled.events }
+  }
+
   private async cancelRunningBatch(
     tx: Prisma.TransactionClient,
     batch: BatchWithMaterials,
-    reason: 'user_stop',
+    reason: 'user_stop' | 'superseded_by_user_message',
   ): Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }> {
     if (batch.status === AiInputBatchStatus.cancelled) {
       return { batch, events: [] }

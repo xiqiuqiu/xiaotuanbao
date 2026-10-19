@@ -529,6 +529,12 @@ function lastToolResult(toolResults: unknown[] | undefined, expectedToolName: st
   return last
 }
 
+/** 模型没把事项了结就停下来时，追问里只引用用户自己的原话，不复述模型半截的内部说法。 */
+function unresolvedItemPrompt(request: string): string {
+  const quoted = request.length > 40 ? `${request.slice(0, 40)}…` : request
+  return `「${quoted}」这次没有处理完。可以补充缺少的信息，或换一种说法再发一次。`
+}
+
 function resolvedItemsFromGenerate(
   output: MastraGenerateLike,
   request: HeadlessExecutionRequest,
@@ -556,7 +562,19 @@ function resolvedItemsFromGenerate(
   const usedRouting = new Set<number>()
   for (const item of items) {
     const resolution = item.resolution
-    if (resolution.kind === 'pending') return fail()
+    // 模型把事项记下来、做了一步就停，事项还停在 pending。整轮判失败会让用户只看到
+    // 「没有形成可确认的结果」，已做的那步也丢了。改成把没了结的事项收成一条追问，
+    // 让这一轮留下可回答的卡片。
+    if (resolution.kind === 'pending') {
+      resolved.push({
+        ...item,
+        resolution: {
+          kind: 'awaiting_user_input',
+          interaction: { type: 'free_text', prompt: unresolvedItemPrompt(item.request) },
+        },
+      })
+      continue
+    }
     if (resolution.kind === 'withdrawn' && !request.currentUserText?.includes(resolution.userExcerpt)) return fail()
     if (resolution.kind === 'awaiting_user_input' || resolution.kind === 'registered_intent') {
       if (usedRouting.has(resolution.routingIndex)) return fail()

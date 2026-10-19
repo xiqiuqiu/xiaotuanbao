@@ -211,6 +211,7 @@ describe('AI create chat status projection', () => {
     )
     expect(batchStatusLabel('completed', null, { disposition: 'confirmed' })).toBe('已完成')
     expect(batchStatusLabel('cancelled', null, { reason: 'user_stop' })).toBe('已停止当前处理')
+    expect(batchStatusLabel('cancelled', null, { reason: 'superseded_by_user_message' })).toBeNull()
     expect(batchStatusLabel('cancelled', null, { reason: 'interaction_cancelled' })).toBe(
       '已取消等待',
     )

@@ -21,7 +21,10 @@ function setup(pendingIds: string[], pendingInteractionBatches: string[] = []) {
     },
     aiConversationInteraction: { count: jest.fn(({ where }) => Promise.resolve(where.inputBatch ? pendingInteractionBatches.length : pendingInteractionBatches.includes(where.inputBatchId) ? 1 : 0)) },
     aiInputBatch: {
-      findMany: jest.fn(({ where }) => Promise.resolve(batches.filter((batch) => where.id.in.includes(batch.id) && (typeof where.status === 'string' ? batch.status === where.status : where.status.in.includes(batch.status))))),
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn(({ where }) => Promise.resolve(where.id?.in
+        ? batches.filter((batch) => where.id.in.includes(batch.id) && (typeof where.status === 'string' ? batch.status === where.status : where.status.in.includes(batch.status)))
+        : [])),
       create: jest.fn().mockResolvedValue({ id: 'continuation' }),
       update: jest.fn(({ where, data }) => {
         const batch = batches.find((item) => item.id === where.id)!

@@ -398,7 +398,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(agent.lastUserText()).not.toBe('请按这个团名建团')
   })
 
-  it('awaiting_review 不标记后续普通输入为排队，并先完成同批次确认续执行', async () => {
+  it('awaiting_review 将普通输入排队，并先完成同批次确认续执行', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -415,7 +415,9 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(ordinary.body.data.batch).toMatchObject({
       status: 'ready_for_agent',
     })
-    expect(ordinary.body.data.batch.queued).toBeUndefined()
+    expect(ordinary.body.data.batch.queued).toBe(true)
+    await processor.processDueJobs(5)
+    expect(agent.callCount()).toBe(callsAfterSubmit)
 
     const pending = (
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)

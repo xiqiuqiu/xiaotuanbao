@@ -675,7 +675,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
   })
 
-  it('等待回答会释放执行权，普通输入继续执行且不会处置待回答交互', async () => {
+  it('等待回答时普通输入保持排队，显式回复后继续按序执行', async () => {
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
@@ -722,7 +722,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(stillWaiting.pendingInteraction?.id).toBe(asked.pendingInteraction?.id)
     expect(stillWaiting.pendingInteraction?.status).toBe('pending')
     expect(stillWaiting.activeBatch?.status).toBe('awaiting_user_input')
-    expect(stillWaiting.queuedBatches).toHaveLength(0)
+    expect(stillWaiting.queuedBatches).toHaveLength(1)
 
     const batches = await prisma.aiInputBatch.findMany({
       where: { conversationId },
@@ -730,11 +730,27 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
     expect(batches.map((batch) => batch.status)).toEqual([
       AiInputBatchStatus.awaiting_user_input,
-      AiInputBatchStatus.completed,
+      AiInputBatchStatus.ready_for_agent,
     ])
+
+    await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      '查询已有发团',
+      `${testPrefix}-hitl-explicit-answer`,
+      {
+        replyToEventId: asked.pendingInteraction?.eventId,
+        interactionId: asked.pendingInteraction?.id,
+        interactionVersion: 1,
+      },
+    ).expect(201)
+    await processor.processDueJobs(5)
+    expect(await prisma.aiInputBatch.count({
+      where: { conversationId, status: { not: AiInputBatchStatus.completed } },
+    })).toBe(0)
   })
 
-  it('同一会话允许多条未处置追问并存', async () => {
+  it('同一会话的新消息等待旧追问关闭后再生成追问', async () => {
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
@@ -747,6 +763,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     ).expect(201)
     const conversationId = track(sent.body.data.conversationId as string)
     await processor.processDueJobs(1)
+    const asked = await listEvents(coordinatorToken, conversationId)
 
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
@@ -765,8 +782,18 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       await prisma.aiConversationInteraction.count({
         where: { conversationId, status: 'pending' },
       }),
-    ).toBe(2)
+    ).toBe(1)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`)
+      .set('Idempotency-Key', `${testPrefix}-multi-interaction-cancel`)
+      .send({ version: 1 })
+      .expect(200)
+    await processor.processDueJobs(1)
     const events = await listEvents(coordinatorToken, conversationId)
+    expect(events.pendingInteraction?.prompt).toBe('请补充预算')
+    expect(await prisma.aiConversationInteraction.count({
+      where: { conversationId, status: 'pending' },
+    })).toBe(1)
     expect(
       events.events.filter(
         (event) =>
@@ -777,7 +804,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     ).toHaveLength(2)
   })
 
-  it('撤回排队消息并编辑重发后，新批次在前一回答结束时继续执行', async () => {
+  it('撤回排队消息并编辑重发后，新批次在前一追问取消后继续执行', async () => {
     agent.setOutcomes([
       resolvedItemOutcome({
         kind: 'awaiting_user_input',
@@ -792,14 +819,9 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       `${testPrefix}-retract-first`,
     ).expect(201)
     const conversationId = track(first.body.data.conversationId as string)
-    agent.holdNextCall()
-    const firstWave = processor.processDueJobs(5)
-    await waitFor(async () => {
-      const running = await prisma.aiInputBatch.findUniqueOrThrow({
-        where: { id: first.body.data.batch.id },
-      })
-      expect(running.status).toBe(AiInputBatchStatus.agent_running)
-    })
+    await processor.processDueJobs(5)
+    const asked = await listEvents(coordinatorToken, conversationId)
+    expect(asked.pendingInteraction?.status).toBe('pending')
 
     const queuedText = `${testPrefix} 先排队再编辑`
     const queued = await sendFollowUp(
@@ -841,8 +863,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
     expect(resent.body.data.batch.id).not.toBe(queued.body.data.batch.id)
     expect(resent.body.data.events.at(-1)?.payload.queued).toBe(true)
-    agent.release()
-    await firstWave
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`)
+      .set('Idempotency-Key', `${testPrefix}-retract-cancel-wait`)
+      .send({ version: 1 })
+      .expect(200)
     await processor.processDueJobs(5)
 
     const batches = await prisma.aiInputBatch.findMany({
@@ -851,7 +876,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       select: { id: true, status: true },
     })
     expect(batches).toEqual([
-      { id: first.body.data.batch.id, status: AiInputBatchStatus.awaiting_user_input },
+      { id: first.body.data.batch.id, status: AiInputBatchStatus.cancelled },
       { id: queued.body.data.batch.id, status: AiInputBatchStatus.cancelled },
       { id: resent.body.data.batch.id, status: AiInputBatchStatus.completed },
     ])

@@ -309,6 +309,11 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
   })
 
   it('reclaims an expired worker lease so a later batch on the same task can run', async () => {
+    agent.setOutcome(resolvedItemOutcome({
+      kind: 'answered',
+      message: COMPLETED_MESSAGE,
+      completionBasis: { kind: 'final_answer' },
+    }))
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -344,8 +349,8 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       orderBy: { createdAt: 'asc' },
     })
     expect(batches.map((batch) => batch.status)).toEqual([
-      'awaiting_user_input',
-      'awaiting_user_input',
+      'completed',
+      'completed',
     ])
     const jobs = await prisma.aiWorkflowJob.findMany({
       where: { taskId },

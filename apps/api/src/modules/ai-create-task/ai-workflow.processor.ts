@@ -371,7 +371,9 @@ export class AiWorkflowProcessor {
                   'waiting_for_materials'::ai_input_batch_status,
                   'ready_for_agent'::ai_input_batch_status,
                   'preparing_context'::ai_input_batch_status,
-                  'agent_running'::ai_input_batch_status
+                  'agent_running'::ai_input_batch_status,
+                  'awaiting_user_input'::ai_input_batch_status,
+                  'awaiting_review'::ai_input_batch_status
                 )
             )
           ORDER BY origin.sequence ASC, b.conversation_version ASC
@@ -2940,6 +2942,8 @@ export class AiWorkflowProcessor {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
+            AiInputBatchStatus.awaiting_user_input,
+            AiInputBatchStatus.awaiting_review,
           ],
         },
       },
