@@ -43,6 +43,35 @@ function setup() {
 }
 
 describe('Agent item outcomes', () => {
+  it.each([true, false])('retains completed answers on a failed batch only while still authorized (%s)', async authorized => {
+    const { processor, tx, appendEvent, job, route, result } = setup()
+    processor.recheckAuthorization = async () => ({ ok: authorized })
+    const persistFailure = Reflect.get(AiWorkflowProcessor.prototype, 'persistFailure')
+    await persistFailure.call(processor, job, 'AGENT_OUTCOME_INCOMPLETE', {
+      kind: 'failed', error: { code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false }, completedAnswers: [result.items[0]],
+    }, 'attempt', route)
+    const messages = appendEvent.mock.calls.map(([, event]) => event).filter(event => event.kind === 'agent_message')
+    expect(messages).toHaveLength(authorized ? 1 : 0)
+    if (authorized) expect(messages[0].payload.text).toBe('当前团名是川西团。')
+    expect(tx.aiInputBatch.update).toHaveBeenCalledWith({ where: { id: 'batch' }, data: { status: 'failed' } })
+    expect(processor.projectReviewPackageViaGateway).not.toHaveBeenCalled()
+  })
+  it('publishes the final public answer once instead of item progress receipts', async () => {
+    const { processor, tx, appendEvent, job, route, result } = setup()
+    tx.aiConversationInteraction.count.mockResolvedValue(0)
+    tx.aiReviewPackage.count.mockResolvedValue(0)
+    const answers = ['数字查询', '操作步骤'].map((request, index) => ({
+      id: `answer-${index}`, request, goal: 'answer', resolution: { kind: 'answered', message: '已说明。' },
+    }))
+    const publicAnswer = '正式应收3000元，应付2450元。先建团，再录入客源与资源，最后核对应收应付。'
+    await processor.persistOutcome(job, route, {}, 'attempt', {
+      ...result, items: answers, reviewPackages: [], message: publicAnswer, publicAnswer,
+    }, 'resolve_items')
+    const messages = appendEvent.mock.calls.map(([, event]) => event).filter(event => event.kind === 'agent_message')
+    expect(messages).toHaveLength(1)
+    expect(messages[0].payload).toMatchObject({ text: publicAnswer, requestItems: answers })
+    expect(processor.persistFailure).not.toHaveBeenCalled()
+  })
   it('atomically projects the answer, accepted review and persistent question without completing the batch', async () => {
     const { processor, tx, appendEvent, job, route, result } = setup()
     await processor.persistOutcome(job, route, {}, 'attempt', result, 'resolve_items')

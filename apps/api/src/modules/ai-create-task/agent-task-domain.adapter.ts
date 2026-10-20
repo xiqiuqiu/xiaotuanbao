@@ -4,6 +4,7 @@ import type {
   ProposeReviewPackageOutput,
   ProposeDepartureResourceReviewPackageOutput,
   ProposeDepartureEditReviewPackageOutput,
+  ProposeInitialFinanceReviewOutput,
   ProposeSegmentResourceReviewPackageOutput,
   ProposeSourceOrderReviewPackageOutput,
   ReviewFieldDescriptor,
@@ -67,6 +68,7 @@ export interface AgentTaskDomainAdapter {
     user: TaskBoundAiToolRequestUser,
     input: unknown,
   ): Promise<ProposeDepartureEditReviewPackageOutput>
+  proposeInitialFinanceReview(user: TaskBoundAiToolRequestUser, input: unknown): Promise<ProposeInitialFinanceReviewOutput>
   submitReview(
     user: TaskBoundAiToolRequestUser,
     input: unknown,

@@ -43,6 +43,7 @@ const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   proposeDepartureResourceReviewPackage: resolveDepartureObject,
   proposeSourceOrderReviewPackage: resolveDepartureObject,
   proposeDepartureEditReviewPackage: resolveDepartureObject,
+  proposeInitialFinanceReviewPackage: resolveDepartureObject,
   getMaterialParseResult: resolvePinnedMaterial,
   readConversationHistory: resolveConversation,
   readConversationSource: resolveConversationSource,

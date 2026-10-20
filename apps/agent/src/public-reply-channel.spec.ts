@@ -44,6 +44,53 @@ function publicChannels(
 }
 
 describe('public reply channel vs hidden reasoning', () => {
+  it.each([false, true])('discards pre-repair prose when the repaired run ends without new text (empty final step: %s)', async emptyFinalStep => {
+    const message = '当前正式团名是川西团。'
+    const recorded = { toolName: 'recordWorkItems', toolCallId: 'repair', result: { status: 'accepted', items: [{
+      id: 'query', request: '查询团名', goal: 'answer', resolution: { kind: 'answered', message },
+    }] } }
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: '暂时没有查到团名。' } }
+          yield { type: 'step-finish' }
+          yield { type: 'step-start' }
+          yield { type: 'tool-call', payload: { toolName: recorded.toolName, toolCallId: recorded.toolCallId } }
+          yield { type: 'tool-result', payload: recorded }
+          yield { type: 'step-finish' }
+          if (emptyFinalStep) {
+            yield { type: 'step-start' }
+            yield { type: 'step-finish' }
+          }
+        })(),
+        getFullOutput: async () => ({ text: '', toolResults: [recorded] }),
+      }),
+    })
+    const { frames, result } = await collectHeadlessRun(executor({ ...IDENTITY, executionGoal: 'resolve_items' }))
+    expect(result).toMatchObject({ kind: 'resolved_items', message })
+    expect(result).not.toHaveProperty('publicAnswer')
+    expect(publicChannels(frames, result).livePublic).toBe(message)
+  })
+  it('does not concatenate a rejected early answer with the corrected final public step', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => IDENTITY.userText,
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: '我会继续处理。' } }
+          yield { type: 'step-finish' }
+          yield { type: 'step-start' }
+          yield { type: 'text-delta', payload: { text: PUBLIC_REPLY } }
+          yield { type: 'step-finish' }
+        })(),
+        getFullOutput: async () => ({ text: PUBLIC_REPLY }),
+      }),
+    })
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(publicChannels(frames, result)).toMatchObject({ livePublic: PUBLIC_REPLY, persisted: PUBLIC_REPLY })
+  })
   it('keeps typed reasoning-delta off the public reply and off persisted agent_message', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => IDENTITY.userText,

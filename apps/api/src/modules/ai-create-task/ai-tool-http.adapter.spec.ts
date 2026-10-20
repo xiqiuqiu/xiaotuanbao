@@ -156,7 +156,7 @@ function adapterWith(
   } as unknown as import('./ai-conversation-recall.service').AiConversationRecallService
   return new AiToolHttpAdapter(
     new AiActionGateway(store, authorityForActor(user)),
-    new DepartureAgentTaskAdapter(tasks),
+    new DepartureAgentTaskAdapter(tasks, {} as never),
     recall,
   )
 }

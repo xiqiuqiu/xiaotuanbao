@@ -50,6 +50,7 @@ describe('getTaskContext formal business facts', () => {
       agentTask: { findFirst: jest.fn().mockResolvedValue(collaboration ? agentTask : null) },
       aiCreateTask: { findFirst: draftRead },
       aiAgentAttempt: { findFirst: jest.fn().mockResolvedValue({ id: caller.runId }) },
+      aiReviewRecord: { findMany: jest.fn().mockResolvedValue([]) },
       itinerarySegment: { findMany: jest.fn().mockResolvedValue([]) },
       sourceOrder: { findMany: sourceRead },
       segmentResource: { findMany: segmentRead },
@@ -69,7 +70,7 @@ describe('getTaskContext formal business facts', () => {
         draftId: null, draftVersion: null, departureId: 'departure-1',
       }) } as never,
     )
-    const http = new AiToolHttpAdapter(gateway, new DepartureAgentTaskAdapter(service), {} as never)
+    const http = new AiToolHttpAdapter(gateway, new DepartureAgentTaskAdapter(service, {} as never), {} as never)
     const result = await http.getTaskContext({
       ...caller, grantedCapabilities: [{ key: 'departure.task-context.read', version: 2 }],
     } as never, caller)
@@ -80,6 +81,17 @@ describe('getTaskContext formal business facts', () => {
     expect(result.objectVersion).toBe(await departureObjectVersion(tx as never, caller.organizationId, 'departure-1'))
     expect(transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'RepeatableRead' })
     expect(draftRead).not.toHaveBeenCalled()
+  })
+
+  it('exposes only same-conversation creation refs as initial finance choices', async () => {
+    const { service, tx } = setup(true, true)
+    tx.aiReviewRecord.findMany.mockResolvedValue([{ afterSnapshot: { objectKind: 'segment_resource', objectId: 'hotel-1' },
+      package: { payloadSchema: 'departure.segment_resource@v1' } }] as never)
+    const result = await service.getTaskContextForAgent({ ...caller, conversationId: 'conv-1' }, caller)
+    expect(result.snapshot.initialFinanceSources).toEqual([{ sourceType: 'segment_resource', sourceId: 'hotel-1' }])
+    expect(tx.aiReviewRecord.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      organizationId: caller.organizationId, package: expect.objectContaining({ conversationId: 'conv-1', targetId: 'departure-1', status: 'confirmed' }),
+    }) }))
   })
 
   it('rejects a different owner before reading source orders', async () => {

@@ -1,3 +1,4 @@
+import { createProposeInitialFinanceReviewTool } from '../src/propose-initial-finance-review.tool'
 import { createRecordWorkItemsTool } from '../src/work-items.tool'
 import { createProposeSourceOrderReviewTool } from '../src/propose-source-order-review.tool'
 import { writeFileSync } from 'node:fs'
@@ -35,6 +36,7 @@ const tools = {
   proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
   proposeDepartureResourceReviewPackage: createProposeDepartureResourceReviewTool(config),
   proposeDepartureEditReviewPackage: createProposeDepartureEditReviewTool(config),
+  proposeInitialFinanceReviewPackage: createProposeInitialFinanceReviewTool(config),
   proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
   readConversationHistory: createReadConversationHistoryTool(config),

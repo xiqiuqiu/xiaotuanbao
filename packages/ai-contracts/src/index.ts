@@ -573,6 +573,7 @@ export {
   PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL,
   PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL,
   DEPARTURE_EDIT_PROPOSE_CAPABILITY,
+  INITIAL_FINANCE_PROPOSE_CAPABILITY,
   DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF,
   proposeDepartureEditReviewPackageOutputSchema,
   type ProposeDepartureEditReviewPackageOutput,
@@ -619,3 +620,5 @@ export { resolvedWorkItemSchema, headlessResolvedItemsResultSchema, type Resolve
 export { WORK_ITEMS_INSTRUCTIONS, WORK_ITEMS_TOOL_DESCRIPTION } from './runtime/work-items-instructions'
 
 export * from './review/departure-edit-schema'
+
+export * from './tools/initial-finance-review'

@@ -70,6 +70,12 @@ export class AiToolController {
     return this.aiToolHttpAdapter.proposeDepartureEditReviewPackage(request.user, body)
   }
 
+  @Post('v1/propose-initial-finance-review-package')
+  @HttpCode(200)
+  proposeInitialFinanceReviewPackage(@Req() request: { user: AiToolRequestUser }, @Body() body: unknown) {
+    return this.aiToolHttpAdapter.proposeInitialFinanceReviewPackage(request.user, body)
+  }
+
   @Post('v1/submit-review-package')
   @HttpCode(200)
   submitReviewPackage(

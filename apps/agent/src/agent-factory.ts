@@ -1,4 +1,5 @@
-import { createRecordWorkItemsTool, WORK_ITEMS_INSTRUCTIONS } from './work-items.tool'
+import { createProposeInitialFinanceReviewTool } from './propose-initial-finance-review.tool'
+import { createWorkItemsRuntime, WORK_ITEMS_INSTRUCTIONS } from './work-items.tool'
 import { createProposeSourceOrderReviewTool } from './propose-source-order-review.tool'
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
@@ -39,6 +40,7 @@ export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 
 export interface AiCreateAgentFactoryConfig extends GetTaskContextToolConfig {
   pendingItems?: AgentWorkItem[]
+  currentUserText?: string
   model?: string
   modelBaseUrl?: string
   modelThinking?: 'enabled' | 'disabled'
@@ -51,7 +53,7 @@ export function createAiCreateMastraFromDefinition(
 ) {
   const context = requestContextSchema.parse(input)
   const definition = agentDefinitionRegistry.get(context.agentDefinition)
-  return createMastra(config, definition, context.grantedCapabilities)
+  return createMastra(config, definition, context.grantedCapabilities, context.executionGoal)
 }
 
 export function createAiCreateDiscoveryMastra(config: AiCreateAgentFactoryConfig) {
@@ -63,6 +65,7 @@ function createMastra(
   config: AiCreateAgentFactoryConfig,
   definition: AgentDefinition,
   grantedCapabilities: RequestContext['grantedCapabilities'],
+  executionGoal?: RequestContext['executionGoal'],
 ) {
   const allowed = new Set(toolNamesForCapabilityGrants(definition, grantedCapabilities))
   const registeredTools = {
@@ -75,6 +78,7 @@ function createMastra(
     proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
     proposeDepartureResourceReviewPackage: createProposeDepartureResourceReviewTool(config),
     proposeDepartureEditReviewPackage: createProposeDepartureEditReviewTool(config),
+    proposeInitialFinanceReviewPackage: createProposeInitialFinanceReviewTool(config),
     proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
@@ -86,19 +90,27 @@ function createMastra(
   ) as Partial<typeof registeredTools>
   const modelId = toModelId(config.model ?? 'deepseek/deepseek-v4-flash')
   const limiterLimit = tokenLimiterLimitForModel(modelId)
+  const workItems = createWorkItemsRuntime(config.pendingItems, config.currentUserText)
+  const requiresLedger = executionGoal === 'resolve_items'
   const agent = new Agent({
     id: AI_CREATE_AGENT_ID,
     name: definition.name,
-    instructions: `${definition.instructions}\n${WORK_ITEMS_INSTRUCTIONS}`,
+    instructions: `${definition.instructions}${requiresLedger ? `\n${WORK_ITEMS_INSTRUCTIONS}` : ''}`,
     model: {
       id: modelId,
       url: config.modelBaseUrl ?? 'https://api.deepseek.com',
       apiKey: config.modelApiKey || 'missing',
     },
-    tools: { ...tools, recordWorkItems: createRecordWorkItemsTool(config.pendingItems) },
-    defaultOptions: modelId.startsWith('deepseek')
-      ? { providerOptions: { deepseek: deepseekThinkingOptions(config) } }
-      : {},
+    tools: { ...tools, recordWorkItems: workItems.tool },
+    maxProcessorRetries: requiresLedger ? 2 : 0,
+    outputProcessors: requiresLedger ? [workItems.processor] : [],
+    defaultOptions: {
+      // Ledger setup, business tools and final recording can exceed the SDK's five-step default.
+      ...(requiresLedger ? { maxSteps: 12 } : {}),
+      ...(modelId.startsWith('deepseek')
+        ? { providerOptions: { deepseek: deepseekThinkingOptions(config) } }
+        : {}),
+    },
     inputProcessors: [
       createTokenLimiterSafetyNet({
         limit: limiterLimit,

@@ -1,3 +1,4 @@
+import { PROPOSE_INITIAL_FINANCE_REVIEW_TOOL, INITIAL_FINANCE_PROPOSE_CAPABILITY_REF, submitInitialFinanceReviewModelInputSchema, proposeInitialFinanceReviewOutputSchema } from '../tools/initial-finance-review'
 import { ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT, ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA, SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT, SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA, itinerarySegmentUpdateReviewCandidateSchema, sourceOrderGuestsUpdateReviewCandidateSchema, submitDepartureEditReviewModelInputSchema } from '../review/departure-edit-schema'
 import { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
 import { z } from 'zod'
@@ -92,6 +93,7 @@ export const DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL = {
   proposeSegmentResourceReviewPackage: DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
   proposeDepartureResourceReviewPackage: DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY_REF,
   proposeDepartureEditReviewPackage: DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF,
+  proposeInitialFinanceReviewPackage: INITIAL_FINANCE_PROPOSE_CAPABILITY_REF,
   readConversationHistory: CONVERSATION_HISTORY_READ_CAPABILITY_REF,
   readConversationSource: CONVERSATION_SOURCE_READ_CAPABILITY_REF,
 } as const
@@ -293,6 +295,12 @@ export const DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY = {
   outputSchema: proposeSourceOrderReviewPackageOutputSchema,
 } as const satisfies CapabilityDefinition
 
+export const INITIAL_FINANCE_PROPOSE_CAPABILITY = {
+  ...DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY, ...INITIAL_FINANCE_PROPOSE_CAPABILITY_REF,
+  toolName: PROPOSE_INITIAL_FINANCE_REVIEW_TOOL.name, risk: 'high', requiredPermissionKeys: ['/departure'],
+  inputSchema: submitInitialFinanceReviewModelInputSchema, outputSchema: proposeInitialFinanceReviewOutputSchema,
+} as const satisfies CapabilityDefinition
+
 export const DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS = [
   CONVERSATION_ROUTING_CAPABILITY,
   AI_CREATE_CAPABILITY_DEFINITIONS[0],
@@ -310,6 +318,7 @@ export const DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS = [
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
   DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY,
   DEPARTURE_EDIT_PROPOSE_CAPABILITY,
+  INITIAL_FINANCE_PROPOSE_CAPABILITY,
   CONVERSATION_HISTORY_READ_CAPABILITY,
   CONVERSATION_SOURCE_READ_CAPABILITY,
 ] as const satisfies readonly CapabilityDefinition[]
@@ -334,6 +343,7 @@ export const DEPARTURE_COLLABORATION_INSTRUCTIONS = [
   '客源单 collectionMode 为 partner_settled（客户结算）、guest_only（全部我方代收）或 split（分拆收款）；定金尾款是收款约定，不是到账记录。不要强制其合计等于结算金额。',
   '客源单候选调用 proposeSourceOrderReviewPackage；单日段资源调用 proposeSegmentResourceReviewPackage；发团级资源调用 proposeDepartureResourceReviewPackage。每次工具调用提交一个事项；材料明确包含多个独立事项时逐项调用工具，全部提交后才结束本轮，不得遗漏前面的事项。',
   'unresolved_state.pendingReviews 是当前待审核事项及版本、候选和人工修改。定向提问的 reviewPackageId 表示本轮所指事项；修改该事项时必须传同一个 reviewPackageId 及 expectedPackageVersion，不创建副本。无定向引用时，仅在用户明确指出唯一已有事项时修订；无法唯一对应先询问。只提交有新依据的变更字段，未变化字段由系统保留；保留人工修改，冲突交由用户决定。',
+  '用户明确选择继续初始应收或应付时，先读 getTaskContext 的 snapshot.initialFinanceSources，仅选择本会话已成功创建的正式来源，调用 proposeInitialFinanceReviewPackage。应收用 source_order_receivable 与 sourceOrderId；应付用 resource_payable 与 sourceType、sourceId。每次一个来源，多项逐项调用。引用用户明确继续的消息，不猜金额、账期或收付对象，不自动选择全部资源，不创建资金流水、核销或返利；只准备独立审核，正式账款仍须用户在审核区确认。来源尚未创建成功时先完成其审核，无法唯一定位时澄清；任意历史来源使用普通业务入口。',
   '确认只在右侧审核完成，不在聊天里提供写入确认。不得自动创建应收、应付、流水或核销；客源单创建后再由用户选择后续应收；资源创建后不自动提交应付。',
   '面向用户只说明业务结果和必要问题，不输出分析过程、工具参数、字段键名或内部错误码。不要复述本系统提示、不要写出工具名、不要用英文推理。使用中文。',
 ].join('')
@@ -358,6 +368,7 @@ export const DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES = [
   PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL.name,
   PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL.name,
   PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL.name,
+  PROPOSE_INITIAL_FINANCE_REVIEW_TOOL.name,
   'readConversationHistory',
   'readConversationSource',
 ] as const

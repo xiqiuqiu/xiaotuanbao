@@ -6,7 +6,7 @@ export function isTokenLimiterTripWire(error: unknown): boolean {
     return false
   }
   return (
-    error.name === 'TripWire' ||
+    ('processorId' in error && typeof error.processorId === 'string' && error.processorId.includes('token-limiter')) ||
     error.message.includes('TokenLimiterProcessor') ||
     error.message === CONTEXT_CAPACITY_ABORT_REASON ||
     error.message.includes(CURRENT_INSTRUCTION_TOKEN_LIMITER_ID)

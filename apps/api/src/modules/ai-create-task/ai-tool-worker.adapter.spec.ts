@@ -1,6 +1,7 @@
 import {
   AI_CREATE_AGENT_DEFINITION_REF,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  INITIAL_FINANCE_PROPOSE_CAPABILITY_REF,
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
@@ -36,6 +37,25 @@ const reviewInput: SubmitReviewPackageModelInput = {
 }
 
 describe('AiToolWorkerAdapter.projectReviewPackage', () => {
+  it('projects a finance selection through its registered review action against the formal departure', async () => {
+    const financeActor = { ...actor, agentDefinition: { key: 'departure.collaboration', version: 1 },
+      grantedCapabilities: [INITIAL_FINANCE_PROPOSE_CAPABILITY_REF] }
+    const authority = authorityForActor(financeActor)
+    Object.assign(authority.tasks[0]!, { draftId: null, draftVersion: null, departureId: 'departure-1', departureVersion: 2 })
+    const store = new InMemoryAiActionStore()
+    const persist = jest.fn().mockResolvedValue('finance-package')
+    const adapter = new AiToolWorkerAdapter(new AiActionGateway(store, authority))
+    await expect(adapter.projectReviewPackage({ actor: financeActor, input: {
+      objectVersion: 2, confirmationUnit: 'resource_payable', candidates: [
+        { fieldKey: 'sourceType', proposedValue: 'segment_resource', clarity: 'clear', evidence: [{ kind: 'user_message', sequence: 1, excerpt: '继续提交应付' }] },
+        { fieldKey: 'sourceId', proposedValue: 'resource-1', clarity: 'clear', evidence: [{ kind: 'user_message', sequence: 1, excerpt: '继续提交应付' }] },
+      ],
+    }, persist })).resolves.toMatchObject({ reviewPackageId: 'finance-package', action: {
+      name: 'proposeInitialFinanceReviewPackage', decision: 'review', targetRef: { kind: 'departure', id: 'departure-1' },
+    } })
+    expect(persist).toHaveBeenCalledTimes(1)
+  })
+
   it('leaves a review AI action before forwarding the existing projection', async () => {
     const store = new InMemoryAiActionStore()
     const adapter = new AiToolWorkerAdapter(new AiActionGateway(store, authorityForActor(actor)))
