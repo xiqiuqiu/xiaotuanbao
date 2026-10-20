@@ -10,6 +10,7 @@ import {
   ResourceKind,
 } from '@prisma/client'
 import type { HeadlessExecutionResult } from '@xiaotuanbao/ai-contracts'
+import { DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL } from '@xiaotuanbao/ai-contracts'
 import { SourceOrderService } from '../src/modules/departure/source-order.service'
 import { departureObjectVersion } from '../src/modules/ai-create-task/departure-object-version'
 import { PrismaService } from '../src/database/prisma/prisma.service'
@@ -252,7 +253,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
   function reviewOutcome(
     objectVersion: number,
     packages: Array<{
-      confirmationUnit: 'source_order_create' | 'segment_resource' | 'departure_resource' | 'itinerary_segment_update' | 'source_order_guests_update'
+      confirmationUnit: 'source_order_create' | 'segment_resource' | 'departure_resource' | 'itinerary_segment_update' | 'source_order_guests_update' | 'source_order_receivable' | 'resource_payable'
       candidates: ReviewCandidate[]
     }>,
   ): HeadlessExecutionResult {
@@ -481,7 +482,9 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     const { conversationId } = await openCollaboration(departureId, '请先读取行程', `${testPrefix}-edit-tool`)
     await processJobs(conversationId)
     const task = await prisma.agentTask.findFirstOrThrow({ where: { departureId, ownerUserId } })
-    const delegation = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId: task.id, conversationId })
+    const delegation = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId: task.id, conversationId,
+      agentDefinition: { key: 'departure.collaboration', version: 1 }, grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL),
+    })
     const text = 'e2e worker-shaped attempt'
     const input = { taskId: task.id, runId: delegation.runId, objectVersion: await objectVersion(departureId), confirmationUnit: 'itinerary_segment_update',
       candidates: [candidate('itinerarySegmentId', segmentId, text, delegation.userMessageSequence), candidate('name', '新行程', text, delegation.userMessageSequence)] }
@@ -1070,6 +1073,114 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     })
     expect(order.guests.map((guest) => guest.name)).toEqual(['赵六'])
     expect(order.netReceivableCents).toBe(200_000)
+  })
+
+  it('prevalidates finance selections without writes, then projects and confirms through Worker with only /departure permission', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-model-finance`)
+    const partner = await createPartner('model-finance')
+    const supplier = await createSupplier('model-finance')
+    const createText = '新增两位成人客源与酒店资源，确认后再决定账款'
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [
+      { confirmationUnit: 'source_order_create', candidates: sourceOrderCandidates(partner.id, createText, 1) },
+      { confirmationUnit: 'segment_resource', candidates: segmentResourceCandidates(segmentId, supplier.id, '初始财务酒店', 70000, createText, 1) },
+    ])))
+    const { conversationId } = await openCollaboration(departureId, createText, `${testPrefix}-model-finance-create`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 2)
+    const sourcePackages = await prisma.aiReviewPackage.findMany({ where: { conversationId, status: 'pending' } })
+    await accept(coordinatorToken, `${testPrefix}-model-finance-create-confirm`, sourcePackages.map((pkg) => ({ packageId: pkg.id, expectedPackageVersion: pkg.version }))).expect(200)
+    await processJobs(conversationId)
+    const source = await prisma.sourceOrder.findFirstOrThrow({ where: { departureId } })
+    const resource = await prisma.segmentResource.findFirstOrThrow({ where: { segmentId } })
+    const taskId = sourcePackages[0]!.taskId!
+    const savedRoles = await prisma.userRole.findMany({ where: { userId: ownerUserId } })
+    const financeUser = await prisma.user.findFirstOrThrow({ where: { username: 'acai', deletedAt: null }, include: { roles: true } })
+    await prisma.userRole.deleteMany({ where: { userId: ownerUserId } })
+    await prisma.userRole.createMany({ data: financeUser.roles.map((role) => ({ userId: ownerUserId, roleId: role.roleId })) })
+    try {
+      const negativeText = '不要提交应收应付，只查询目前状态'
+      let minted = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId, conversationId,
+        agentDefinition: { key: 'departure.collaboration', version: 1 },
+        grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL), userText: negativeText,
+      })
+      const tool = (body: Record<string, unknown>) => request(app.getHttpServer()).post('/api/ai-tools/v1/propose-initial-finance-review-package')
+        .set('X-Agent-Service-Key', AGENT_SECRET).set('Authorization', `Bearer ${minted.delegationToken}`).send(body)
+      const input = { taskId, runId: minted.runId, objectVersion: await objectVersion(departureId), confirmationUnit: 'source_order_receivable',
+        candidates: [candidate('sourceOrderId', source.id, '继续提交应收', minted.userMessageSequence)] }
+      const deniedEvidence = await tool(input).expect(200)
+      expect(deniedEvidence.body.data.status).toBe('rejected')
+      expect(await prisma.aiReviewPackage.count({ where: { conversationId } })).toBe(2)
+      const positiveText = '继续提交刚才客源的应收和酒店应付'
+      await prisma.aiAgentAttempt.update({ where: { id: minted.attemptId }, data: { status: 'completed' } })
+      await prisma.aiInputBatch.update({ where: { id: minted.inputBatchId }, data: { status: 'completed' } })
+      minted = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId, conversationId,
+        agentDefinition: { key: 'departure.collaboration', version: 1 },
+        grantedCapabilities: Object.values(DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL), userText: positiveText,
+      })
+      input.runId = minted.runId
+      input.candidates = [candidate('sourceOrderId', source.id, positiveText, minted.userMessageSequence)]
+      const prevalidated = await tool(input).expect(200)
+      expect(prevalidated.body.data.status).toBe('accepted')
+      expect(await prisma.aiReviewPackage.count({ where: { conversationId } })).toBe(2)
+      expect(await prisma.paymentSchedule.count({ where: { departureId } })).toBe(0)
+      const ordinarySource = await app.get(SourceOrderService).createWithSelectedGuests(organizationId, departureId, {
+        partnerId: partner.id, adultGuestCount: 1, childGuestCount: 0, adultUnitPriceCents: 100,
+        collectionMode: 'partner_settled', discountType: 'none',
+      }, [])
+      await tool({ ...input, objectVersion: await objectVersion(departureId), candidates: [candidate('sourceOrderId', ordinarySource.id, positiveText, minted.userMessageSequence)] }).expect(400)
+      await prisma.aiAgentAttempt.update({ where: { id: minted.attemptId }, data: { status: 'completed' } })
+      await prisma.aiInputBatch.update({ where: { id: minted.inputBatchId }, data: { status: 'completed' } })
+
+      const sent = await authRequest(app, coordinatorToken).post(`/api/agent/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `${testPrefix}-model-finance-prepare`).send({ text: positiveText, pageLocator: { kind: 'departure', objectId: departureId } }).expect(201)
+      const sequence = sent.body.data.events.find((event: { kind: string }) => event.kind === 'user_message').sequence
+      agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [
+        { confirmationUnit: 'source_order_receivable', candidates: [candidate('sourceOrderId', source.id, positiveText, sequence)] },
+        { confirmationUnit: 'resource_payable', candidates: [candidate('sourceType', 'segment_resource', positiveText, sequence), candidate('sourceId', resource.id, positiveText, sequence)] },
+      ])))
+      await processJobs(conversationId)
+      await waitForPendingPackages(conversationId, 2)
+      const financial = await prisma.aiReviewPackage.findMany({ where: { conversationId, status: 'pending' } })
+      expect(financial.map((pkg) => pkg.confirmationUnit).sort()).toEqual(['resource_payable', 'source_order_receivable'])
+      expect(financial.every((pkg) => pkg.sourceActionId && pkg.inputBatchId === sent.body.data.batch.id)).toBe(true)
+      expect(await prisma.paymentSchedule.count({ where: { departureId } })).toBe(0)
+      await authRequest(app, coordinatorToken).post(`/api/departures/${departureId}/segments`).send({ name: '不得扩权' }).expect(403)
+      const payable = financial.find((pkg) => pkg.confirmationUnit === 'resource_payable')!
+      await prisma.segmentResource.update({ where: { id: resource.id }, data: { amountCents: 80000 } })
+      const staleDecision = `${testPrefix}-model-finance-stale`
+      await accept(coordinatorToken, staleDecision, [{ packageId: payable.id, expectedPackageVersion: payable.version }]).expect(200)
+      await processJobs(conversationId)
+      const conflict = await getConfirmation(coordinatorToken, staleDecision).expect(200)
+      expect(conflict.body.data.items[0].status).toBe('conflict')
+      expect(await prisma.paymentSchedule.count({ where: { sourceId: resource.id } })).toBe(0)
+
+      const reviseText = '基于当前正式金额重新准备这项应付审核'
+      const revisedInput = await authRequest(app, coordinatorToken).post(`/api/agent/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `${testPrefix}-model-finance-revise`).send({ text: reviseText, reviewPackageId: payable.id, pageLocator: { kind: 'departure', objectId: departureId } }).expect(201)
+      const revisionSequence = revisedInput.body.data.events.find((event: { kind: string }) => event.kind === 'user_message').sequence
+      const revisedProposal = { objectVersion: await objectVersion(departureId), confirmationUnit: 'resource_payable', reviewPackageId: payable.id, expectedPackageVersion: payable.version,
+        candidates: [candidate('sourceType', 'segment_resource', reviseText, revisionSequence), candidate('sourceId', resource.id, reviseText, revisionSequence)] }
+      agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_review', completionBasis: { kind: 'accepted_review_package' }, reviewPackage: revisedProposal } as HeadlessExecutionResult))
+      await processJobs(conversationId)
+      const latestPayable = await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: payable.id } })
+      expect(latestPayable.version).toBeGreaterThan(payable.version)
+      expect((latestPayable.candidates as Array<{ fieldKey: string; proposedValue: unknown }>).find((item) => item.fieldKey === 'amountCents')?.proposedValue).toBe(80000)
+      const receivable = financial.find((pkg) => pkg.confirmationUnit === 'source_order_receivable')!
+      const selected = [receivable, latestPayable].map((pkg) => ({ packageId: pkg.id, expectedPackageVersion: pkg.version }))
+      const decision = `${testPrefix}-model-finance-final`
+      await accept(coordinatorToken, decision, selected).expect(200)
+      await processJobs(conversationId)
+      const receipt = await getConfirmation(coordinatorToken, decision).expect(200)
+      expect(receipt.body.data.items.every((item: { status: string }) => item.status === 'succeeded')).toBe(true)
+      const beforeReplay = await prisma.paymentSchedule.count({ where: { departureId } })
+      expect(beforeReplay).toBe(2)
+      await accept(coordinatorToken, decision, selected).expect(200)
+      await processJobs(conversationId)
+      expect(await prisma.paymentSchedule.count({ where: { departureId } })).toBe(beforeReplay)
+    } finally {
+      await prisma.userRole.deleteMany({ where: { userId: ownerUserId } })
+      await prisma.userRole.createMany({ data: savedRoles })
+    }
   })
 
   it('lets finance confirm receivables but not create source orders, and refuses F2 backfill', async () => {

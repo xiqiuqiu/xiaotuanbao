@@ -1,3 +1,4 @@
+import { SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT, RESOURCE_PAYABLE_CONFIRMATION_UNIT } from '@xiaotuanbao/ai-contracts'
 import { createHash, randomUUID } from 'node:crypto'
 import { Injectable, Inject, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -37,11 +38,9 @@ import {
   type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
   type SubmitReviewPackageModelInput,
-  DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
   DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
   DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
   DEPARTURE_COLLABORATION_INSTRUCTIONS,
-  departureCollaborationCapabilityDefinitionRegistry,
   DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
@@ -92,6 +91,7 @@ import { buildBudgetedContext } from './ai-context-budget'
 import { resolvePreparedProjection } from './ai-context-compaction'
 import { resolveModelCurrentInput, userMessageSourceOrigin, withSourceIndexTruncation } from './ai-context-source-index'
 import { markBatchAgentRunningAfterAttempt } from './ai-workflow.agent-running'
+import { resolveCollaborationCapabilityGrants } from './collaboration-capability-grants'
 import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
@@ -156,6 +156,7 @@ const CONVERSATION_GENERAL_CONTEXT_TOOL_NAMES = [
 
 function isDepartureCollaborationReviewUnit(confirmationUnit: string) {
   return (
+    confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT || confirmationUnit === RESOURCE_PAYABLE_CONFIRMATION_UNIT ||
     confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
     confirmationUnit === DEPARTURE_RESOURCE_CONFIRMATION_UNIT ||
     confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT ||
@@ -1591,14 +1592,7 @@ export class AiWorkflowProcessor {
           { organizationId: job.organizationId, kind: 'agent_conversation', id: job.conversationId },
         ],
       })
-      const grants = capabilityGrantResolver.resolve({
-        agentDefinition: DEPARTURE_COLLABORATION_AGENT_CAPABILITY_DECLARATION,
-        capabilities: departureCollaborationCapabilityDefinitionRegistry,
-        requestContext: unresolvedContext,
-        user: { organizationId: job.organizationId, permissionKeys },
-        entitlements: { status: 'unavailable' },
-        riskPolicy: { allowedRisks: ['low', 'medium'] },
-      })
+      const grants = resolveCollaborationCapabilityGrants(unresolvedContext, permissionKeys)
       const requestContext = requestContextSchema.parse({
         ...unresolvedContext,
         grantedCapabilities: grants.granted,
@@ -1989,7 +1983,9 @@ export class AiWorkflowProcessor {
     if (result.kind === 'failed') {
       const errorCode = result.error.code
       if (isImmediateWorkflowFailure(errorCode) || result.error.retryable === false) {
-        await this.persistFailure(job, errorCode, result, attemptId)
+        if (result.completedAnswers?.length && errorCode === 'AGENT_OUTCOME_INCOMPLETE') {
+          await this.persistFailure(job, errorCode, result, attemptId, route)
+        } else await this.persistFailure(job, errorCode, result, attemptId)
         this.workflowLog('failed', {
           job: job.id,
           type: job.type,
@@ -2296,8 +2292,10 @@ export class AiWorkflowProcessor {
     const eventIds: string[] = []
     const interactionIds: string[] = []
     const reviewPackageIds: string[] = []
+    const answerItems = result.publicAnswer ? result.items.filter(item => item.resolution.kind === 'answered') : []
     for (const item of result.items) {
       const resolution = item.resolution
+      if (result.publicAnswer && resolution.kind === 'answered' && item.id !== answerItems[0]?.id) continue
       // Task creation is committed by persistTaskCreationProposal, then continued in this batch.
       if (resolution.kind === 'registered_intent') continue
       const itemReviewIds: string[] = []
@@ -2323,7 +2321,7 @@ export class AiWorkflowProcessor {
         responseSchema: responseSchemaFor(interaction.type, interaction.options ?? []),
         status: AiConversationInteractionStatus.pending, version: 1,
       } : null
-      const message = resolution.kind === 'answered' ? resolution.message
+      const message = resolution.kind === 'answered' ? result.publicAnswer ?? resolution.message
         : resolution.kind === 'withdrawn' ? `已按你的要求撤回：${item.request}`
         : interaction ? interaction.prompt
         : `已提交待审核建议：${item.request}，请审核确认。`
@@ -2332,6 +2330,7 @@ export class AiWorkflowProcessor {
         kind: AiConversationEventKind.agent_message,
         payload: {
           text: message, batchId: job.inputBatchId, attemptId, requestItem: item,
+          ...(result.publicAnswer ? { requestItems: answerItems } : {}),
           ...(job.taskId ? { taskId: job.taskId } : {}),
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
           ...(coordinates ? {
@@ -2605,6 +2604,7 @@ export class AiWorkflowProcessor {
     errorCode: string,
     result?: HeadlessExecutionResult,
     attemptId?: string,
+    answerRoute?: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
   ): Promise<void> {
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
@@ -2620,6 +2620,20 @@ export class AiWorkflowProcessor {
         })
         if (!canCommitAttemptTerminal(currentAttempt, currentJob.generation)) {
           return
+        }
+      }
+      if (answerRoute && result?.kind === 'failed' && result.completedAnswers?.length
+        && errorCode === 'AGENT_OUTCOME_INCOMPLETE') {
+        const authorization = await this.recheckAuthorization(job, answerRoute)
+        if (authorization.ok) {
+          for (const item of result.completedAnswers) {
+            const answerEvent = await this.conversationService.appendEvent(tx, {
+              organizationId: job.organizationId, conversationId: job.conversationId,
+              kind: AiConversationEventKind.agent_message,
+              payload: { text: item.resolution.message, batchId: job.inputBatchId, attemptId: attemptId ?? null, requestItem: item },
+            })
+            published.push(answerEvent.id)
+          }
         }
       }
       const errorEvent = await this.conversationService.appendEvent(tx, {
@@ -3052,6 +3066,13 @@ export class AiWorkflowProcessor {
         }
         if (target.version == null) {
           throw new Error('NORMALIZED_TARGET_VERSION_MISSING')
+        }
+        if (reviewPackage.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT || reviewPackage.confirmationUnit === RESOURCE_PAYABLE_CONFIRMATION_UNIT) {
+          return this.reviewCollaboration.projectInitialFinanceReviewInTx(tx, {
+            organizationId: job.organizationId, userId: job.inputBatch.creatorUserId, taskId,
+            departureId: target.id, conversationId: job.conversationId!, inputBatchId: job.inputBatchId,
+            attemptId, sourceActionId: action.id, itemIdentity,
+          }, validated.reviewPackage)
         }
         return projectPendingReviewPackage(tx, {
           organizationId: job.organizationId,

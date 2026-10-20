@@ -1,3 +1,4 @@
+import { ReviewCollaborationService } from './review-collaboration.service'
 import { Injectable } from '@nestjs/common'
 import {
   DEPARTURE_BASIC_INFO_REVIEW_SCHEMA,
@@ -35,7 +36,7 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
   readonly descriptor = DEPARTURE_CREATION_TASK_DESCRIPTOR
   readonly reviewSchema = DEPARTURE_BASIC_INFO_REVIEW_SCHEMA
 
-  constructor(private readonly tasks: AiCreateTaskService) {}
+  constructor(private readonly tasks: AiCreateTaskService, private readonly collaboration: ReviewCollaborationService) {}
 
   getSnapshot(caller: TaskBoundAiToolRequestUser, input: unknown) {
     return this.tasks.getTaskContextForAgent(caller as SnapshotCaller, input)
@@ -91,6 +92,10 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
     return this.tasks.proposeDepartureEditReviewPackageForAgent(
       caller as Parameters<AiCreateTaskService['proposeDepartureEditReviewPackageForAgent']>[0], input,
     )
+  }
+
+  proposeInitialFinanceReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.collaboration.proposeInitialFinanceReviewForAgent(caller, input)
   }
 
   submitReview(caller: TaskBoundAiToolRequestUser, input: unknown, options: SubmitReviewOptions) {

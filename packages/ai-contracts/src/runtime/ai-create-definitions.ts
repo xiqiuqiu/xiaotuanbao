@@ -87,7 +87,7 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
     toolName: GET_TASK_CONTEXT_TOOL.name,
     kind: 'read',
     risk: 'low',
-    requiredPermissionKeys: ['departure:write'],
+    requiredPermissionKeys: ['/departure'],
     requiredObjectScopes: [{ kind: 'ai_create_task', idFromContext: 'taskId' }],
     inputSchema: z.object({}).strict(),
     outputSchema: getTaskContextOutputSchema,

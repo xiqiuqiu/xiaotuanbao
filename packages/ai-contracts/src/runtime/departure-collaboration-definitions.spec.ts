@@ -1,4 +1,5 @@
 import { capabilityGrantResolver, requestContextSchema } from './agent-platform'
+import { INITIAL_FINANCE_PROPOSE_CAPABILITY_REF } from '../tools/initial-finance-review'
 import {
   DEPARTURE_COLLABORATION_AGENT_DEFINITION,
   DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS,
@@ -60,7 +61,7 @@ describe('已有发团协作 Agent Definition #449 #450', () => {
       agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION,
       capabilities: departureCollaborationCapabilityDefinitionRegistry,
       requestContext,
-      user: { organizationId: 'org-1', permissionKeys: ['departure:write'] },
+      user: { organizationId: 'org-1', permissionKeys: ['/departure', 'departure:write'] },
       entitlements: { status: 'unavailable' },
       riskPolicy: { allowedRisks: ['low', 'medium'] },
     })
@@ -75,6 +76,8 @@ describe('已有发团协作 Agent Definition #449 #450', () => {
         { key: 'departure.departure-resource.propose', version: 1 },
       ]),
     )
-    expect(result.denied).toEqual([])
+    expect(result.denied).toEqual([
+      { capability: INITIAL_FINANCE_PROPOSE_CAPABILITY_REF, reason: 'RISK_POLICY_DENIED' },
+    ])
   })
 })

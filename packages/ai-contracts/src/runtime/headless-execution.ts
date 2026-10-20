@@ -1,3 +1,4 @@
+import { submitInitialFinanceReviewModelInputSchema } from '../tools/initial-finance-review'
 import { submitDepartureEditReviewModelInputSchema } from '../review/departure-edit-schema'
 import { z } from 'zod'
 import { AiCollaborationError, aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
@@ -100,6 +101,7 @@ export const headlessDiagnosticSchema = z
     usage: usageCountsSchema.optional(),
     latencyMs: z.number().int().nonnegative().optional(),
     errorCode: z.string().min(1).optional(),
+    outcomeIssue: z.object({ code: z.string().min(1).max(120), itemId: z.string().min(1).max(120).optional() }).optional(),
     toolSteps: z.array(toolStepDiagnosticSchema).default([]),
     modelSteps: z.array(modelStepUsageSchema).default([]),
   })
@@ -199,6 +201,7 @@ export const headlessAwaitingUserInputResultSchema = z
   .strip()
 
 const headlessReviewPackageSchema = z.union([
+  submitInitialFinanceReviewModelInputSchema,
   submitReviewPackageModelInputSchema,
   submitSegmentResourceReviewModelInputSchema,
   submitDepartureResourceReviewModelInputSchema,
@@ -229,6 +232,7 @@ export const resolvedWorkItemSchema = agentWorkItemSchema.extend({
 export const headlessResolvedItemsResultSchema = z.object({
   kind: z.literal('resolved_items'),
   message: z.string().trim().min(1),
+  publicAnswer: z.string().trim().min(1).optional(),
   items: z.array(resolvedWorkItemSchema).min(1).max(50),
   reviewPackages: z.array(headlessReviewPackageSchema),
   completionBasis: completionBasisSchema,
@@ -241,6 +245,10 @@ export const headlessFailedResultSchema = z
   .object({
     kind: z.literal('failed'),
     error: aiCollaborationErrorSchema,
+    completedAnswers: z.array(agentWorkItemSchema.extend({
+      goal: z.literal('answer'),
+      resolution: z.object({ kind: z.literal('answered'), message: z.string().trim().min(1) }),
+    })).min(1).max(50).optional(),
     diagnostic: headlessDiagnosticSchema.optional(),
   })
   .strip()
@@ -487,6 +495,7 @@ function outcomeMatchesGoal(goal: AgentExecutionGoal, outcome: HeadlessExecution
   }
   if (goal === 'resolve_items') {
     if (outcome.kind !== 'resolved_items' || outcome.completionBasis.kind !== 'resolved_items') return false
+    if (outcome.publicAnswer && outcome.items.some(item => item.resolution.kind !== 'answered')) return false
     const ids = new Set(outcome.items.map(item => item.id))
     const usedPackages = new Set<number>()
     return ids.size === outcome.items.length && outcome.items.length > 0 && outcome.items.every(item => {

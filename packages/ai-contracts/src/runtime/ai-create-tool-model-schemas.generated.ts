@@ -54,7 +54,8 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
                     },
                     "message": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "直接展示给用户的完整回答正文，必须包含要求的数字、步骤或解释；不能只写“已说明”“已回答”等进度回执。"
                     }
                   },
                   "required": [
@@ -3294,6 +3295,168 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
                   "additionalProperties": false
                 }
               ]
+            },
+            "clarity": {
+              "type": "string",
+              "enum": [
+                "clear",
+                "needs_confirmation",
+                "undetermined"
+              ]
+            },
+            "evidence": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "user_message"
+                      },
+                      "excerpt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "sequence": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "messageId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "excerpt",
+                      "sequence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "system_derivation"
+                      },
+                      "rule": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "rule"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "material_region"
+                      },
+                      "materialId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "parseResultVersion": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "pageNumber": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "excerpt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "materialId",
+                      "parseResultVersion",
+                      "pageNumber",
+                      "excerpt"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "fieldKey",
+            "proposedValue",
+            "clarity",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "objectVersion",
+      "confirmationUnit",
+      "candidates"
+    ],
+    "additionalProperties": false
+  },
+  "proposeInitialFinanceReviewPackage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "objectVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "reviewPackageId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedPackageVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "confirmationUnit": {
+        "type": "string",
+        "enum": [
+          "source_order_receivable",
+          "resource_payable"
+        ]
+      },
+      "candidates": {
+        "minItems": 1,
+        "maxItems": 2,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fieldKey": {
+              "type": "string",
+              "enum": [
+                "sourceOrderId",
+                "sourceType",
+                "sourceId"
+              ]
+            },
+            "proposedValue": {
+              "type": "string",
+              "minLength": 1
             },
             "clarity": {
               "type": "string",

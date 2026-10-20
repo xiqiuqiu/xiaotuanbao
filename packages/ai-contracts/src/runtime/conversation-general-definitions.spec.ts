@@ -106,7 +106,7 @@ describe('建团 Attempt 能力授予', () => {
       agentDefinition: AI_CREATE_AGENT_CAPABILITY_DECLARATION,
       capabilities: aiCreateCapabilityDefinitionRegistry,
       requestContext,
-      user: { organizationId: 'org-1', permissionKeys: ['departure:write'] },
+      user: { organizationId: 'org-1', permissionKeys: ['/departure', 'departure:write'] },
       entitlements: { status: 'unavailable' },
       riskPolicy: { allowedRisks: ['low', 'medium'] },
       availableCapabilities: availableToolNames.flatMap((toolName) => {

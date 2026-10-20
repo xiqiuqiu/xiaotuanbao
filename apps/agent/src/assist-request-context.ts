@@ -4,6 +4,7 @@ import { AiCollaborationError, type RequestContext, type AgentWorkItem } from '@
 export interface AssistRequestContext extends Partial<RequestContext> {
   delegationToken: string
   pendingItems?: AgentWorkItem[]
+  currentUserText?: string
 }
 
 const storage = new AsyncLocalStorage<AssistRequestContext>()

@@ -53,6 +53,12 @@ import { AuthService } from '../auth/auth.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import { DepartureFinanceGenerationService } from '../finance/departure-finance-generation.service'
 import { lockResourceConvention } from '../finance/resource-convention-lock'
+import { readInitialFinanceSources } from './initial-finance-sources'
+import { submitInitialFinanceReviewInputSchema, submitInitialFinanceReviewModelInputSchema, type SubmitInitialFinanceReviewModelInput, type ProposeInitialFinanceReviewOutput } from '@xiaotuanbao/ai-contracts'
+import type { TaskBoundAiToolRequestUser } from './agent-task-domain.adapter'
+import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
+import { loadEvidenceAuthority } from './evidence-authority'
+import { validateReviewProposal } from './review-proposal.validator'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 import { findInFlightReviewConfirmJob } from './review-confirm-in-flight'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -79,6 +85,8 @@ import {
   resolveDepartureResourceReviewDraft,
   resolveSegmentResourceReviewDraft,
 } from '@xiaotuanbao/ai-contracts'
+
+type InitialFinanceOrigin = { taskId: string; inputBatchId: string; attemptId: string; sourceActionId: string }
 
 const REVISION_PENDING_REASON = '助手正在核对该事项，请等待更新后再确认'
 const REVISING_BATCH_STATUSES: AiInputBatchStatus[] = [
@@ -122,6 +130,103 @@ export class ReviewCollaborationService {
     private readonly segments: SegmentService,
   ) {}
 
+  async proposeInitialFinanceReviewForAgent(caller: TaskBoundAiToolRequestUser, rawInput: unknown): Promise<ProposeInitialFinanceReviewOutput> {
+    const parsed = submitInitialFinanceReviewInputSchema.safeParse(rawInput)
+    if (!parsed.success) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    const input = parsed.data
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId || !caller.attemptId || !caller.conversationId || !caller.inputBatchId ||
+        !caller.grantedCapabilities.some((ref) => ref.key === 'departure.initial-finance.propose' && ref.version === 1)) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (!(await this.auth.getPermissionKeysForUser(caller.userId)).includes('/departure')) throw new ForbiddenException('无权准备初始账款')
+    return this.prisma.$transaction(async (tx) => {
+      const task = await tx.agentTask.findFirst({ where: { id: caller.taskId, organizationId: caller.organizationId,
+        ownerUserId: caller.userId, type: 'departure_collaboration', status: { in: ['active', 'waiting'] } } })
+      const attempt = await tx.aiAgentAttempt.findFirst({ where: { id: caller.attemptId, organizationId: caller.organizationId,
+        taskId: caller.taskId, conversationId: caller.conversationId, inputBatchId: caller.inputBatchId, status: 'running' } })
+      if (!task?.departureId || !attempt) throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      if (await departureObjectVersion(tx, caller.organizationId, task.departureId) !== input.objectVersion) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      const authority = await loadEvidenceAuthority(tx, { ...caller, conversationId: caller.conversationId!, inputBatchId: caller.inputBatchId!, attemptId: caller.attemptId! })
+      if (!authority) throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      const validated = validateReviewProposal({ proposal: input, authority })
+      if (!validated.success) return { status: 'rejected', errors: validated.errors }
+      await this.validateInitialFinanceRevision(tx, { ...caller, departureId: task.departureId, conversationId: caller.conversationId! }, input)
+      await this.previewInitialFinanceSelection(tx, caller.organizationId, task.departureId, caller.conversationId!, input)
+      const { taskId, runId, ...proposal } = input
+      return { status: 'accepted', ...proposal, normalizedProposal: validated.normalizedProposal }
+    }, { isolationLevel: 'RepeatableRead' })
+  }
+
+  private async previewInitialFinanceSelection(tx: Prisma.TransactionClient, organizationId: string, departureId: string, conversationId: string,
+    proposal: SubmitInitialFinanceReviewModelInput) {
+    const values = Object.fromEntries(proposal.candidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue]))
+    const sourceType = proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT ? 'source_order' : values.sourceType
+    const sourceId = proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT ? values.sourceOrderId : values.sourceId
+    const eligible = await readInitialFinanceSources(tx, organizationId, conversationId, departureId)
+    if (!eligible.some((item) => item.sourceType === sourceType && item.sourceId === sourceId)) throw new BadRequestException('只能为本会话成功创建的来源准备初始账款')
+    if (sourceType === 'source_order') {
+      const preview = await this.generation.previewInitialReceivables(organizationId, sourceId!, tx)
+      if (preview.order.departureId !== departureId) throw new BadRequestException('客源不属于当前发团')
+    } else {
+      const preview = await this.generation.previewInitialPayable(organizationId, { sourceType: sourceType!, sourceId: sourceId! }, tx)
+      const actualDepartureId = preview.resourceKind === 'segment' ? preview.resource.segment.departure.id : preview.resource.departure.id
+      if (actualDepartureId !== departureId) throw new BadRequestException('资源不属于当前发团')
+    }
+    return values
+  }
+
+  private async validateInitialFinanceRevision(tx: Prisma.TransactionClient,
+    context: { organizationId: string; taskId: string; conversationId: string; departureId: string }, proposal: SubmitInitialFinanceReviewModelInput) {
+    if (!proposal.reviewPackageId) return
+    const current = await tx.aiReviewPackage.findFirst({ where: {
+      id: proposal.reviewPackageId, organizationId: context.organizationId, taskId: context.taskId, conversationId: context.conversationId,
+      targetKind: 'departure', targetId: context.departureId, status: 'pending', version: proposal.expectedPackageVersion,
+      confirmationUnit: proposal.confirmationUnit,
+      payloadSchema: proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT ? SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA : RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
+    } })
+    if (!current) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    const values = Object.fromEntries(proposal.candidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue]))
+    if (proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT) {
+      if (sourceOrderIdFromBaseline(current.baselineSnapshot) !== values.sourceOrderId) throw new BadRequestException('重新准备不能更换客源')
+    } else {
+      const previous = payableSourceFromBaseline(current.baselineSnapshot)
+      if (!previous || previous.sourceId !== values.sourceId || previous.sourceType !== values.sourceType) throw new BadRequestException('重新准备不能更换资源')
+    }
+  }
+
+  async projectInitialFinanceReviewInTx(tx: Prisma.TransactionClient, context: {
+    organizationId: string; userId: string; taskId: string; departureId: string; conversationId: string;
+    inputBatchId: string; attemptId: string; sourceActionId: string; itemIdentity?: string;
+  }, rawProposal: unknown): Promise<string> {
+    const proposal = submitInitialFinanceReviewModelInputSchema.parse(rawProposal)
+    const replay = await tx.aiReviewPackage.findFirst({ where: { organizationId: context.organizationId, sourceActionId: context.sourceActionId }, select: { id: true } })
+    if (replay) return replay.id
+    await this.validateInitialFinanceRevision(tx, context, proposal)
+    const values = await this.previewInitialFinanceSelection(tx, context.organizationId, context.departureId, context.conversationId, proposal)
+    if (!proposal.reviewPackageId) {
+      const existing = await tx.aiReviewPackage.findMany({ where: {
+        organizationId: context.organizationId, conversationId: context.conversationId,
+        targetKind: 'departure', targetId: context.departureId, confirmationUnit: proposal.confirmationUnit,
+        status: { in: ['pending', 'confirmed'] },
+      } })
+      const matching = existing.find((pkg) => proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT
+        ? sourceOrderIdFromBaseline(pkg.baselineSnapshot) === values.sourceOrderId
+        : payableSourceFromBaseline(pkg.baselineSnapshot)?.sourceType === values.sourceType && payableSourceFromBaseline(pkg.baselineSnapshot)?.sourceId === values.sourceId)
+      // Existing agreements change only through explicit package/version re-preparation.
+      if (matching) return matching.id
+    }
+    const pkg = proposal.confirmationUnit === SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT
+      ? await this.prepareSourceOrderReceivableReviewInTx(tx, context.organizationId, context.userId, context.departureId, { conversationId: context.conversationId, sourceOrderId: values.sourceOrderId! }, context)
+      : (await this.prepareResourcePayableReviewsInTx(tx, context.organizationId, context.userId, context.departureId, { conversationId: context.conversationId,
+        items: [{ sourceType: values.sourceType as 'segment_resource' | 'departure_resource', sourceId: values.sourceId! }] }, context))[0]!
+    if (proposal.reviewPackageId && pkg.id !== proposal.reviewPackageId) throw new ConflictException('审核包已变化，请刷新后重新准备')
+    if (pkg.status === 'pending') await tx.aiReviewPackage.update({ where: { id: pkg.id }, data: {
+      sourceActionId: context.sourceActionId, attemptId: context.attemptId,
+      capabilityKey: 'departure.initial-finance.propose', capabilityVersion: 1,
+    } })
+    return pkg.id
+  }
+
   async ensureDepartureCollaborationTask(
     organizationId: string,
     userId: string,
@@ -158,147 +263,154 @@ export class ReviewCollaborationService {
       throw new ForbiddenException('无权准备初始应收')
     }
     await this.departures.getById(organizationId, departureId)
-    return this.prisma.$transaction(async (tx) => {
-      await lockAgentConversation(tx, organizationId, dto.conversationId)
-      const conversation = await tx.aiConversation.findFirst({
-        where: { id: dto.conversationId, organizationId, creatorUserId: userId },
-      })
-      if (!conversation) {
-        throw new NotFoundException('会话不存在')
-      }
-      const sourceOrder = await tx.sourceOrder.findFirst({
-        where: {
-          id: dto.sourceOrderId,
-          departureId,
-          departure: { organizationId },
-        },
-        select: { id: true },
-      })
-      if (!sourceOrder) {
-        throw new NotFoundException('客源单不存在')
-      }
-      const sourceRecords = await tx.aiReviewRecord.findMany({
-        where: {
-          organizationId,
-          writeResult: AiReviewWriteResult.success,
-          package: {
-            conversationId: dto.conversationId,
-            payloadSchema: SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
-            status: AiReviewPackageStatus.confirmed,
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        include: { package: true },
-      })
-      const sourceRecord = sourceRecords.find(
-        (record) => parseStoredResultRef(record.afterSnapshot)?.objectId === dto.sourceOrderId,
-      )
-      const sourcePackage = sourceRecord?.package
-      const taskId = sourcePackage?.taskId
-      const inputBatchId = sourcePackage?.inputBatchId
-      if (!sourcePackage || !taskId || !inputBatchId) {
-        throw new BadRequestException('只能从本次成功创建的客源继续提交应收')
-      }
-      await lockAiCreateTask(tx, organizationId, taskId)
-      const siblings = await tx.aiReviewPackage.findMany({
-        where: { organizationId, conversationId: dto.conversationId },
-        select: {
-          id: true,
-          status: true,
-          version: true,
-          itemIdentity: true,
-          payloadSchema: true,
-          baselineSnapshot: true,
-        },
-      })
-      const existing = siblings.find(
-        (pkg) =>
-          pkg.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA &&
-          sourceOrderIdFromBaseline(pkg.baselineSnapshot) === dto.sourceOrderId,
-      )
-      if (existing?.status === AiReviewPackageStatus.confirmed) {
-        const confirmed = await tx.aiReviewPackage.findFirstOrThrow({ where: { id: existing.id } })
-        return toReviewPackageView(confirmed)
-      }
-      if (existing?.status === AiReviewPackageStatus.pending) {
-        const inFlight = await findInFlightReviewConfirmJob(tx, existing.id)
-        if (inFlight) {
-          throw new ConflictException('该事项正在确认中，暂不可重复准备')
-        }
-      }
-      const preview = await this.generation.previewInitialReceivables(
+    return this.prisma.$transaction((tx) => this.prepareSourceOrderReceivableReviewInTx(tx, organizationId, userId, departureId, dto))
+  }
+
+  async prepareSourceOrderReceivableReviewInTx(
+    tx: Prisma.TransactionClient, organizationId: string, userId: string, departureId: string,
+    dto: { sourceOrderId: string; conversationId: string },
+    origin?: InitialFinanceOrigin,
+  ): Promise<AiReviewPackageView> {
+    await lockAgentConversation(tx, organizationId, dto.conversationId)
+    const conversation = await tx.aiConversation.findFirst({
+      where: { id: dto.conversationId, organizationId, creatorUserId: userId },
+    })
+    if (!conversation) {
+      throw new NotFoundException('会话不存在')
+    }
+    const sourceOrder = await tx.sourceOrder.findFirst({
+      where: {
+        id: dto.sourceOrderId,
+        departureId,
+        departure: { organizationId },
+      },
+      select: { id: true },
+    })
+    if (!sourceOrder) {
+      throw new NotFoundException('客源单不存在')
+    }
+    const sourceRecords = await tx.aiReviewRecord.findMany({
+      where: {
         organizationId,
-        dto.sourceOrderId,
-        tx,
-      )
-      const candidates = sourceOrderReceivableReviewCandidates({
-        sourceOrderId: preview.order.id,
-        displayName: preview.order.displayName,
-        partnerName: preview.order.partner.name,
-        collectionMode: preview.order.collectionMode,
-        netReceivableCents: preview.order.netReceivableCents,
-        paths: preview.expectedPaths,
-        classification: preview.classification,
-      })
-      const stored = toStoredCandidates(candidates)
-      const baselineSnapshot = {
-        sourceOrderId: preview.order.id,
-        collectionMode: preview.order.collectionMode,
-        depositCents: preview.order.depositCents,
-        balanceCents: preview.order.balanceCents,
-        netReceivableCents: preview.order.netReceivableCents,
-        partnerId: preview.order.partnerId,
-      }
-      if (existing?.status === AiReviewPackageStatus.pending) {
-        const updated = await tx.aiReviewPackage.update({
-          where: { id: existing.id },
-          data: {
-            candidates: stored as unknown as Prisma.InputJsonValue,
-            baselineSnapshot,
-            proposalHash: reviewProposalHash({
-              confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
-              candidates,
-            }),
-            version: { increment: 1 },
-            baseObjectVersion: await departureObjectVersion(tx, organizationId, departureId),
-          },
-        })
-        return toReviewPackageView(updated)
-      }
-      const created = await tx.aiReviewPackage.create({
-        data: {
-          organizationId,
-          taskId,
+        writeResult: AiReviewWriteResult.success,
+        package: {
           conversationId: dto.conversationId,
-          inputBatchId,
-          attemptId: sourcePackage.attemptId,
-          status: AiReviewPackageStatus.pending,
-          confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
-          payloadSchema: SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
-          capabilityKey: 'departure.source-order-receivable.prepare',
-          capabilityVersion: 1,
-          targetKind: 'departure',
-          targetId: departureId,
-          itemIdentity: nextReviewItemIdentity(
-            (
-              await tx.aiReviewPackage.findMany({
-                where: { inputBatchId },
-                select: { itemIdentity: true },
-              })
-            ).map((pkg) => pkg.itemIdentity),
-          ),
+          payloadSchema: SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+          status: AiReviewPackageStatus.confirmed,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { package: true },
+    })
+    const sourceRecord = sourceRecords.find(
+      (record) => parseStoredResultRef(record.afterSnapshot)?.objectId === dto.sourceOrderId,
+    )
+    const sourcePackage = sourceRecord?.package
+    const taskId = origin?.taskId ?? sourcePackage?.taskId
+    const inputBatchId = origin?.inputBatchId ?? sourcePackage?.inputBatchId
+    if (!sourcePackage || !taskId || !inputBatchId) {
+      throw new BadRequestException('只能从本次成功创建的客源继续提交应收')
+    }
+    await lockAiCreateTask(tx, organizationId, taskId)
+    const siblings = await tx.aiReviewPackage.findMany({
+      where: { organizationId, conversationId: dto.conversationId },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        itemIdentity: true,
+        payloadSchema: true,
+        baselineSnapshot: true,
+      },
+    })
+    const existing = siblings.find(
+      (pkg) =>
+        pkg.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA &&
+        sourceOrderIdFromBaseline(pkg.baselineSnapshot) === dto.sourceOrderId,
+    )
+    if (existing?.status === AiReviewPackageStatus.confirmed) {
+      const confirmed = await tx.aiReviewPackage.findFirstOrThrow({ where: { id: existing.id } })
+      return toReviewPackageView(confirmed)
+    }
+    if (existing?.status === AiReviewPackageStatus.pending) {
+      const inFlight = await findInFlightReviewConfirmJob(tx, existing.id)
+      if (inFlight) {
+        throw new ConflictException('该事项正在确认中，暂不可重复准备')
+      }
+    }
+    const preview = await this.generation.previewInitialReceivables(
+      organizationId,
+      dto.sourceOrderId,
+      tx,
+    )
+    const candidates = sourceOrderReceivableReviewCandidates({
+      sourceOrderId: preview.order.id,
+      displayName: preview.order.displayName,
+      partnerName: preview.order.partner.name,
+      collectionMode: preview.order.collectionMode,
+      netReceivableCents: preview.order.netReceivableCents,
+      paths: preview.expectedPaths,
+      classification: preview.classification,
+    })
+    const stored = toStoredCandidates(candidates)
+    const baselineSnapshot = {
+      sourceOrderId: preview.order.id,
+      collectionMode: preview.order.collectionMode,
+      depositCents: preview.order.depositCents,
+      balanceCents: preview.order.balanceCents,
+      netReceivableCents: preview.order.netReceivableCents,
+      partnerId: preview.order.partnerId,
+    }
+    if (existing?.status === AiReviewPackageStatus.pending) {
+      const updated = await tx.aiReviewPackage.update({
+        where: { id: existing.id },
+        data: {
+          candidates: stored as unknown as Prisma.InputJsonValue,
+          baselineSnapshot,
           proposalHash: reviewProposalHash({
             confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
             candidates,
           }),
+          version: { increment: 1 },
           baseObjectVersion: await departureObjectVersion(tx, organizationId, departureId),
-          baselineSnapshot,
-          candidates: stored as unknown as Prisma.InputJsonValue,
-          version: 1,
         },
       })
-      return toReviewPackageView(created)
+      return toReviewPackageView(updated)
+    }
+    const created = await tx.aiReviewPackage.create({
+      data: {
+        organizationId,
+        taskId,
+        conversationId: dto.conversationId,
+        inputBatchId,
+        attemptId: origin?.attemptId ?? sourcePackage.attemptId,
+        ...(origin ? { sourceActionId: origin.sourceActionId } : {}),
+        status: AiReviewPackageStatus.pending,
+        confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
+        payloadSchema: SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
+        capabilityKey: 'departure.source-order-receivable.prepare',
+        capabilityVersion: 1,
+        targetKind: 'departure',
+        targetId: departureId,
+        itemIdentity: nextReviewItemIdentity(
+          (
+            await tx.aiReviewPackage.findMany({
+              where: { inputBatchId },
+              select: { itemIdentity: true },
+            })
+          ).map((pkg) => pkg.itemIdentity),
+        ),
+        proposalHash: reviewProposalHash({
+          confirmationUnit: SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
+          candidates,
+        }),
+        baseObjectVersion: await departureObjectVersion(tx, organizationId, departureId),
+        baselineSnapshot,
+        candidates: stored as unknown as Prisma.InputJsonValue,
+        version: 1,
+      },
     })
+    return toReviewPackageView(created)
   }
 
   async prepareResourcePayableReviews(
@@ -319,44 +431,50 @@ export class ReviewCollaborationService {
       throw new BadRequestException('应付选择不能包含重复资源')
     }
     await this.departures.getById(organizationId, departureId)
-    return this.prisma.$transaction(async (tx) => {
-      await lockAgentConversation(tx, organizationId, dto.conversationId)
-      const conversation = await tx.aiConversation.findFirst({
-        where: { id: dto.conversationId, organizationId, creatorUserId: userId },
-      })
-      if (!conversation) {
-        throw new NotFoundException('会话不存在')
-      }
-      const successRecords = await tx.aiReviewRecord.findMany({
-        where: {
-          organizationId,
-          writeResult: AiReviewWriteResult.success,
-          package: {
-            conversationId: dto.conversationId,
-            payloadSchema: {
-              in: [SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA, DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA],
-            },
-            status: AiReviewPackageStatus.confirmed,
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        include: { package: true },
-      })
-      const prepared: AiReviewPackageView[] = []
-      for (const item of dto.items) {
-        prepared.push(
-          await this.prepareOneResourcePayableReview(tx, {
-            organizationId,
-            departureId,
-            conversationId: dto.conversationId,
-            sourceType: item.sourceType,
-            sourceId: item.sourceId,
-            successRecords,
-          }),
-        )
-      }
-      return prepared
+    return this.prisma.$transaction((tx) => this.prepareResourcePayableReviewsInTx(tx, organizationId, userId, departureId, dto))
+  }
+
+  async prepareResourcePayableReviewsInTx(
+    tx: Prisma.TransactionClient, organizationId: string, userId: string, departureId: string,
+    dto: { conversationId: string; items: Array<{ sourceType: 'segment_resource' | 'departure_resource'; sourceId: string }> },
+    origin?: InitialFinanceOrigin,
+  ): Promise<AiReviewPackageView[]> {
+    await lockAgentConversation(tx, organizationId, dto.conversationId)
+    const conversation = await tx.aiConversation.findFirst({
+      where: { id: dto.conversationId, organizationId, creatorUserId: userId },
     })
+    if (!conversation) {
+      throw new NotFoundException('会话不存在')
+    }
+    const successRecords = await tx.aiReviewRecord.findMany({
+      where: {
+        organizationId,
+        writeResult: AiReviewWriteResult.success,
+        package: {
+          conversationId: dto.conversationId,
+          payloadSchema: {
+            in: [SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA, DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA],
+          },
+          status: AiReviewPackageStatus.confirmed,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { package: true },
+    })
+    const prepared: AiReviewPackageView[] = []
+    for (const item of dto.items) {
+      prepared.push(
+        await this.prepareOneResourcePayableReview(tx, {
+          organizationId,
+          departureId,
+          conversationId: dto.conversationId,
+          sourceType: item.sourceType,
+          sourceId: item.sourceId,
+          successRecords, origin,
+        }),
+      )
+    }
+    return prepared
   }
 
   private async prepareOneResourcePayableReview(
@@ -367,6 +485,7 @@ export class ReviewCollaborationService {
       conversationId: string
       sourceType: 'segment_resource' | 'departure_resource'
       sourceId: string
+      origin?: InitialFinanceOrigin
       successRecords: Array<{
         afterSnapshot: unknown
         package: AiReviewPackage
@@ -380,8 +499,8 @@ export class ReviewCollaborationService {
       return ref?.objectKind === expectedKind && ref.objectId === params.sourceId
     })
     const sourcePackage = sourceRecord?.package
-    const taskId = sourcePackage?.taskId
-    const inputBatchId = sourcePackage?.inputBatchId
+    const taskId = params.origin?.taskId ?? sourcePackage?.taskId
+    const inputBatchId = params.origin?.inputBatchId ?? sourcePackage?.inputBatchId
     if (!sourcePackage || !taskId || !inputBatchId) {
       throw new BadRequestException('只能从本次成功录入且尚未提交的资源继续提交应付')
     }
@@ -472,7 +591,8 @@ export class ReviewCollaborationService {
         taskId,
         conversationId: params.conversationId,
         inputBatchId,
-        attemptId: sourcePackage.attemptId,
+        attemptId: params.origin?.attemptId ?? sourcePackage.attemptId,
+        ...(params.origin ? { sourceActionId: params.origin.sourceActionId } : {}),
         status: AiReviewPackageStatus.pending,
         confirmationUnit: RESOURCE_PAYABLE_CONFIRMATION_UNIT,
         payloadSchema: RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,

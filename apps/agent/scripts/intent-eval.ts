@@ -108,6 +108,7 @@ async function main() {
       if (!address || typeof address === 'string') throw new Error('Fixture listener unavailable')
       try {
         const mastra = createAiCreateMastraFromDefinition({ ...config,
+          pendingItems, currentUserText: fixture.text,
           apiBaseUrl: `http://127.0.0.1:${address.port}`, serviceSecret: 'eval-only',
         }, context)
         const executor = createMastraHeadlessExecutor({ readUserText: async () => userText,

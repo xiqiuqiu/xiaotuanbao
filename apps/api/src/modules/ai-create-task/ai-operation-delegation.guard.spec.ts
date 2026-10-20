@@ -1,12 +1,17 @@
 import { ExecutionContext } from '@nestjs/common'
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host'
 import {
   AI_CREATE_AGENT_DEFINITION_REF,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+  DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
+  DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
+  INITIAL_FINANCE_PROPOSE_CAPABILITY_REF,
 } from '@xiaotuanbao/ai-contracts'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiOperationDelegationGuard } from './ai-operation-delegation.guard'
 
-function contextWithBearer(token: string): {
+function contextWithBearer(token: string, toolName = 'getTaskContext'): {
   ctx: ExecutionContext
   request: { header: (name: string) => string; user?: unknown }
 } {
@@ -15,9 +20,8 @@ function contextWithBearer(token: string): {
   }
   return {
     request,
-    ctx: {
-      switchToHttp: () => ({ getRequest: () => request }),
-    } as ExecutionContext,
+    ctx: new ExecutionContextHost([request], undefined,
+      Object.defineProperty(() => undefined, 'name', { value: toolName })),
   }
 }
 
@@ -92,7 +96,7 @@ describe('AiOperationDelegationGuard', () => {
     }
     const authService = {
       getPermissionKeysForUser: jest.fn().mockResolvedValue(
-        options?.permissionKeys ?? ['departure:write'],
+        options?.permissionKeys ?? ['departure:write', '/departure'],
       ),
     }
     const configService = {
@@ -194,6 +198,13 @@ describe('AiOperationDelegationGuard', () => {
     })
   })
 
+  it.each(['proposeReviewPackage', 'submitReviewPackage'])(
+    'keeps the %s review endpoint authorized by the registered proposal capability', async (toolName) => {
+      const { guard } = createGuard()
+      await expect(guard.canActivate(contextWithBearer('worker-token', toolName).ctx)).resolves.toBe(true)
+    },
+  )
+
   it('accepts a taskless conversation token without departure write permission', async () => {
     const { guard, prisma, authService } = createGuard({
       payload: {
@@ -201,7 +212,7 @@ describe('AiOperationDelegationGuard', () => {
         runId: undefined,
         executionGoal: 'answer',
         agentDefinition: { key: 'conversation.general', version: 1 },
-        grantedCapabilities: [],
+        grantedCapabilities: [CONVERSATION_HISTORY_READ_CAPABILITY_REF],
         objectScopes: [{ organizationId: 'org-1', kind: 'agent_conversation', id: 'conv-1' }],
       },
       attempt: {
@@ -209,11 +220,11 @@ describe('AiOperationDelegationGuard', () => {
         status: 'running',
         agentDefinitionKey: 'conversation.general',
         agentDefinitionVersion: 1,
-        grantedCapabilities: [],
+        grantedCapabilities: [CONVERSATION_HISTORY_READ_CAPABILITY_REF],
       },
       permissionKeys: [],
     })
-    const { ctx, request } = contextWithBearer('taskless-token')
+    const { ctx, request } = contextWithBearer('taskless-token', 'readConversationHistory')
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true)
     expect(authService.getPermissionKeysForUser).not.toHaveBeenCalled()
@@ -234,5 +245,53 @@ describe('AiOperationDelegationGuard', () => {
     })
     expect(request.user).not.toHaveProperty('taskId')
     expect(request.user).not.toHaveProperty('runId')
+  })
+
+  const collaborationCapabilities = [
+    AI_CREATE_CAPABILITY_REFS_BY_TOOL.getTaskContext,
+    INITIAL_FINANCE_PROPOSE_CAPABILITY_REF,
+  ]
+  function collaborationGuard(permissionKeys: string[], grantedCapabilities: Array<{ key: string; version: number }> = collaborationCapabilities) {
+    return createGuard({
+      payload: { agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF, grantedCapabilities },
+      attempt: {
+        id: 'attempt-1', status: 'running',
+        agentDefinitionKey: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF.key,
+        agentDefinitionVersion: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF.version,
+        grantedCapabilities,
+      },
+      permissionKeys,
+    })
+  }
+
+  it.each(['getTaskContext', 'proposeInitialFinanceReviewPackage'])(
+    'allows /departure-only finance users to call granted %s', async (toolName) => {
+      const { guard } = collaborationGuard(['/departure'])
+      await expect(guard.canActivate(contextWithBearer('finance-token', toolName).ctx)).resolves.toBe(true)
+    },
+  )
+
+  it('rejects a resource proposal not granted to the finance token', async () => {
+    const { guard } = collaborationGuard(['/departure'])
+    await expect(guard.canActivate(contextWithBearer('finance-token', 'proposeSegmentResourceReviewPackage').ctx))
+      .rejects.toBeInstanceOf(AiCollaborationHttpException)
+  })
+
+  it('rejects a previously granted resource proposal after departure write permission is revoked', async () => {
+    const { guard } = collaborationGuard(['/departure'], [DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF])
+    await expect(guard.canActivate(contextWithBearer('revoked-token', 'proposeSegmentResourceReviewPackage').ctx))
+      .rejects.toMatchObject({ response: expect.objectContaining({ data: expect.objectContaining({ code: 'PERMISSION_DENIED' }) }) })
+  })
+
+  it('rejects finance tools after /departure permission is revoked', async () => {
+    const { guard } = collaborationGuard([])
+    await expect(guard.canActivate(contextWithBearer('revoked-token', 'proposeInitialFinanceReviewPackage').ctx))
+      .rejects.toMatchObject({ response: expect.objectContaining({ data: expect.objectContaining({ code: 'PERMISSION_DENIED' }) }) })
+  })
+
+  it('keeps departure creation behind departure write permission', async () => {
+    const { guard } = createGuard({ permissionKeys: ['/departure'] })
+    await expect(guard.canActivate(contextWithBearer('creation-token').ctx))
+      .rejects.toMatchObject({ response: expect.objectContaining({ data: expect.objectContaining({ code: 'PERMISSION_DENIED' }) }) })
   })
 })

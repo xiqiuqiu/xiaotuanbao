@@ -47,4 +47,8 @@ describe('mapModelError', () => {
     const original = AiCollaborationError.fromCode('INVALID_FORMAT')
     expect(mapModelError(original)).toBe(original)
   })
+  it('does not confuse completion-guard exhaustion with token capacity', () => {
+    const trip = Object.assign(new Error('事项仍未完成'), { name: 'TripWire', processorId: 'work-items-completion' })
+    expect(mapModelError(trip)).toMatchObject({ code: 'AGENT_OUTCOME_INCOMPLETE', retryable: false })
+  })
 })

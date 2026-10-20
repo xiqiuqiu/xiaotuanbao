@@ -88,6 +88,10 @@ export const getTaskContextOutputSchema = z
       })
       .strip(),
     snapshot: aiCreateDraftSnapshotSchema.extend({
+      initialFinanceSources: z.array(z.object({
+        sourceType: z.enum(['source_order', 'segment_resource', 'departure_resource']),
+        sourceId: z.string().min(1),
+      }).strict()).optional(),
       departureId: z.string().min(1).optional(),
       resources: z.object({
         count: z.number().int().nonnegative(),
@@ -135,6 +139,7 @@ export const getTaskContextOutputSchema = z
           'proposeSegmentResourceReviewPackage',
           'proposeDepartureResourceReviewPackage',
           'proposeDepartureEditReviewPackage',
+          'proposeInitialFinanceReviewPackage',
           'routeConversation',
         ]),
       ]))

@@ -190,6 +190,10 @@ export class AiToolHttpAdapter {
     return this.domain.proposeDepartureEditReview(requireTaskBoundUser(user), body)
   }
 
+  proposeInitialFinanceReviewPackage(user: AiToolRequestUser, body: unknown) {
+    return this.domain.proposeInitialFinanceReview(requireTaskBoundUser(user), body)
+  }
+
   submitReviewPackage(
     user: AiToolRequestUser,
     body: unknown,

@@ -17,7 +17,7 @@ describe('DepartureAgentTaskAdapter #440', () => {
       confirmDepartureReviewPackage: jest.fn().mockResolvedValue({ id: 'task-1' }),
       confirm: jest.fn().mockResolvedValue({ id: 'departure-1' }),
     }
-    const adapter = new DepartureAgentTaskAdapter(tasks as never)
+    const adapter = new DepartureAgentTaskAdapter(tasks as never, {} as never)
     const caller = {
       userId: 'user-1',
       organizationId: 'org-1',

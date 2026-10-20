@@ -219,7 +219,7 @@ export async function handleHeadlessRun(
   const requestContext = bound.requestContext
 
   try {
-    await runWithAssistRequestContext({ delegationToken, ...requestContext, pendingItems: parsedRequest.data.pendingItems }, () =>
+    await runWithAssistRequestContext({ delegationToken, ...requestContext, pendingItems: parsedRequest.data.pendingItems, currentUserText: parsedRequest.data.currentUserText }, () =>
       writeNdjsonRun(request, response, (signal) =>
         iterateHeadlessFrames(executor, { ...parsedRequest.data, userText }, signal),
       ),

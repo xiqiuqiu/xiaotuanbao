@@ -181,7 +181,7 @@ export const DEPARTURE_COLLABORATION_TASK_DESCRIPTOR: TaskDescriptor = {
   version: 1,
   defaultTitle: '发团协作',
   attachmentLabel: '当前发团协作',
-  requiredPermissionKey: 'departure:write',
+  requiredPermissionKey: '/departure',
   agentDefinition: DEPARTURE_COLLABORATION_AGENT_DEFINITION_REF,
   registeredIntent: {
     key: DEPARTURE_COLLABORATION_GOAL_INTENT_KEY,

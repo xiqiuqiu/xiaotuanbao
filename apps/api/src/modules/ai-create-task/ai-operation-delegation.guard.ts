@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
 import { OrganizationStatus, UserStatus, AiAgentAttemptStatus } from '@prisma/client'
-import { requestContextSchema } from '@xiaotuanbao/ai-contracts'
+import {
+  registeredCapabilityDefinitionForTool,
+  registeredTaskDescriptors,
+  requestContextSchema,
+} from '@xiaotuanbao/ai-contracts'
 import {
   AI_OP_DELEGATION_JWT_AUD,
   AI_OP_DELEGATION_JWT_TYP,
@@ -92,6 +96,15 @@ export class AiOperationDelegationGuard implements CanActivate {
     if (!trustedContext.success) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
+    const toolName = context.getHandler().name
+    const capability = registeredCapabilityDefinitionForTool(
+      toolName === 'submitReviewPackage' ? 'proposeReviewPackage' : toolName,
+    )
+    if (!capability || !trustedContext.data.grantedCapabilities.some(
+      (grant) => grant.key === capability.key && grant.version === capability.version,
+    )) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
 
     const user = await this.prisma.user.findFirst({
       where: {
@@ -107,9 +120,18 @@ export class AiOperationDelegationGuard implements CanActivate {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
+    const permissionKeys = taskBound || capability.requiredPermissionKeys.length > 0
+      ? await this.authService.getPermissionKeysForUser(user.id)
+      : []
+    if (capability.requiredPermissionKeys.some((key) => !permissionKeys.includes(key))) {
+      throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
+    }
     if (taskBound) {
-      const permissionKeys = await this.authService.getPermissionKeysForUser(user.id)
-      if (!permissionKeys.includes('departure:write')) {
+      const descriptor = registeredTaskDescriptors.findByAgentDefinition(trustedContext.data.agentDefinition)
+      if (!descriptor) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      if (!permissionKeys.includes(descriptor.requiredPermissionKey)) {
         throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
       }
       if (!isAiCreateAssistEnabledForUser(this.configService, user.id)) {

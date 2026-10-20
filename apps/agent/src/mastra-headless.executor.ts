@@ -1,4 +1,5 @@
 import { workItemsInputSchema, preservesWorkItems, type RecordedWorkItem } from './work-items.tool'
+import { toolPayload, workItemReferences, validateRecordedWorkItems, resolveRecordedWorkItems, type WorkItemIssue } from './work-item-results'
 import {
   AI_CREATE_CAPABILITY_DEFINITIONS,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
@@ -7,17 +8,11 @@ import {
   CONVERSATION_ROUTING_TOOL,
   conversationRoutingOutputSchema,
   registeredTaskDescriptors,
-  submitReviewPackageModelInputSchema,
-  submitSegmentResourceReviewModelInputSchema,
-  submitDepartureResourceReviewModelInputSchema,
-  submitDepartureEditReviewModelInputSchema,
-  submitSourceOrderReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   createThinkTagSplitter,
   PUBLIC_REPLY_FALLBACK,
   selectPublicReply,
   validateHeadlessOutcomeAgainstGoal,
-  type HeadlessResolvedItemsResult,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessRunFrame,
@@ -97,8 +92,10 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
         if (stepReasoning) {
           streamedReasoning.push(stepReasoning)
         }
-        if (!stepHasTools) {
-          streamedPublicText += stepPublicText
+        if (stepHasTools) {
+          streamedPublicText = ''
+        } else if (stepPublicText) {
+          streamedPublicText = stepPublicText
         }
         stepReasoning = ''
         stepPublicText = ''
@@ -108,7 +105,9 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       if (streamed?.fullStream) {
         for await (const chunk of iterateUnknownStream(streamed.fullStream)) {
           if (chunk && typeof chunk === 'object' && 'type' in chunk) {
-            if (chunk.type === 'step-start') stepStartedAt = Date.now()
+            if (chunk.type === 'step-start') {
+              stepStartedAt = Date.now()
+            }
             if (chunk.type === 'step-finish' && stepStartedAt != null) {
               stepLatencies.push(Date.now() - stepStartedAt)
               stepStartedAt = undefined
@@ -127,6 +126,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
           if (isStepBoundaryChunk(chunk)) {
             yield* consumeThinkParts(thinkTags.flush())
             commitModelStep()
+            if ((chunk as { type: string }).type === 'step-start') streamedPublicText = ''
             continue
           }
           const reasoning = reasoningTextFromChunk(chunk)
@@ -225,7 +225,12 @@ function resultFromGenerate(
     return capacityFailure(diagnostic)
   }
   if (publicReply.request?.executionGoal === 'resolve_items') {
-    return resolvedItemsFromGenerate(output, publicReply.request, diagnostic)
+    return resolvedItemsFromGenerate(output, publicReply.request, diagnostic, selectPublicReply({
+      streamedPublicText: publicReply.streamedPublicText,
+      streamedReasoning: publicReply.streamedReasoning,
+      fullOutputText: publicReply.allowFullOutputFallback === false ? '' : output.text ?? '',
+      fallback: '',
+    }))
   }
   const reviewPackages = acceptedReviewPackagesFromGenerate(output)
   if (reviewPackages.length > 0) {
@@ -243,6 +248,7 @@ function resultFromGenerate(
     'proposeSegmentResourceReviewPackage',
     'proposeDepartureResourceReviewPackage',
     'proposeDepartureEditReviewPackage',
+    'proposeInitialFinanceReviewPackage',
   ].some((name) => {
     const result = lastToolResult(output.toolResults, name)
     return result && typeof result === 'object' && 'status' in result && result.status === 'rejected'
@@ -427,6 +433,8 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
           toolCalls.slice(0, index).filter((item) => toolNameFromCall(item) === toolName).length
         ]
     const capability = capabilityForToolName(toolName)
+    const output = result?.result && typeof result.result === 'object'
+      ? result.result as { status?: string; issue?: { code?: string } } : null
     return [
       {
         stepId: `tool-${index + 1}`,
@@ -438,16 +446,13 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined, toolResults: unkno
         status:
           !result || result.isError === true || result.error != null
             ? 'failed' as const
+            : output?.status === 'rejected' ? 'schema_rejected' as const
+            : output?.status === 'denied' ? 'denied' as const
             : 'succeeded' as const,
+        ...(output?.status === 'rejected' ? { errorCode: output.issue?.code ?? 'INVALID_FORMAT' } : {}),
       },
     ]
   })
-}
-
-function toolPayload(value: unknown): { toolCallId?: string; toolName?: string; isError?: boolean; error?: unknown; result?: unknown } {
-  if (!value || typeof value !== 'object') return {}
-  const item = value as { payload?: object }
-  return item.payload ?? value
 }
 
 function capabilityForToolName(toolName: string) {
@@ -476,29 +481,7 @@ function toolNameFromCall(call: unknown): string | null {
 }
 
 function acceptedReviewPackagesFromGenerate(output: MastraGenerateLike) {
-  const packages: Extract<HeadlessExecutionResult, { kind: 'awaiting_review' }>['reviewPackage'][] = []
-  const seenCalls = new Set<string>()
-  for (const item of output.toolResults ?? []) {
-    const { toolName, toolCallId, result } = toolPayload(item)
-    if (!['proposeReviewPackage', 'proposeSegmentResourceReviewPackage', 'proposeDepartureResourceReviewPackage', 'proposeDepartureEditReviewPackage', 'proposeSourceOrderReviewPackage'].includes(toolName ?? '')) continue
-    if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'accepted') continue
-    if (toolCallId && seenCalls.has(toolCallId)) continue
-    const schema = toolName === 'proposeReviewPackage'
-      ? submitReviewPackageModelInputSchema
-      : toolName === 'proposeSegmentResourceReviewPackage'
-        ? submitSegmentResourceReviewModelInputSchema
-        : toolName === 'proposeDepartureResourceReviewPackage'
-          ? submitDepartureResourceReviewModelInputSchema
-          : toolName === 'proposeDepartureEditReviewPackage'
-            ? submitDepartureEditReviewModelInputSchema
-            : submitSourceOrderReviewPackageModelInputSchema
-    const { status, payloadSchema, normalizedProposal, ...proposal } = result as Record<string, unknown>
-    const parsed = schema.safeParse(proposal)
-    if (!parsed.success) continue
-    if (toolCallId) seenCalls.add(toolCallId)
-    packages.push(parsed.data)
-  }
-  return packages
+  return workItemReferences(output.toolResults ?? []).reviews
 }
 
 function acceptedConversationRoutingFromGenerate(output: MastraGenerateLike) {
@@ -534,78 +517,49 @@ function lastToolResult(toolResults: unknown[] | undefined, expectedToolName: st
   return last
 }
 
-/** 模型没把事项了结就停下来时，追问里只引用用户自己的原话，不复述模型半截的内部说法。 */
-function unresolvedItemPrompt(request: string): string {
-  const quoted = request.length > 40 ? `${request.slice(0, 40)}…` : request
-  return `「${quoted}」这次没有处理完。可以补充缺少的信息，或换一种说法再发一次。`
-}
-
 function resolvedItemsFromGenerate(
   output: MastraGenerateLike,
   request: HeadlessExecutionRequest,
   diagnostic: ReturnType<typeof diagnosticFromMastraGenerate>,
+  finalPublicText: string,
 ): HeadlessExecutionResult {
-  const fail = (): HeadlessExecutionResult => ({ kind: 'failed', error: AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE').toJSON(), diagnostic })
   let items: RecordedWorkItem[] = (request.pendingItems ?? []).map(item => ({ ...item, resolution: { kind: 'pending' } }))
+  const fail = (outcomeIssue: WorkItemIssue): HeadlessExecutionResult => ({
+    kind: 'failed', error: AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE').toJSON(),
+    ...(outcomeIssue.code !== 'ITEM_LEDGER_CHANGED' && diagnostic.toolSteps.every(step => step.toolName === 'recordWorkItems' || step.status === 'succeeded')
+      && items.some(item => item.goal === 'answer' && item.resolution.kind === 'answered')
+      ? { completedAnswers: items.flatMap(item => item.goal === 'answer' && item.resolution.kind === 'answered'
+        ? [{ ...item, goal: 'answer' as const, resolution: item.resolution }] : []) } : {}),
+    diagnostic: { ...diagnostic, outcomeIssue },
+  })
   const seenCalls = new Set<string>()
-  const routing: ReturnType<typeof conversationRoutingOutputSchema.parse>[] = []
   for (const raw of output.toolResults ?? []) {
     const { toolName, toolCallId, result } = toolPayload(raw)
     if (toolCallId && seenCalls.has(toolCallId)) continue
     if (toolCallId) seenCalls.add(toolCallId)
-    if (toolName === CONVERSATION_ROUTING_TOOL.name) {
-      const parsed = conversationRoutingOutputSchema.safeParse(result)
-      if (parsed.success) routing.push(parsed.data)
-    }
     if (toolName !== 'recordWorkItems' || !result || typeof result !== 'object' || !('status' in result) || result.status !== 'accepted') continue
     const parsed = workItemsInputSchema.safeParse(result)
-    if (!parsed.success || !preservesWorkItems(items, parsed.data.items)) return fail()
+    if (!parsed.success || !preservesWorkItems(items, parsed.data.items)) return fail({ code: 'ITEM_LEDGER_CHANGED' })
     items = parsed.data.items
   }
-  if (items.length === 0) return fail()
-  const resolved: HeadlessResolvedItemsResult['items'] = []
-  const usedRouting = new Set<number>()
-  for (const item of items) {
-    const resolution = item.resolution
-    // 模型把事项记下来、做了一步就停，事项还停在 pending。整轮判失败会让用户只看到
-    // 「没有形成可确认的结果」，已做的那步也丢了。改成把没了结的事项收成一条追问，
-    // 让这一轮留下可回答的卡片。
-    if (resolution.kind === 'pending') {
-      resolved.push({
-        ...item,
-        resolution: {
-          kind: 'awaiting_user_input',
-          interaction: { type: 'free_text', prompt: unresolvedItemPrompt(item.request) },
-        },
-      })
-      continue
-    }
-    if (resolution.kind === 'withdrawn' && !request.currentUserText?.includes(resolution.userExcerpt)) return fail()
-    if (resolution.kind === 'awaiting_user_input' || resolution.kind === 'registered_intent') {
-      if (usedRouting.has(resolution.routingIndex)) return fail()
-      usedRouting.add(resolution.routingIndex)
-      const actual = routing[resolution.routingIndex]
-      if (resolution.kind === 'awaiting_user_input') {
-        if (!actual || !('interaction' in actual)) return fail()
-        resolved.push({ ...item, resolution: { kind: 'awaiting_user_input', interaction: actual.interaction } })
-      } else {
-        if (!actual || !('registeredIntent' in actual)) return fail()
-        resolved.push({ ...item, resolution: { kind: 'registered_intent', intent: actual.registeredIntent } })
-      }
-    } else resolved.push({ ...item, resolution })
-  }
-  const messages = resolved.flatMap(item => {
+  const references = workItemReferences(output.toolResults ?? [])
+  const issue = validateRecordedWorkItems(items, references, request.currentUserText, false)
+  if (issue) return fail(issue)
+  const resolved = resolveRecordedWorkItems(items, references)
+  // Only a pure answer can use the final public step; prose must never claim an unconfirmed action succeeded.
+  const publicAnswer = finalPublicText && resolved.every(item => item.resolution.kind === 'answered') ? finalPublicText : undefined
+  const messages = resolved.map(item => {
     switch (item.resolution.kind) {
-      case 'answered': return [item.resolution.message]
-      case 'awaiting_user_input': return [item.resolution.interaction.prompt]
-      case 'awaiting_review': return [`${item.request}：已生成待审核建议。`]
-      case 'registered_intent': return [`${item.request}：已登记任务目标，等待确认。`]
-      case 'withdrawn': return [`${item.request}：已按你的要求撤销。`]
+      case 'answered': return item.resolution.message
+      case 'awaiting_user_input': return item.resolution.interaction.prompt
+      case 'awaiting_review': return `${item.request}：已生成待审核建议。`
+      case 'registered_intent': return `${item.request}：已登记任务目标，等待确认。`
+      case 'withdrawn': return `${item.request}：已按你的要求撤销。`
     }
   })
   return {
-    kind: 'resolved_items', message: messages.join('\n\n'), items: resolved,
-    reviewPackages: acceptedReviewPackagesFromGenerate(output),
+    kind: 'resolved_items', message: publicAnswer ?? messages.join('\n\n'), items: resolved,
+    ...(publicAnswer ? { publicAnswer } : {}), reviewPackages: references.reviews,
     completionBasis: { kind: 'resolved_items' }, diagnostic,
   }
 }

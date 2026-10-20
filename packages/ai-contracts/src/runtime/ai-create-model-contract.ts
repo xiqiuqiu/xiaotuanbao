@@ -66,6 +66,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   proposeSourceOrderReviewPackage: '从用户对话或材料提取当前发团的一个客源单审核事项。只提交有证据的候选，不默认缺失字段，不写正式客源单或应收。',
   proposeSegmentResourceReviewPackage:
     '提出已有发团行程段资源的待审核候选（行程段、种类、供应商、资源名称、正总价、备注、容量提醒）。itinerarySegmentId 必须来自当前业务事实中的正式行程段，不能凭页面日期默认挂靠。供应商 ID 必须来自 searchSuppliers。只做预校验，不写入资源，也不提交应付。',
+  proposeInitialFinanceReviewPackage: '按用户明确选择，为本会话已成功创建的客源或资源准备独立初始应收/应付审核；只选正式来源，不填写金额、账期或收付对象，不生成账款或资金。',
   proposeDepartureEditReviewPackage: '为已有行程段修改或已有客源游客追加/修改生成审核稿；使用本次正式数据的目标 ID 和 objectVersion，确认后才写入，不删除游客、不改报价或计费人数。',
   proposeDepartureResourceReviewPackage:
     '提出已有发团的发团级资源待审核候选（种类、供应商、资源名称、正总价、备注、容量提醒）。用于明确全程或仅覆盖部分日期的整体费用；跨日日期写入备注，不拆价，不强挂某一天。材料已有的名称和种类必须提交，缺总价也不要只交备注。整体多服务报价按业务含义归类：地接/旅行社整体承接可归拼出；不要自动全部归为拼出。材料明确写种类其他时可以提交其他。供应商 ID 必须来自 searchSuppliers；材料点名的供应商可以使用。金额未知不要用 0；免费服务不生成费用行。只做预校验，不写入资源，也不提交应付。',

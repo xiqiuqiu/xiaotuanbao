@@ -3,6 +3,7 @@ import { AiConversationService } from './ai-conversation.service'
 function setup(pendingIds: string[], pendingInteractionBatches: string[] = []) {
   const batches = ['original', 'revision-1', 'revision-2', 'multi'].map((id, index) => ({
     id, conversationId: 'conv-1', conversationVersion: index + 1,
+    taskLinks: [{ taskId: 'task-1' }],
     status: pendingInteractionBatches.includes(id) ? 'awaiting_user_input' : 'awaiting_review', userMessageEventId: `message-${id}`,
   }))
   const messages = [
@@ -23,7 +24,7 @@ function setup(pendingIds: string[], pendingInteractionBatches: string[] = []) {
     aiInputBatch: {
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn(({ where }) => Promise.resolve(where.id?.in
-        ? batches.filter((batch) => where.id.in.includes(batch.id) && (typeof where.status === 'string' ? batch.status === where.status : where.status.in.includes(batch.status)))
+        ? batches.filter((batch) => where.id.in.includes(batch.id) && (typeof where.status === 'string' ? batch.status === where.status : where.status.in.includes(batch.status)) && (where.OR ? where.OR.some((scope: { id?: { in: string[] }; taskLinks?: { some: { taskId: string } } }) => scope.id?.in?.includes(batch.id) || batch.taskLinks.some((link) => link.taskId === scope.taskLinks?.some.taskId)) : batch.taskLinks.some((link) => link.taskId === where.taskLinks?.some?.taskId)))
         : [])),
       create: jest.fn().mockResolvedValue({ id: 'continuation' }),
       update: jest.fn(({ where, data }) => {
@@ -145,4 +146,21 @@ it('records one creation receipt without a model batch when all waiting items ar
         taskId: 'task-1', batchId: 'original', text: '本次审核建议已写入建团草稿。',
       },
     }) }]])
+})
+
+it('finishes a legacy unlinked review batch without touching another task batch', async () => {
+  const { tx, service, batches } = setup([])
+  batches[0].taskLinks = []
+  batches[1].taskLinks = [{ taskId: 'other-task' }]
+  tx.aiReviewPackage.findFirst.mockResolvedValue({ conversationId: 'conv-1', inputBatchId: 'original' })
+  tx.aiConversationEvent.findMany.mockResolvedValue([
+    { payload: { batchId: 'revision-1', reviewPackageId: 'other-task-review' } },
+  ])
+  const events = await service.finalizeReviewDisposition(tx as never, {
+    organizationId: 'org-1', taskId: 'task-1', userId: 'user-1', reviewPackageId: 'pkg-b', inputBatchId: 'original', disposition: 'confirmed',
+  })
+  expect(batches[0].status).toBe('completed')
+  expect(batches[1].status).toBe('awaiting_review')
+  expect(events.map((event) => event.payload)).toEqual([{ batchId: 'original', status: 'completed', reviewPackageId: 'pkg-b', disposition: 'confirmed' }])
+  expect(tx.agentTask.updateMany).toHaveBeenCalledWith({ where: { id: 'task-1', status: 'waiting' }, data: { status: 'active', statusVersion: { increment: 1 } } })
 })

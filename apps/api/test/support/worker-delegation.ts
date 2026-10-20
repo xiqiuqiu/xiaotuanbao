@@ -32,6 +32,9 @@ export async function mintRunningAttemptDelegation(options: {
   userId: string
   taskId: string
   conversationId: string
+  agentDefinition?: { key: string; version: number }
+  grantedCapabilities?: Array<{ key: string; version: number }>
+  userText?: string
 }): Promise<{
   runId: string
   attemptId: string
@@ -41,6 +44,8 @@ export async function mintRunningAttemptDelegation(options: {
   delegationToken: string
 }> {
   const { app, prisma, organizationId, userId, taskId, conversationId } = options
+  const definition = options.agentDefinition ?? AI_CREATE_AGENT_DEFINITION_REF
+  const capabilities = options.grantedCapabilities ?? Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL)
   const last = await prisma.aiConversationEvent.findFirst({
     where: { conversationId },
     orderBy: { sequence: 'desc' },
@@ -53,7 +58,7 @@ export async function mintRunningAttemptDelegation(options: {
       conversationId,
       sequence,
       kind: AiConversationEventKind.user_message,
-      payload: { text: 'e2e worker-shaped attempt' },
+      payload: { text: options.userText ?? 'e2e worker-shaped attempt' },
     },
   })
   const batch = await prisma.aiInputBatch.create({
@@ -105,9 +110,9 @@ export async function mintRunningAttemptDelegation(options: {
       inputBatchId: batch.id,
       jobId: job.id,
       contextManifestId: manifest.id,
-      agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
-      agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
-      grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+      agentDefinitionKey: definition.key,
+      agentDefinitionVersion: definition.version,
+      grantedCapabilities: capabilities,
       status: AiAgentAttemptStatus.running,
     },
   })
@@ -124,10 +129,10 @@ export async function mintRunningAttemptDelegation(options: {
     attemptId: attempt.id,
     contextManifestId: manifest.id,
     executionGoal: 'propose_change',
-    agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
-    grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+    agentDefinition: definition,
+    grantedCapabilities: capabilities,
     entitlementStatus: 'unavailable',
-    objectScopes: [{ organizationId, kind: 'ai_create_task', id: taskId }],
+    objectScopes: [{ organizationId, kind: definition.key === 'departure.collaboration' ? 'agent_task' : 'ai_create_task', id: taskId }],
   }
   const delegationToken = await jwt.signAsync(payload, {
     expiresIn: 600,

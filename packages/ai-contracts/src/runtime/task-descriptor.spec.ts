@@ -4,6 +4,7 @@ import {
   DEPARTURE_CREATION_ROUTING_DECISION,
   DEPARTURE_CREATION_TASK_DESCRIPTOR,
   DEPARTURE_CREATION_TASK_TYPE,
+  DEPARTURE_COLLABORATION_TASK_DESCRIPTOR,
   TaskDescriptorRegistry,
   buildTaskCompletedHref,
   buildTaskWorkspaceHref,
@@ -40,6 +41,10 @@ const extraDescriptor: TaskDescriptor = {
 }
 
 describe('Task Descriptor Registry #439', () => {
+  it('uses page access for formal collaboration while keeping departure creation writable', () => {
+    expect(DEPARTURE_COLLABORATION_TASK_DESCRIPTOR.requiredPermissionKey).toBe('/departure')
+    expect(DEPARTURE_CREATION_TASK_DESCRIPTOR.requiredPermissionKey).toBe('departure:write')
+  })
   it('registers the existing basic-info departure task with current User-visible fields', () => {
     const descriptor = registeredTaskDescriptors.getByTaskType(DEPARTURE_CREATION_TASK_TYPE)
 

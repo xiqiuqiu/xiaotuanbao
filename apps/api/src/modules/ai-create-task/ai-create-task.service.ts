@@ -1,3 +1,4 @@
+import { readInitialFinanceSources } from './initial-finance-sources'
 import { formatDateOnly } from '../departure/departure-date.utils'
 import { createHash } from 'node:crypto'
 import {
@@ -399,7 +400,7 @@ export class AiCreateTaskService {
             currentPhase: AiCreatePhase.BASIC_INFO,
             creatorUserId: collaborationTask.ownerUserId,
           },
-          snapshot,
+          snapshot: { ...snapshot, initialFinanceSources: caller.conversationId ? await readInitialFinanceSources(tx, caller.organizationId, caller.conversationId, departure.id) : [] },
           objectVersion: await departureObjectVersion(tx, caller.organizationId, departure.id),
           pending: { hasPendingReview: Boolean(pending), reviewPackageId: pending?.id ?? null },
           availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,

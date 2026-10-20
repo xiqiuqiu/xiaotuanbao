@@ -1,5 +1,6 @@
 import { AiCollaborationError, type AiCollaborationErrorCode } from '@xiaotuanbao/ai-contracts'
 import { isTokenLimiterTripWire } from './capacity-tripwire'
+import { WORK_ITEMS_PROCESSOR_ID } from './work-item-results'
 
 export function mapAgentFetchError(payload: unknown, httpStatus?: number): AiCollaborationError {
   if (payload && typeof payload === 'object' && 'code' in payload) {
@@ -32,6 +33,9 @@ export function mapAgentFetchError(payload: unknown, httpStatus?: number): AiCol
 export function mapModelError(error: unknown): AiCollaborationError {
   if (error instanceof AiCollaborationError) {
     return error
+  }
+  if (error instanceof Error && 'processorId' in error && error.processorId === WORK_ITEMS_PROCESSOR_ID) {
+    return AiCollaborationError.fromCode('AGENT_OUTCOME_INCOMPLETE')
   }
 
   if (isTokenLimiterTripWire(error)) {

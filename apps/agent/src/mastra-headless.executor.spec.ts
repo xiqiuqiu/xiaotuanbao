@@ -383,7 +383,7 @@ describe('createMastraHeadlessExecutor', () => {
     })
   })
 
-  it('overwrites previous-step reasoning and keeps public reply accumulating', async () => {
+  it('keeps reasoning per step and publishes only the final public step', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个喀纳斯3日团',
       stream: async () => ({
@@ -405,7 +405,7 @@ describe('createMastraHeadlessExecutor', () => {
     const reasoning = frames.filter((frame) => frame.type === 'reasoning.delta')
     const messages = frames.filter((frame) => frame.type === 'message.delta')
     expect(reasoning.map((frame) => frame.text)).toEqual(['第一段思考', '第二段思考'])
-    expect(messages.map((frame) => frame.text)).toEqual(['已记下路线。日期待核对。'])
+    expect(messages.map((frame) => frame.text)).toEqual(['日期待核对。'])
     expect(frames.some((frame) => frame.type === 'run.heartbeat')).toBe(false)
   })
 
@@ -526,7 +526,8 @@ describe('createMastraHeadlessExecutor', () => {
               toolName: 'proposeReviewPackage',
               capabilityKey: 'departure.review-package.propose',
               capabilityVersion: 1,
-              status: 'succeeded',
+              status: 'schema_rejected',
+              errorCode: 'INVALID_FORMAT',
             },
           ],
           modelSteps: [],
