@@ -426,7 +426,9 @@ function createReviewPackageActivityRenderer(
                   ? '已确认'
                   : content.disposition === 'rejected'
                     ? '已拒绝'
-                    : '待审核'}
+                    : content.disposition === 'cancelled'
+                      ? '已取消'
+                      : '待审核'}
               </Tag>
             </div>
           }
@@ -448,7 +450,9 @@ function createReviewPackageActivityRenderer(
                 onClick={() =>
                   openTask(content.taskId!, content.taskType, {
                     departureId: content.departureId,
-                    reviewPackageId: content.reviewPackageId,
+                    reviewPackageId: content.taskType !== DEPARTURE_COLLABORATION_TASK_TYPE && content.disposition
+                      ? undefined
+                      : content.reviewPackageId,
                   })
                 }
               >
@@ -663,6 +667,15 @@ function useAgentConversationChatController(
   }, [conversationId, conversationView, currentPageAttachment, syncDefaultPageAttachment])
 
   useEffect(() => {
+    if (attachedPageAttachment?.kind !== 'agent_task' || !attachedPageAttachment.reviewPackageId) return
+    if (events.some((event) => event.kind === 'batch_status' &&
+      event.payload.reviewPackageId === attachedPageAttachment.reviewPackageId &&
+      ['confirmed', 'rejected', 'cancelled'].includes(String(event.payload.disposition)))) {
+      detachCurrentPage()
+    }
+  }, [attachedPageAttachment, events, detachCurrentPage])
+
+  useEffect(() => {
     setFocusedReviewPackageId(null)
     useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
   }, [conversationId])
@@ -858,9 +871,9 @@ function useAgentConversationChatController(
           conversationIdRef.current,
           {
             text: outboundText,
+            ...conversationSendContextFromAttachment(attachment),
             ...(reviewPackageId ? { reviewPackageId } : {}),
             ...(files.length > 0 ? { files } : {}),
-            ...conversationSendContextFromAttachment(attachment),
           },
           sendIdempotencyKey,
         )
@@ -884,7 +897,12 @@ function useAgentConversationChatController(
             title: outboundText.slice(0, 40),
           })
         }
-        useAgentConversationStore.getState().detachCurrentPage()
+        if (
+          !(attachment?.kind === 'page_locator' && attachment.locator.kind === 'departure') &&
+          !(attachment?.kind === 'agent_task' && attachment.reviewPackageId)
+        ) {
+          useAgentConversationStore.getState().detachCurrentPage()
+        }
       } catch (error) {
         setErrorText(getAssistErrorText(error))
         updateDraft(nextText)
@@ -1184,7 +1202,7 @@ function useAgentConversationChatController(
   const hasPendingInteraction = useMemo(() => hasPendingInteractionEvent(events), [events])
   const messageView = useMemo(() => ({ reasoningMessage: AgentReasoningMessage, userMessage: ConversationUserMessage }), [])
   const openAgentTask = useCallback(
-    (
+    async (
       taskId: string,
       taskType?: string,
       extras?: { departureId?: string; reviewPackageId?: string },
@@ -1231,10 +1249,14 @@ function useAgentConversationChatController(
         void navigate(agentTaskWorkspaceNavigation(taskId, taskType, extras))
         return
       }
-      if (alreadyOnTask) {
-        return
+      if (!alreadyOnTask) {
+        await navigate(agentTaskWorkspaceNavigation(taskId, taskType))
       }
-      void navigate(agentTaskWorkspaceNavigation(taskId, taskType))
+      if (taskType === 'departure_creation' && extras?.reviewPackageId) {
+        useAgentConversationStore.getState().attachCurrentPage({
+          kind: 'agent_task', taskType, taskId, reviewPackageId: extras.reviewPackageId,
+        })
+      }
     },
     [
       closeGlobalForBusinessNavigation,

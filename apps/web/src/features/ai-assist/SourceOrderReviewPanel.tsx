@@ -27,11 +27,14 @@ export interface SourceOrderReviewPanelProps {
   error?: string
   saving?: boolean
   confirming?: boolean
+  disposing?: boolean
   confirmationBlockedReason?: string
   createdSourceOrderId?: string | null
   continuingReceivables?: boolean
   onSaveGroup?: (corrections: Record<string, unknown>) => Promise<void>
   onConfirm?: () => Promise<void>
+  onReject?: () => Promise<void>
+  onCancel?: () => Promise<void>
   onViewSourceOrder?: (sourceOrderId: string) => void
   onContinueReceivables?: (sourceOrderId: string) => void
   onSkipReceivables?: () => void
@@ -45,11 +48,14 @@ export function SourceOrderReviewPanel({
   saving,
   error,
   confirming,
+  disposing,
   confirmationBlockedReason,
   createdSourceOrderId,
   continuingReceivables,
   onSaveGroup,
   onConfirm,
+  onReject,
+  onCancel,
   onViewSourceOrder,
   onContinueReceivables,
   onSkipReceivables,
@@ -66,7 +72,9 @@ export function SourceOrderReviewPanel({
   const missing = missingSourceOrderLabels(values)
   const missingLabels = new Set(missing)
   const confirmReasonId = useId()
-  const confirmDisabledReason = confirmationBlockedReason ?? sourceOrderConfirmDisabledReason(readOnly, saving, editingGroup, missing)
+  const confirmDisabledReason = disposing
+    ? '正在处理审核建议，请稍候。'
+    : confirmationBlockedReason ?? sourceOrderConfirmDisabledReason(readOnly, saving, editingGroup, missing)
 
   if (createdSourceOrderId) {
     return (
@@ -143,7 +151,7 @@ export function SourceOrderReviewPanel({
           action={
             <ConfirmEmptySourceOrderFields
               values={savedValues}
-              readOnly={readOnly}
+              readOnly={readOnly || Boolean(disposing)}
               editing={Boolean(editingGroup)}
               saving={saving}
               confirming={confirming}
@@ -206,7 +214,7 @@ export function SourceOrderReviewPanel({
             children: (
               <>
                 {editing ? (
-                  <Form layout="vertical" component="div" disabled={readOnly || saving}>
+                  <Form layout="vertical" component="div" disabled={readOnly || saving || disposing}>
                     <div className={styles.fields}>
                       {rows.map((row, index) => (
                         <Form.Item
@@ -242,7 +250,7 @@ export function SourceOrderReviewPanel({
                       type="primary"
                       size="small"
                       loading={saving}
-                      disabled={readOnly || rowDraftPending}
+                      disabled={readOnly || rowDraftPending || disposing}
                       onClick={() => {
                         void onSaveGroup?.(draft)
                           .then(() => {
@@ -260,7 +268,7 @@ export function SourceOrderReviewPanel({
                   <Button
                     className={styles.editGroup}
                     size="small"
-                    disabled={readOnly || Boolean(editingGroup) || confirming}
+                    disabled={readOnly || Boolean(editingGroup) || confirming || disposing}
                     onClick={() => {
                       setEditingGroup(group)
                       setDraft({})
@@ -279,6 +287,18 @@ export function SourceOrderReviewPanel({
           <Typography.Text id={confirmReasonId} type="secondary" role="status">
             {confirmDisabledReason}
           </Typography.Text>
+        ) : null}
+        {onCancel ? (
+          <Button disabled={readOnly || saving || confirming || disposing}
+            onClick={() => void onCancel().catch(() => undefined)}>
+            取消审核
+          </Button>
+        ) : null}
+        {onReject ? (
+          <Button danger disabled={readOnly || saving || confirming || disposing}
+            onClick={() => void onReject().catch(() => undefined)}>
+            拒绝建议
+          </Button>
         ) : null}
         <Button
           type={editingGroup ? 'default' : 'primary'}

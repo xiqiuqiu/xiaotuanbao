@@ -1,4 +1,6 @@
 import type { AddressInfo } from 'node:net'
+import request from 'supertest'
+import { mintRunningAttemptDelegation } from './support/worker-delegation'
 import type { INestApplication } from '@nestjs/common'
 import {
   DirectoryProfileStatus,
@@ -250,7 +252,7 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
   function reviewOutcome(
     objectVersion: number,
     packages: Array<{
-      confirmationUnit: 'source_order_create' | 'segment_resource' | 'departure_resource'
+      confirmationUnit: 'source_order_create' | 'segment_resource' | 'departure_resource' | 'itinerary_segment_update' | 'source_order_guests_update'
       candidates: ReviewCandidate[]
     }>,
   ): HeadlessExecutionResult {
@@ -374,6 +376,192 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
   function getConfirmation(token: string, decisionCommandId: string) {
     return authRequest(app, token).get(`/api/agent/review-decisions/${decisionCommandId}`)
   }
+
+  it('edits an existing segment and appends/updates guests only after review, preserving unrelated guests and quotes', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-已有对象修改`)
+    const partner = await createPartner('名单修改客户')
+    const source = await app.get(SourceOrderService).createWithSelectedGuests(organizationId, departureId, {
+      partnerId: partner.id, adultGuestCount: 3, childGuestCount: 0, adultUnitPriceCents: 100000,
+      collectionMode: 'partner_settled', discountType: 'none',
+    }, [{ name: '张三', phone: '13800000001', gender: 'male' }, { name: '李四', notes: '保留备注' }])
+    const guests = await prisma.sourceOrderGuest.findMany({ where: { sourceOrderId: source.id }, orderBy: { name: 'asc' } })
+    const zhang = guests.find((guest) => guest.name === '张三')!
+    const text = '将第一天改名为拉萨游览并清空目的地；张三电话清空，追加游客王五，其他名单和报价不变'
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [
+      { confirmationUnit: 'itinerary_segment_update', candidates: [candidate('itinerarySegmentId', segmentId, text, 1), candidate('name', '拉萨游览', text, 1), candidate('destination', null, text, 1)] },
+      { confirmationUnit: 'source_order_guests_update', candidates: [candidate('sourceOrderId', source.id, text, 1), candidate('guestChanges', { add: [{ name: '王五' }], update: [{ guestId: zhang.id, phone: null }] }, text, 1)] },
+    ])))
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-formal-edit`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 2)
+    const context = agent.lastTaskContext() as { data: { snapshot: { itinerarySegments: unknown[]; sourceOrders: Array<{ id: string; guests: unknown[] }> } } }
+    expect(context.data.snapshot.itinerarySegments).toEqual(expect.arrayContaining([expect.objectContaining({ id: segmentId, name: '第一天' })]))
+    expect(context.data.snapshot.sourceOrders.find((order) => order.id === source.id)?.guests).toEqual(expect.arrayContaining([expect.objectContaining({ id: zhang.id, phone: '13800000001' })]))
+    expect(await prisma.itinerarySegment.findUniqueOrThrow({ where: { id: segmentId } })).toMatchObject({ name: '第一天', destination: '日喀则' })
+    expect(await prisma.sourceOrderGuest.findMany({ where: { sourceOrderId: source.id } })).toHaveLength(2)
+    const packages = await prisma.aiReviewPackage.findMany({ where: { conversationId }, orderBy: { confirmationUnit: 'asc' } })
+    const segmentPkg = packages.find((pkg) => pkg.confirmationUnit === 'itinerary_segment_update')!
+    expect(segmentPkg.baselineSnapshot).toMatchObject({ itinerarySegmentId: segmentId, name: '第一天' })
+    const corrected = await authRequest(app, coordinatorToken).patch(`/api/agent/review-packages/${segmentPkg.id}`)
+      .send({ expectedPackageVersion: segmentPkg.version, corrections: { name: '拉萨市内游览', notes: '人工补充的行程备注' } }).expect(200)
+    segmentPkg.version = corrected.body.data.pendingReviews.find((pkg: { id: string }) => pkg.id === segmentPkg.id).version
+    await authRequest(app, coordinatorToken).patch(`/api/agent/review-packages/${segmentPkg.id}`)
+      .send({ expectedPackageVersion: segmentPkg.version, corrections: { itinerarySegmentId: 'another-segment' } }).expect(400)
+    const decision = `${testPrefix}-formal-edit-confirm`
+    const selected = packages.map((pkg) => ({ packageId: pkg.id, expectedPackageVersion: pkg.version }))
+    await accept(coordinatorToken, decision, selected).expect(200)
+    await processJobs(conversationId)
+    const receipt = await getConfirmation(coordinatorToken, decision).expect(200)
+    expect(receipt.body.data.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ packageId: segmentPkg.id, status: 'succeeded', resultRef: { objectKind: 'itinerary_segment', objectId: segmentId } }),
+      expect.objectContaining({ status: 'succeeded', resultRef: { objectKind: 'source_order_guests', objectId: source.id } }),
+    ]))
+    expect(await prisma.itinerarySegment.findUniqueOrThrow({ where: { id: segmentId } })).toMatchObject({ name: '拉萨市内游览', destination: null, notes: '人工补充的行程备注' })
+    expect(await prisma.sourceOrderGuest.findMany({ where: { sourceOrderId: source.id } })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: zhang.id, name: '张三', phone: null, gender: 'male' }),
+      expect.objectContaining({ name: '李四', notes: '保留备注' }), expect.objectContaining({ name: '王五' }),
+    ]))
+    expect(await prisma.sourceOrder.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({ adultGuestCount: 3, netReceivableCents: 300000, adultUnitPriceCents: 100000 })
+    await accept(coordinatorToken, decision, selected).expect(200)
+    await processJobs(conversationId)
+    expect(await prisma.sourceOrderGuest.count({ where: { sourceOrderId: source.id } })).toBe(3)
+  })
+
+  it.each(['itinerary_segment_update', 'source_order_guests_update'] as const)('blocks stale %s edits after manual changes and keeps the review pending', async (confirmationUnit) => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-修改并发-${confirmationUnit}`)
+    const partner = await createPartner(`并发名单-${confirmationUnit}`)
+    const source = await app.get(SourceOrderService).createWithSelectedGuests(organizationId, departureId, {
+      partnerId: partner.id, adultGuestCount: 1, childGuestCount: 0, adultUnitPriceCents: 100000,
+      collectionMode: 'partner_settled', discountType: 'none',
+    }, [{ name: '原游客', phone: '13800000001' }])
+    const guest = await prisma.sourceOrderGuest.findFirstOrThrow({ where: { sourceOrderId: source.id } })
+    const text = '修改第一天名称为新行程，或者将原游客电话改为13800000002'
+    const segmentEdit = confirmationUnit === 'itinerary_segment_update'
+    const candidates = segmentEdit
+      ? [candidate('itinerarySegmentId', segmentId, text, 1), candidate('name', '新行程', text, 1)]
+      : [candidate('sourceOrderId', source.id, text, 1), candidate('guestChanges', { update: [{ guestId: guest.id, phone: '13800000002' }] }, text, 1)]
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [{ confirmationUnit, candidates }])))
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-stale-${confirmationUnit}`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 1)
+    const pkg = await prisma.aiReviewPackage.findFirstOrThrow({ where: { conversationId } })
+    if (segmentEdit) {
+      await authRequest(app, coordinatorToken).patch(`/api/segments/${segmentId}`).send({ name: '人工改名' }).expect(200)
+    } else {
+      await app.get(SourceOrderService).updateGuest(organizationId, source.id, guest.id, { phone: '13800000003' })
+    }
+    const key = `${testPrefix}-stale-confirm-${confirmationUnit}`
+    await accept(coordinatorToken, key, [{ packageId: pkg.id, expectedPackageVersion: pkg.version }]).expect(200)
+    await processJobs(conversationId)
+    const receipt = await getConfirmation(coordinatorToken, key).expect(200)
+    expect(receipt.body.data.items[0]).toMatchObject({ status: 'conflict', reason: expect.stringContaining('目标记录已变化') })
+    expect(await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: pkg.id } })).toMatchObject({ status: 'pending', version: pkg.version })
+    expect(await prisma.itinerarySegment.findUniqueOrThrow({ where: { id: segmentId } })).toMatchObject({ name: segmentEdit ? '人工改名' : '第一天' })
+    expect(await prisma.sourceOrderGuest.findUniqueOrThrow({ where: { id: guest.id } })).toMatchObject({ phone: segmentEdit ? '13800000001' : '13800000003' })
+  })
+
+  it.each(['reject', 'cancel'] as const)('%s leaves existing segment edits unwritten', async (action) => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-修改处置-${action}`)
+    const text = '将第一天名称改为未确认的新行程'
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [{
+      confirmationUnit: 'itinerary_segment_update', candidates: [candidate('itinerarySegmentId', segmentId, text, 1), candidate('name', '未确认的新行程', text, 1)],
+    }])))
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-edit-${action}`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 1)
+    const pkg = await prisma.aiReviewPackage.findFirstOrThrow({ where: { conversationId } })
+    await authRequest(app, coordinatorToken).post(`/api/agent/review-packages/${pkg.id}/${action}`).send({ expectedPackageVersion: pkg.version }).expect(200)
+    expect(await prisma.itinerarySegment.findUniqueOrThrow({ where: { id: segmentId } })).toMatchObject({ name: '第一天' })
+    expect(await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: pkg.id } })).toMatchObject({ status: action === 'reject' ? 'rejected' : 'cancelled' })
+  })
+
+  it('checks edit tool evidence, target ownership, format and version without changing formal data', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-修改工具`)
+    const foreign = await createDeparture(`${testPrefix}-其他团`)
+    const { conversationId } = await openCollaboration(departureId, '请先读取行程', `${testPrefix}-edit-tool`)
+    await processJobs(conversationId)
+    const task = await prisma.agentTask.findFirstOrThrow({ where: { departureId, ownerUserId } })
+    const delegation = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId: task.id, conversationId })
+    const text = 'e2e worker-shaped attempt'
+    const input = { taskId: task.id, runId: delegation.runId, objectVersion: await objectVersion(departureId), confirmationUnit: 'itinerary_segment_update',
+      candidates: [candidate('itinerarySegmentId', segmentId, text, delegation.userMessageSequence), candidate('name', '新行程', text, delegation.userMessageSequence)] }
+    const call = (body: Record<string, unknown>) => request(app.getHttpServer()).post('/api/ai-tools/v1/propose-departure-edit-review-package')
+      .set('X-Agent-Service-Key', AGENT_SECRET).set('Authorization', `Bearer ${delegation.delegationToken}`).send(body)
+    expect((await call(input).expect(200)).body.data).toMatchObject({ status: 'accepted', payloadSchema: 'departure.itinerary_segment_update@v1' })
+    await call({ ...input, objectVersion: input.objectVersion + 1 }).expect(409)
+    await call({ ...input, candidates: [candidate('itinerarySegmentId', foreign.segmentId, text, delegation.userMessageSequence), input.candidates[1]] }).expect(409)
+    const invalidEvidence = await call({ ...input, candidates: [input.candidates[0], candidate('name', '新行程', '不存在的证据原文', delegation.userMessageSequence)] }).expect(200)
+    expect(invalidEvidence.body.data.status).toBe('rejected')
+    await call({ ...input, confirmationUnit: 'source_order_guests_update', candidates: [candidate('sourceOrderId', 'source-unknown', text, delegation.userMessageSequence), candidate('guestChanges', { delete: ['guest-unknown'] }, text, delegation.userMessageSequence)] }).expect(422)
+    expect(await prisma.itinerarySegment.findUniqueOrThrow({ where: { id: segmentId } })).toMatchObject({ name: '第一天' })
+    expect(await prisma.aiReviewPackage.count({ where: { conversationId } })).toBe(0)
+  })
+
+  it('reads latest formal resources and finance through the tool, excluding review candidates, voided bills and other departures', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-formal-context`)
+    const other = await createDeparture(`${testPrefix}-other-context`)
+    const partner = await createPartner('formal-context')
+    const supplier = await createSupplier('formal-context')
+    const conversation = await prisma.aiConversation.create({ data: { organizationId, creatorUserId: ownerUserId, title: 'formal-context' } })
+    trackConversation(conversation.id)
+    const task = await prisma.agentTask.create({ data: {
+      organizationId, ownerUserId, departureId, type: 'departure_collaboration', status: 'active', goal: '读取正式资源和账款汇总',
+    } })
+    const minted = await mintRunningAttemptDelegation({ app, prisma, organizationId, userId: ownerUserId, taskId: task.id, conversationId: conversation.id })
+    const source = await prisma.sourceOrder.create({ data: {
+      departureId, partnerId: partner.id, displayName: '正式客源', guestCount: 2, adultGuestCount: 2, childGuestCount: 0,
+      adultUnitPriceCents: 100_000, childUnitPriceCents: 0, grossReceivableCents: 200_000, netReceivableCents: 200_000,
+      collectionMode: 'partner_settled', partnerCollectedCents: 200_000, guestCollectCents: 0,
+    } })
+    const hotel = await prisma.segmentResource.create({ data: {
+      segmentId, resourceKind: 'hotel', counterpartyType: 'supplier', supplierId: supplier.id, title: '正式酒店', amountCents: 60_000,
+    } })
+    const car = await prisma.departureResource.create({ data: {
+      departureId, resourceKind: 'transport', counterpartyType: 'supplier', supplierId: supplier.id, title: '正式用车', amountCents: 185_000,
+    } })
+    await prisma.departureResource.create({ data: {
+      departureId: other.departureId, resourceKind: 'transport', counterpartyType: 'supplier', supplierId: supplier.id, title: '其他团资源', amountCents: 999_999,
+    } })
+    for (const status of ['pending', 'rejected'] as const) {
+      await prisma.aiReviewPackage.create({ data: {
+        organizationId, taskId: task.id, conversationId: conversation.id, status,
+        confirmationUnit: 'departure_resource', payloadSchema: 'departure.departure_resource@v1', targetKind: 'departure', targetId: departureId,
+        baseObjectVersion: 1, baselineSnapshot: {}, candidates: [{ fieldKey: 'amountCents', proposedValue: 999_999 }],
+      } })
+    }
+    const dueDate = new Date('2026-09-05')
+    await prisma.paymentSchedule.createMany({ data: [
+      { organizationId, departureId, direction: 'receivable', scheduleNo: `${testPrefix}-AR-context`, title: '正式应收', amountCents: 200_000,
+        dueDate, counterpartyType: 'partner', sourceType: 'source_order_customer_settlement', sourceId: source.id },
+      { organizationId, departureId, direction: 'payable', scheduleNo: `${testPrefix}-AP-hotel`, title: '酒店应付', amountCents: 60_000,
+        dueDate, counterpartyType: 'supplier', sourceType: 'segment_resource', sourceId: hotel.id },
+      { organizationId, departureId, direction: 'payable', scheduleNo: `${testPrefix}-AP-car`, title: '用车关闭未付', amountCents: 185_000,
+        dueDate, counterpartyType: 'supplier', sourceType: 'departure_resource', sourceId: car.id, cancelledAt: new Date() },
+      { organizationId, departureId, direction: 'payable', scheduleNo: `${testPrefix}-AP-void`, title: '作废应付', amountCents: 999_999,
+        dueDate, counterpartyType: 'supplier', voidedAt: new Date() },
+      { organizationId, departureId: other.departureId, direction: 'receivable', scheduleNo: `${testPrefix}-AR-other`, title: '其他团应收', amountCents: 999_999,
+        dueDate, counterpartyType: 'partner' },
+    ] })
+    const read = () => request(app.getHttpServer()).post('/api/ai-tools/v1/get-task-context')
+      .set('X-Agent-Service-Key', AGENT_SECRET).set('Authorization', `Bearer ${minted.delegationToken}`)
+      .send({ taskId: task.id, runId: minted.runId, departureId: other.departureId })
+    const first = (await read().expect(200)).body.data
+    expect(first.snapshot).toMatchObject({
+      departureId, guestCount: 2, resources: { count: 2, totalAmountCents: 245_000, items: [
+        { id: hotel.id, scope: 'segment', amountCents: 60_000 }, { id: car.id, scope: 'departure', amountCents: 185_000 },
+      ] },
+      financeSummary: { netReceivableCents: 200_000, receivedCents: 0, openUnreceivedCents: 200_000,
+        confirmedPayableCents: 245_000, paidCents: 0, openUnpaidCents: 60_000, closedUnpaidCents: 185_000 },
+    })
+    expect(first.snapshot).not.toHaveProperty('candidates')
+    // 正式约定变更但既有关闭账款不跟随，重读必须同时呈现新资源成本和原账款差额。
+    await prisma.departureResource.update({ where: { id: car.id }, data: { amountCents: 195_000 } })
+    const second = (await read().expect(200)).body.data.snapshot
+    expect(second.resources.totalAmountCents).toBe(255_000)
+    expect(second.financeSummary).toMatchObject({ confirmedPayableCents: 245_000, resourcePayableDifferenceCents: -10_000 })
+    expect(await prisma.sourceOrder.count({ where: { departureId } })).toBe(1)
+    expect(await prisma.aiReviewPackage.count({ where: { taskId: task.id, status: 'pending' } })).toBe(1)
+  })
 
   it('covers material → review → revision → confirm → formal records without leftover collaboration data reset', async () => {
     const { departureId, segmentId } = await createDeparture(`${testPrefix}-闭环`)
@@ -506,6 +694,43 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
       .flatMap((confirmation) => confirmation.items)
       .find((item) => item.submittedValues?.title === '日喀则希尔顿')
     expect(hotelItem?.currentFormalValues).toEqual(expect.objectContaining({ title: '日喀则希尔顿', amountCents: 128_000 }))
+  })
+
+  it.each(['reject', 'cancel'] as const)('disposes a collaboration review with %s without a creation draft and preserves its sibling', async (action) => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-${action}`)
+    const supplier = await createSupplier(`${action}-供应商`)
+    const text = `${testPrefix} ${action} 两项酒店费用`
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [
+      { confirmationUnit: 'segment_resource', candidates: segmentResourceCandidates(segmentId, supplier.id, '待放弃酒店', 10_000, text, 1) },
+      { confirmationUnit: 'segment_resource', candidates: segmentResourceCandidates(segmentId, supplier.id, '保留酒店', 20_000, text, 1) },
+    ])))
+    const { conversationId, batchId } = await openCollaboration(departureId, text, `${testPrefix}-${action}`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 2)
+    const packages = await prisma.aiReviewPackage.findMany({ where: { conversationId }, orderBy: { createdAt: 'asc' } })
+    const target = packages[0]!
+    const sibling = packages[1]!
+    expect(await prisma.aiCreateTask.count({ where: { id: target.taskId! } })).toBe(0)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${target.id}/${action}`)
+      .send({ expectedPackageVersion: target.version }).expect(200)
+    expect(response.body.data).toMatchObject({ id: target.taskId, departureId })
+    expect(response.body.data.pendingReviews).toEqual([expect.objectContaining({ id: sibling.id })])
+    expect(await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: target.id } }))
+      .toMatchObject({ status: action === 'reject' ? 'rejected' : 'cancelled', version: target.version + 1 })
+    expect(await prisma.aiReviewRecord.count({ where: { packageId: target.id, action } })).toBe(1)
+    expect(await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: batchId } })).toMatchObject({ status: 'awaiting_review' })
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${target.id}/${action}`)
+      .send({ expectedPackageVersion: target.version }).expect(409)
+    await accept(coordinatorToken, `${testPrefix}-${action}-confirm-sibling`, [
+      { packageId: sibling.id, expectedPackageVersion: sibling.version },
+    ]).expect(200)
+    await processJobs(conversationId)
+    expect(await prisma.segmentResource.count({ where: { segmentId } })).toBe(1)
+    expect(await prisma.aiReviewPackage.findUniqueOrThrow({ where: { id: sibling.id } })).toMatchObject({ status: 'confirmed' })
   })
 
   it('rejects a different payload on the same confirmation key and isolates private sessions', async () => {

@@ -50,6 +50,33 @@ export const getTaskContextInputSchema = z
   })
   .strip()
 
+const formalResourceSchema = z.object({
+  id: z.string().min(1),
+  scope: z.enum(['segment', 'departure']),
+  segmentId: z.string().min(1).nullable(),
+  resourceKind: z.string().min(1),
+  title: z.string(),
+  amountCents: z.number().int(),
+  supplierName: z.string().nullable(),
+  partnerName: z.string().nullable(),
+})
+
+const formalFinanceSummarySchema = z.object({
+  netReceivableCents: z.number().int(),
+  receivedCents: z.number().int(),
+  openUnreceivedCents: z.number().int(),
+  closedUnreceivedCents: z.number().int(),
+  ungeneratedReceivableCents: z.number().int(),
+  otherReceivableCents: z.number().int(),
+  confirmedPayableCents: z.number().int(),
+  paidCents: z.number().int(),
+  openUnpaidCents: z.number().int(),
+  closedUnpaidCents: z.number().int(),
+  ungeneratedPayableCents: z.number().int(),
+  otherPayableCents: z.number().int(),
+  resourcePayableDifferenceCents: z.number().int(),
+})
+
 export const getTaskContextOutputSchema = z
   .object({
     task: z
@@ -62,9 +89,21 @@ export const getTaskContextOutputSchema = z
       .strip(),
     snapshot: aiCreateDraftSnapshotSchema.extend({
       departureId: z.string().min(1).optional(),
+      resources: z.object({
+        count: z.number().int().nonnegative(),
+        totalAmountCents: z.number().int(),
+        items: z.array(formalResourceSchema),
+      }).optional(),
+      financeSummary: formalFinanceSummarySchema.optional(),
       guestCount: z.number().int().nonnegative().optional(),
       adultGuestCount: z.number().int().nonnegative().optional(),
       childGuestCount: z.number().int().nonnegative().optional(),
+      itinerarySegments: z.array(z.object({
+        id: z.string().min(1), name: z.string(), destination: z.string().nullable(),
+        startDate: z.string().nullable(), endDate: z.string().nullable(), notes: z.string().nullable(),
+        fullTicketCount: z.number().int().nonnegative(), halfTicketCount: z.number().int().nonnegative(),
+        studentTicketCount: z.number().int().nonnegative(), freeTicketCount: z.number().int().nonnegative(),
+      })).optional(),
       sourceOrders: z
         .array(z.object({
           id: z.string().min(1),
@@ -74,6 +113,10 @@ export const getTaskContextOutputSchema = z
           guestCount: z.number().int().nonnegative(),
           adultGuestCount: z.number().int().nonnegative(),
           childGuestCount: z.number().int().nonnegative(),
+          guests: z.array(z.object({
+            id: z.string().min(1), name: z.string(), phone: z.string().nullable(),
+            gender: z.enum(['male', 'female', 'unknown']).nullable(), notes: z.string().nullable(),
+          })).optional(),
         }))
         .optional(),
     }),
@@ -91,6 +134,7 @@ export const getTaskContextOutputSchema = z
           'proposeSourceOrderReviewPackage',
           'proposeSegmentResourceReviewPackage',
           'proposeDepartureResourceReviewPackage',
+          'proposeDepartureEditReviewPackage',
           'routeConversation',
         ]),
       ]))

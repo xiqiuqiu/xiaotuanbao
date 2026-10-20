@@ -34,7 +34,7 @@ import {
   getReviewConfirmation,
 } from '@/services/agent-collaboration.service'
 import { patchAiReviewPackage, rejectAiReviewPackage } from '@/services/ai-create-task.service'
-import { confirmationForPackage } from './review-confirmation-for-package'
+import { confirmationForPackage, useConfirmedReviewInvalidation } from './review-confirmation-for-package'
 import styles from './SegmentResourceReviewPanel.module.css'
 
 const KIND_OPTIONS = RESOURCE_KIND_OPTIONS.map((option) => ({
@@ -115,6 +115,7 @@ function SegmentResourceReviewItem({
 }) {
   const { message } = App.useApp()
   const queryClient = useQueryClient()
+  const invalidateSucceeded = useConfirmedReviewInvalidation(departureId, pkg, confirmation)
   const rootRef = useRef<HTMLElement | null>(null)
   const pendingCorrections = useRef<Record<string, string | number | null>>({})
   const correctTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -267,6 +268,7 @@ function SegmentResourceReviewItem({
     },
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
+      invalidateSucceeded(item?.status)
       if (item?.status === 'succeeded') {
         message.success('已写入行程段资源，未提交应付')
         for (const [key, commandId] of Object.entries(decisionCommandIds.current)) {
@@ -283,9 +285,6 @@ function SegmentResourceReviewItem({
       }
       await queryClient.invalidateQueries({
         queryKey: ['departure-collaboration', departureId],
-      })
-      await queryClient.invalidateQueries({
-        queryKey: ['segments', departureId],
       })
     },
     onError: (error) => {

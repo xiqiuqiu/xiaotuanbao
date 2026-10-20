@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../departure/departure-date.utils'
 import { createHash } from 'node:crypto'
 import {
   BadRequestException,
@@ -21,6 +22,12 @@ import {
   ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
+  submitDepartureEditReviewInputSchema,
+  ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT,
+  ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA,
+  SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA,
+  type ProposeDepartureEditReviewPackageOutput,
+  proposeDepartureEditReviewPackageOutputSchema,
   classifyDraftFields,
   DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES,
   capabilitiesForPendingReview,
@@ -112,6 +119,7 @@ import {
   requireValidReviewProposal,
   ReviewProposalRejectedError,
 } from './review-proposal.commit'
+import { readDepartureEditSnapshot } from './formal-edit-snapshot'
 import { validateReviewProposal } from './review-proposal.validator'
 import { toFormalDepartureSnapshot } from './formal-departure-snapshot'
 import {
@@ -373,7 +381,7 @@ export class AiCreateTaskService {
         await this.requireRunningAttempt(caller)
         const snapshot = {
           ...toFormalDepartureSnapshot(departure, null),
-          ...(await this.readFormalSourceOrderFacts(caller.organizationId, departure.id, tx)),
+          ...(await this.readFormalDepartureFacts(caller.organizationId, departure.id, tx)),
         }
         const pending = collaborationTask.reviewPackages.find(
           (pkg) => pkg.conversationId === caller.conversationId,
@@ -426,7 +434,7 @@ export class AiCreateTaskService {
       snapshot: {
         ...snapshot,
         ...(task.departure &&
-          (await this.readFormalSourceOrderFacts(caller.organizationId, task.departure.id))),
+          (await this.readFormalDepartureFacts(caller.organizationId, task.departure.id))),
       },
       objectVersion: summary.draft.version,
       pending: {
@@ -441,22 +449,74 @@ export class AiCreateTaskService {
     })
   }
 
-  private async readFormalSourceOrderFacts(organizationId: string, departureId: string, tx: Prisma.TransactionClient = this.prisma) {
-    const sourceOrders = await tx.sourceOrder.findMany({
-      where: { departureId, departure: { organizationId } },
-      select: {
-        id: true,
-        displayName: true,
-        partnerId: true,
-        partner: { select: { name: true } },
-        guestCount: true,
-        adultGuestCount: true,
-        childGuestCount: true,
-      },
-      orderBy: { id: 'asc' },
-    })
+  private async readFormalDepartureFacts(organizationId: string, departureId: string, tx: Prisma.TransactionClient = this.prisma) {
+    const [sourceOrders, segmentResources, departureResources, departure, itinerarySegments] = await Promise.all([
+      tx.sourceOrder.findMany({
+        where: { departureId, departure: { organizationId } },
+        select: {
+          id: true,
+          displayName: true,
+          partnerId: true,
+          partner: { select: { name: true } },
+          guestCount: true,
+          adultGuestCount: true,
+          childGuestCount: true,
+          guests: { orderBy: { id: 'asc' }, select: { id: true, name: true, phone: true, gender: true, notes: true } },
+        },
+        orderBy: { id: 'asc' },
+      }),
+      tx.segmentResource.findMany({
+        where: { segment: { departureId, departure: { organizationId } } },
+        select: { id: true, segmentId: true, resourceKind: true, title: true, amountCents: true,
+          supplier: { select: { name: true } }, partner: { select: { name: true } } },
+        orderBy: { id: 'asc' },
+      }),
+      tx.departureResource.findMany({
+        where: { departureId, departure: { organizationId } },
+        select: { id: true, resourceKind: true, title: true, amountCents: true,
+          supplier: { select: { name: true } }, partner: { select: { name: true } } },
+        orderBy: { id: 'asc' },
+      }),
+      // 复用正式发团读模型，经 Finance Facade 计算核销、关闭及作废口径。
+      this.departureService.getById(organizationId, departureId),
+      tx.itinerarySegment.findMany({
+        where: { departureId, departure: { organizationId } },
+        select: { id: true, name: true, destination: true, startDate: true, endDate: true, notes: true,
+          fullTicketCount: true, halfTicketCount: true, studentTicketCount: true, freeTicketCount: true },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      }),
+    ])
+    const items = [
+      ...segmentResources.map(({ supplier, partner, ...resource }) => ({
+        ...resource, scope: 'segment' as const, supplierName: supplier?.name ?? null, partnerName: partner?.name ?? null,
+      })),
+      ...departureResources.map(({ supplier, partner, ...resource }) => ({
+        ...resource, scope: 'departure' as const, segmentId: null, supplierName: supplier?.name ?? null, partnerName: partner?.name ?? null,
+      })),
+    ]
+    const stats = departure.overviewStats
     return {
       departureId,
+      itinerarySegments: itinerarySegments.map((segment) => ({ ...segment,
+        startDate: segment.startDate ? formatDateOnly(segment.startDate) : null,
+        endDate: segment.endDate ? formatDateOnly(segment.endDate) : null,
+      })),
+      resources: { count: items.length, totalAmountCents: items.reduce((sum, item) => sum + item.amountCents, 0), items },
+      financeSummary: {
+        netReceivableCents: departure.netReceivableCents,
+        receivedCents: stats.receivedCents,
+        openUnreceivedCents: stats.openUnreceivedCents,
+        closedUnreceivedCents: stats.closedUnreceivedCents,
+        ungeneratedReceivableCents: stats.ungeneratedReceivableCents,
+        otherReceivableCents: stats.otherReceivableCents,
+        confirmedPayableCents: stats.confirmedPayableCents,
+        paidCents: stats.paidCents,
+        openUnpaidCents: stats.openUnpaidCents,
+        closedUnpaidCents: stats.closedUnpaidCents,
+        ungeneratedPayableCents: stats.ungeneratedPayableCents,
+        otherPayableCents: stats.otherPayableCents,
+        resourcePayableDifferenceCents: stats.resourcePayableDifferenceCents,
+      },
       guestCount: sourceOrders.reduce((sum, order) => sum + order.guestCount, 0),
       adultGuestCount: sourceOrders.reduce((sum, order) => sum + order.adultGuestCount, 0),
       childGuestCount: sourceOrders.reduce((sum, order) => sum + order.childGuestCount, 0),
@@ -727,6 +787,29 @@ export class AiCreateTaskService {
     }
     await this.requireRunningAttempt(caller)
 
+    const batch = await this.prisma.aiInputBatch.findFirst({
+      where: { id: caller.inputBatchId, organizationId: caller.organizationId, conversationId: caller.conversationId },
+      select: { userMessageEvent: { select: { payload: true } } },
+    })
+    if (!batch) throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    const message = batch.userMessageEvent.payload as Record<string, unknown>
+    let reviewReference: { reviewPackageId?: string; expectedPackageVersion?: number } = {}
+    if (typeof message.reviewPackageId === 'string') {
+      if (typeof message.expectedPackageVersion !== 'number' || !Number.isInteger(message.expectedPackageVersion)) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      reviewReference = { reviewPackageId: message.reviewPackageId, expectedPackageVersion: message.expectedPackageVersion }
+    }
+    if (reviewReference.reviewPackageId) {
+      const target = await this.prisma.aiReviewPackage.findFirst({ where: {
+        id: reviewReference.reviewPackageId, organizationId: caller.organizationId,
+        taskId: caller.taskId, conversationId: caller.conversationId,
+        status: AiReviewPackageStatus.pending, version: reviewReference.expectedPackageVersion,
+        confirmationUnit: input.confirmationUnit,
+      } })
+      if (!target) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
+
     const authority = await loadEvidenceAuthority(this.prisma, {
       organizationId: caller.organizationId,
       conversationId: caller.conversationId,
@@ -739,6 +822,7 @@ export class AiCreateTaskService {
     }
     const validated = validateReviewProposal({
       proposal: {
+        ...reviewReference,
         objectVersion: input.objectVersion,
         confirmationUnit: input.confirmationUnit,
         candidates: input.candidates,
@@ -750,6 +834,7 @@ export class AiCreateTaskService {
     }
     return {
       status: 'accepted',
+      ...reviewReference,
       objectVersion: input.objectVersion,
       confirmationUnit: input.confirmationUnit,
       candidates: input.candidates,
@@ -1096,6 +1181,55 @@ export class AiCreateTaskService {
     }
   }
 
+  async proposeDepartureEditReviewPackageForAgent(
+    caller: Parameters<AiCreateTaskService['proposeDepartureResourceReviewPackageForAgent']>[0],
+    rawInput: unknown,
+  ): Promise<ProposeDepartureEditReviewPackageOutput> {
+    const parsed = submitDepartureEditReviewInputSchema.safeParse(rawInput)
+    if (!parsed.success) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    const input = parsed.data
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId ||
+        !caller.conversationId || !caller.inputBatchId || !caller.attemptId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const task = await this.prisma.agentTask.findFirst({
+      where: { id: caller.taskId, organizationId: caller.organizationId },
+    })
+    if (!task || task.type !== AgentTaskType.departure_collaboration || !task.departureId) {
+      throw new NotFoundException('发团协作任务不存在')
+    }
+    if (task.ownerUserId !== caller.userId) throw new ForbiddenException('仅任务创建者可提交审核包')
+    if (task.status !== AgentTaskStatus.active && task.status !== AgentTaskStatus.waiting) {
+      throw new BadRequestException('仅进行中的发团协作任务可提交审核包')
+    }
+    await this.requireRunningAttempt(caller)
+    if (await departureObjectVersion(this.prisma, caller.organizationId, task.departureId) !== input.objectVersion) {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
+    const authority = await loadEvidenceAuthority(this.prisma, { ...caller, attemptId: caller.attemptId })
+    if (!authority) throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    const validated = validateReviewProposal({ proposal: input, authority })
+    if (!validated.success) return { status: 'rejected', errors: validated.errors }
+    const values = Object.fromEntries(input.candidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue]))
+    await readDepartureEditSnapshot(this.prisma, caller.organizationId, task.departureId, input.confirmationUnit, values)
+    const payloadSchema = input.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT
+      ? ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA : SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA
+    if (input.reviewPackageId) {
+      const current = await this.prisma.aiReviewPackage.findFirst({ where: {
+        id: input.reviewPackageId, organizationId: caller.organizationId, taskId: caller.taskId,
+        conversationId: caller.conversationId, status: AiReviewPackageStatus.pending,
+        version: input.expectedPackageVersion, confirmationUnit: input.confirmationUnit,
+        targetKind: 'departure', targetId: task.departureId, payloadSchema,
+      } })
+      if (!current) throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      const targetKey = input.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT ? 'itinerarySegmentId' : 'sourceOrderId'
+      const previous = toReviewPackageView(current).candidates.find((candidate) => candidate.fieldKey === targetKey)
+      if (previous?.proposedValue !== values[targetKey]) throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    const { taskId, runId, ...proposal } = input
+    return proposeDepartureEditReviewPackageOutputSchema.parse({ status: 'accepted', ...proposal, payloadSchema, normalizedProposal: validated.normalizedProposal })
+  }
+
   async submitReviewPackageForAgent(
     caller: {
       userId: string
@@ -1355,11 +1489,7 @@ export class AiCreateTaskService {
         inputBatchId: pkg.inputBatchId,
         disposition: 'rejected',
       })
-      const task = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, agentTask: { organizationId } },
-        include: TASK_WITH_PENDING_INCLUDE,
-      })
-      return { summary: this.toSummary(task), events }
+      return { summary: await this.toSummaryAfterReviewWrite(tx, organizationId, taskId), events }
     })
     for (const event of events) {
       this.conversationService.publish(event.conversationId, event)
@@ -1425,11 +1555,7 @@ export class AiCreateTaskService {
         inputBatchId: pkg.inputBatchId,
         conversationId: pkg.conversationId,
       })
-      const task = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, agentTask: { organizationId } },
-        include: TASK_WITH_PENDING_INCLUDE,
-      })
-      return { summary: this.toSummary(task), events }
+      return { summary: await this.toSummaryAfterReviewWrite(tx, organizationId, taskId), events }
     })
     for (const event of events) {
       this.conversationService.publish(event.conversationId, event)

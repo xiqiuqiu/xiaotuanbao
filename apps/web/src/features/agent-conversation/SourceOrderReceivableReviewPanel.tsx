@@ -13,7 +13,7 @@ import {
   getDepartureCollaboration,
   getReviewConfirmation,
 } from '@/services/agent-collaboration.service'
-import { confirmationForPackage } from './review-confirmation-for-package'
+import { confirmationForPackage, useConfirmedReviewInvalidation } from './review-confirmation-for-package'
 import { useAgentConversationStore } from './agent-conversation.store'
 import styles from './SegmentResourceReviewPanel.module.css'
 
@@ -124,6 +124,7 @@ function SourceOrderReceivableReviewItem({
   const { message } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const invalidateSucceeded = useConfirmedReviewInvalidation(departureId, pkg, confirmation)
   const decisionCommandIds = useRef<Record<string, string>>({})
   const [unknownCommandId, setUnknownCommandId] = useState<string | null>(null)
   const values = useMemo(() => candidateValues(pkg.candidates), [pkg.candidates])
@@ -185,6 +186,7 @@ function SourceOrderReceivableReviewItem({
     },
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
+      invalidateSucceeded(item?.status)
       if (item?.status === 'succeeded') {
         message.success(
           historyStatus === 'complete_and_consistent'
@@ -209,9 +211,6 @@ function SourceOrderReceivableReviewItem({
       await queryClient.invalidateQueries({
         queryKey: ['departure-collaboration', departureId],
       })
-      await queryClient.invalidateQueries({
-        queryKey: ['receivables', departureId],
-      })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '确认审核失败')
@@ -222,6 +221,7 @@ function SourceOrderReceivableReviewItem({
     mutationFn: async (decisionCommandId: string) => getReviewConfirmation(decisionCommandId),
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
+      invalidateSucceeded(item?.status)
       if (item?.status === 'succeeded') {
         setUnknownCommandId(null)
         message.success(

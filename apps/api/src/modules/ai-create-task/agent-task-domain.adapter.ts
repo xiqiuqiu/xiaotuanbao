@@ -3,6 +3,7 @@ import type {
   GetTaskContextOutput,
   ProposeReviewPackageOutput,
   ProposeDepartureResourceReviewPackageOutput,
+  ProposeDepartureEditReviewPackageOutput,
   ProposeSegmentResourceReviewPackageOutput,
   ProposeSourceOrderReviewPackageOutput,
   ReviewFieldDescriptor,
@@ -62,6 +63,10 @@ export interface AgentTaskDomainAdapter {
     user: TaskBoundAiToolRequestUser,
     input: unknown,
   ): Promise<ProposeDepartureResourceReviewPackageOutput>
+  proposeDepartureEditReview(
+    user: TaskBoundAiToolRequestUser,
+    input: unknown,
+  ): Promise<ProposeDepartureEditReviewPackageOutput>
   submitReview(
     user: TaskBoundAiToolRequestUser,
     input: unknown,

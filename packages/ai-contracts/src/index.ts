@@ -571,6 +571,11 @@ export {
   DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY_REF,
   PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL,
   PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL,
+  PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL,
+  DEPARTURE_EDIT_PROPOSE_CAPABILITY,
+  DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF,
+  proposeDepartureEditReviewPackageOutputSchema,
+  type ProposeDepartureEditReviewPackageOutput,
   departureCollaborationCapabilityDefinitionRegistry,
   proposeSegmentResourceReviewPackageOutputSchema,
   proposeDepartureResourceReviewPackageOutputSchema,
@@ -612,3 +617,5 @@ export { agentWorkItemSchema, type AgentWorkItem } from './runtime/execution-goa
 export { resolvedWorkItemSchema, headlessResolvedItemsResultSchema, type ResolvedWorkItem, type HeadlessResolvedItemsResult } from './runtime/headless-execution'
 
 export { WORK_ITEMS_INSTRUCTIONS, WORK_ITEMS_TOOL_DESCRIPTION } from './runtime/work-items-instructions'
+
+export * from './review/departure-edit-schema'

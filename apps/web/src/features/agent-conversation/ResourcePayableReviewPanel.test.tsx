@@ -108,13 +108,13 @@ function pkg(overrides?: Partial<AiReviewPackageView>): AiReviewPackageView {
   }
 }
 
-function renderPanel(item = pkg()) {
+function renderPanel(item = pkg(), client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   getDepartureCollaboration.mockResolvedValue({
     items: [item],
     confirmations: [],
   })
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <App>
         <ResourcePayableReviewPanel
           departureId="departure-1"
@@ -134,6 +134,14 @@ afterEach(() => {
   prepareResourcePayableReviews.mockReset()
   navigate.mockReset()
   closeGlobalForBusinessNavigation.mockReset()
+})
+
+it('refreshes resource generation state and payable lists when a confirmed receipt is restored', async () => {
+  const client = new QueryClient()
+  const keys = [['segment-resources', 'seg-1'], ['finance-payables']]
+  for (const key of keys) client.setQueryData(key, { items: [] })
+  renderPanel(pkg({ status: 'confirmed' }), client)
+  for (const key of keys) await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
 })
 
 it('confirms one selected resource payable without a segment batch action', async () => {

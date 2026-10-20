@@ -47,6 +47,7 @@ describe('searchRouteTemplates contract v1', () => {
       'searchUsers',
       'searchSuppliers',
       'searchPartners',
+      'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

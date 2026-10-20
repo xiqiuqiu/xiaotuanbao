@@ -12,6 +12,7 @@ import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.s
 import {
   abandonAgentConversationBatch,
   cancelAgentConversationInteraction,
+  getAgentConversation,
   listAgentConversationEvents,
   removeAgentConversationMaterials,
   retractQueuedAgentConversationBatch,
@@ -492,6 +493,26 @@ describe('AgentConversationChat page locator #371', () => {
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
   })
 
+  it('retains the visible current departure for consecutive messages until explicitly removed', async () => {
+    const user = userEvent.setup()
+    routerState.location = { pathname: '/departure/dep-1', searchStr: '?tab=overview', hash: '' }
+    vi.mocked(getAgentConversation).mockResolvedValue({ id: 'c-new', title: '当前团', events: [], lastSequence: 1 } as never)
+    vi.mocked(sendAgentConversationText).mockResolvedValue({ conversationId: 'c-new', events: [], lastSequence: 1 } as never)
+    renderChat()
+    for (const text of ['检查这个团', '继续填写内容']) {
+      await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), text)
+      await user.click(screen.getByRole('button', { name: '发送' }))
+      expect(sendAgentConversationText).toHaveBeenLastCalledWith(text === '检查这个团' ? null : 'c-new', {
+        text, pageLocator: { kind: 'departure', objectId: 'dep-1', section: 'overview' },
+      }, expect.any(String))
+      expect(useAgentConversationStore.getState().attachedPageAttachment).toMatchObject({ locator: { objectId: 'dep-1' } })
+    }
+    await act(async () => useAgentConversationStore.getState().detachCurrentPage())
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '独立提问')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenLastCalledWith(expect.any(String), { text: '独立提问' }, expect.any(String))
+  })
+
   it('sends the attached locator and omits it after the chip is removed', async () => {
     const user = userEvent.setup()
     vi.mocked(sendAgentConversationText).mockResolvedValue({
@@ -783,6 +804,9 @@ describe('AgentConversationChat task and review activities', () => {
 
   it('renders the task card and opens the matching departure review form', async () => {
     const user = userEvent.setup()
+    routerState.navigate.mockImplementationOnce(async () => {
+      routerState.location = { pathname: '/departure/new', searchStr: '?taskId=task-1', hash: '' }
+    })
     renderChat()
 
     expect(await screen.findByRole('region', { name: 'Agent 任务' })).toHaveTextContent(
@@ -798,6 +822,13 @@ describe('AgentConversationChat task and review activities', () => {
       search: { taskId: 'task-1' },
     })
     expect(useAgentConversationStore.getState().globalOpen).toBe(false)
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toMatchObject({
+      kind: 'agent_task', taskId: 'task-1', reviewPackageId: 'pkg-1',
+    })
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '把路线建议改一下')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenLastCalledWith('c-1',
+      expect.objectContaining({ primaryTaskId: 'task-1', reviewPackageId: 'pkg-1' }), expect.any(String))
   })
 
   it('refreshes the current wizard task instead of no-op navigating when already on it', async () => {
@@ -811,6 +842,65 @@ describe('AgentConversationChat task and review activities', () => {
 
     await user.click(await screen.findByRole('button', { name: '查看审核内容' }))
     expect(routerState.navigate).not.toHaveBeenCalled()
+  })
+
+  it.each(['confirmed', 'rejected', 'cancelled'])('clears the review reference after it is %s and does not reattach from history', async (disposition) => {
+    routerState.location = { pathname: '/departure/new', searchStr: '?taskId=task-1', hash: '' }
+    useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'agent_task', taskType: 'departure_creation', taskId: 'task-1', reviewPackageId: 'pkg-1',
+    })
+    const runtime = useAgentConversationRuntimeStore.getState()
+    runtime.hydrate({ events: [...runtime.events, {
+      id: 'disposed-review', sequence: 5, kind: 'batch_status', createdAt: '2026-08-27T00:01:00.000Z',
+      payload: { status: 'completed', taskId: 'task-1', batchId: 'batch-1', reviewPackageId: 'pkg-1', disposition },
+    }] })
+    vi.mocked(sendAgentConversationText).mockReset().mockResolvedValue({
+      conversationId: 'c-1', events: [], lastSequence: 5,
+    } as never)
+    renderChat()
+    await waitFor(() => expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull())
+    expect(screen.getByText(disposition === 'confirmed' ? '已确认' : disposition === 'rejected' ? '已拒绝' : '已取消')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '查看审核内容' }))
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
+    for (const text of ['继续检查当前团', '再核对一次人数']) {
+      await userEvent.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), text)
+      await userEvent.click(screen.getByRole('button', { name: '发送' }))
+      await waitFor(() => expect(sendAgentConversationText).toHaveBeenLastCalledWith(
+        'c-1', expect.objectContaining({ text }), expect.any(String),
+      ))
+      expect(vi.mocked(sendAgentConversationText).mock.lastCall?.[1]).not.toHaveProperty('reviewPackageId')
+    }
+  })
+
+  it.each(['cancelled', 'confirmed'])('opens a %s source-order history view without attaching it to the composer', async (disposition) => {
+    const onReviewRequested = vi.fn()
+    routerState.location = { pathname: '/departure/dep-1', searchStr: '', hash: '' }
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationRuntimeStore.getState().hydrate({ conversationId: 'c-1', events: [
+      { sequence: 1, kind: 'agent_message', createdAt: '2026-10-20T00:00:00Z', payload: {
+        text: '客源单待审核', taskId: 'task-collab', taskType: 'departure_collaboration',
+        departureId: 'dep-1', reviewPackageId: 'pkg-source', payloadSchema: 'source_order.create@v1', fieldKeys: ['partnerId'],
+      } },
+      { sequence: 2, kind: 'batch_status', createdAt: '2026-10-20T00:00:01Z', payload: {
+        taskId: 'task-collab', taskType: 'departure_collaboration', status: disposition === 'cancelled' ? 'cancelled' : 'completed',
+        reviewPackageId: 'pkg-source', disposition,
+      } },
+    ] })
+    vi.mocked(sendAgentConversationText).mockReset().mockResolvedValue({
+      conversationId: 'c-1', events: [], lastSequence: 2,
+    } as never)
+    renderChat(<AgentConversationChat onReviewRequested={onReviewRequested} />)
+    expect(await screen.findByText(disposition === 'cancelled' ? '已取消' : '已确认')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '查看审核内容' }))
+    expect(onReviewRequested).toHaveBeenCalledWith('pkg-source', 'dep-1')
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
+    expect(document.querySelector('[data-focused-review-package-id]')).toBeNull()
+    await userEvent.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '核对当前团人数')
+    await userEvent.click(screen.getByRole('button', { name: '发送' }))
+    await waitFor(() => expect(sendAgentConversationText).toHaveBeenLastCalledWith(
+      'c-1', expect.objectContaining({ text: '核对当前团人数' }), expect.any(String),
+    ))
+    expect(vi.mocked(sendAgentConversationText).mock.lastCall?.[1]).not.toHaveProperty('reviewPackageId')
   })
 
   it('opens the current departure assist pane for segment-resource review #449', async () => {

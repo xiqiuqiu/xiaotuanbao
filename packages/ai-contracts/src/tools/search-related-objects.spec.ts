@@ -54,6 +54,7 @@ describe('search related objects contract v1 #443', () => {
       'searchUsers',
       'searchSuppliers',
       'searchPartners',
+      'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

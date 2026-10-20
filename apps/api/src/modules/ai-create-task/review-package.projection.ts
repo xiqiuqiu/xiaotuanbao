@@ -1,3 +1,5 @@
+import { ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT, SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT } from '@xiaotuanbao/ai-contracts'
+import { readDepartureEditSnapshot } from './formal-edit-snapshot'
 import { AgentTaskType, type Prisma } from '@prisma/client'
 import {
   DEPARTURE_OBJECT_TARGET_KIND,
@@ -147,6 +149,13 @@ async function revisePendingReviewPackage(
   if (pkg.status !== 'pending' || pkg.version !== params.reviewPackage.expectedPackageVersion || target.version !== params.reviewPackage.objectVersion) {
     throw new Error('VERSION_CONFLICT')
   }
+  const isEdit = params.reviewPackage.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT || params.reviewPackage.confirmationUnit === SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT
+  if (isEdit) {
+    const key = params.reviewPackage.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT ? 'itinerarySegmentId' : 'sourceOrderId'
+    const existing = toReviewPackageView(pkg).candidates.find((candidate) => candidate.fieldKey === key)
+    const proposed = params.reviewPackage.candidates.find((candidate) => candidate.fieldKey === key)
+    if (existing?.proposedValue !== proposed?.proposedValue) throw new Error('REVIEW_PACKAGE_TARGET_MISMATCH')
+  }
   const before = toReviewPackageView(pkg)
   if (!before.schemaSupported) throw new Error('REVIEW_PACKAGE_SCHEMA_UNSUPPORTED')
   const { corrections, submissions: beforeValues } = reviewConfirmValues(before.candidates)
@@ -175,7 +184,7 @@ async function revisePendingReviewPackage(
       proposalHash: departureReviewProposalHash({ ...params.reviewPackage, candidates: nextCandidates }),
       candidates: nextCandidates as unknown as Prisma.InputJsonValue,
       userCorrections: corrections as Prisma.InputJsonValue,
-      baselineSnapshot: { ...baseline, reviewConflicts: [...conflicts.values()] } as Prisma.InputJsonValue,
+      baselineSnapshot: { ...(isEdit ? target.snapshot as Record<string, Prisma.InputJsonValue> : baseline), reviewConflicts: [...conflicts.values()] } as Prisma.InputJsonValue,
     },
   })
   if (updated.count !== 1) throw new Error('VERSION_CONFLICT')
@@ -254,11 +263,14 @@ async function resolveReviewPackageTarget(
     if (!agentTask.departure) {
       throw new Error('REVIEW_PACKAGE_TASK_MISSING')
     }
+    const isEdit = params.reviewPackage.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT || params.reviewPackage.confirmationUnit === SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT
+    const editSnapshot = isEdit ? await readDepartureEditSnapshot(tx, params.organizationId, agentTask.departure.id,
+      params.reviewPackage.confirmationUnit, Object.fromEntries(params.reviewPackage.candidates.map((candidate) => [candidate.fieldKey, candidate.proposedValue]))) : null
     return {
       kind: DEPARTURE_OBJECT_TARGET_KIND,
       id: agentTask.departure.id,
       version: await departureObjectVersion(tx, params.organizationId, agentTask.departure.id),
-      snapshot: {
+      snapshot: editSnapshot ?? {
         departureId: agentTask.departure.id,
         departureNo: agentTask.departure.departureNo,
         name: agentTask.departure.name,

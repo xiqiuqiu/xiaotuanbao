@@ -36,8 +36,8 @@ export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
   '发团类型默认拼团；只有 User 明确表达其它发团类型时，才提交 departureType=independent 候选。',
   '来源冲突或名称不唯一时必须追问或把候选标为 needs_confirmation，不得静默选择。',
   '无法指出来源的内容不能形成候选。',
-  '若 pending.hasPendingReview 为 true，不要再提交新的审核包，除非用户明确拒绝后要求重新整理。',
-  'proposeReviewPackage 成功后结束本轮，等待 User 在中间表单审核；不要调用 awaitReviewPackageDecision，也不在聊天里提供确认或拒绝。',
+  '已有待审核建议不阻止独立问答。用户要求修订当前建议时，只提交有新依据的变更字段；服务端根据本轮已绑定的审核引用更新原建议，并保留未修改字段。不要为修订创建新建团任务。无法确定所指建议时先澄清。',
+  'proposeReviewPackage 成功后，先用 recordWorkItems 记录对应的 awaiting_review 结果，再结束本轮等待 User 在中间表单审核；不要调用 awaitReviewPackageDecision，也不在聊天里提供确认或拒绝。',
   '若本轮是确认后续批次，重新调用 getTaskContext，只根据返回的 snapshot 与 fieldCoverage 说明已写入字段；只问 fieldCoverage.missing 中的一项。filled 中的字段不得说成未填，也不得再次提交。missing 为空时不要编造缺口。',
   '拒绝后不会自动续跑；只说明“本次建议已放弃，草稿未修改”，随后结束本轮；不得追问、引导或自动重新提交。',
   '不要声称已经改写草稿或创建发团；候选只出现在中间表单，由 User 确认后才写入。',
@@ -52,7 +52,7 @@ export interface AiCreateModelContract {
 export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   recordWorkItems: WORK_ITEMS_TOOL_DESCRIPTION,
   getTaskContext:
-    '读取当前业务快照、字段覆盖和未解决审核状态；已有发团时包含正式客源列表、客户名称及实际人数合计，建团前返回草稿。对话尾部与资料索引在冻结投影里，不在本工具中。不改写业务数据。',
+    '读取当前业务快照、字段覆盖和未解决审核状态；已有发团时包含正式客源、实际人数、resources（按日与发团级资源明细及合计）和 financeSummary（正式应收应付汇总），金额单位均为分。resources 是资源约定成本，不等于已提交应付；financeSummary 分开列出团款应收、已收、开放/关闭未收、未提交应收、其他应收，以及确认应付、已付、开放/关闭未付、未提交应付及差异。每次调用重读正式数据，不用聊天、待审核或已拒绝候选计算汇总；建团前只返回草稿。对话尾部与资料索引在冻结投影里，不在本工具中。不改写业务数据。',
   searchRouteTemplates:
     '按当前 Organization 用关键词和可选天数查询常用路线。只返回服务端给出的候选与匹配理由，不写草稿。关键词与天数都空时结果为空。',
   searchUsers:
@@ -66,6 +66,7 @@ export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
   proposeSourceOrderReviewPackage: '从用户对话或材料提取当前发团的一个客源单审核事项。只提交有证据的候选，不默认缺失字段，不写正式客源单或应收。',
   proposeSegmentResourceReviewPackage:
     '提出已有发团行程段资源的待审核候选（行程段、种类、供应商、资源名称、正总价、备注、容量提醒）。itinerarySegmentId 必须来自当前业务事实中的正式行程段，不能凭页面日期默认挂靠。供应商 ID 必须来自 searchSuppliers。只做预校验，不写入资源，也不提交应付。',
+  proposeDepartureEditReviewPackage: '为已有行程段修改或已有客源游客追加/修改生成审核稿；使用本次正式数据的目标 ID 和 objectVersion，确认后才写入，不删除游客、不改报价或计费人数。',
   proposeDepartureResourceReviewPackage:
     '提出已有发团的发团级资源待审核候选（种类、供应商、资源名称、正总价、备注、容量提醒）。用于明确全程或仅覆盖部分日期的整体费用；跨日日期写入备注，不拆价，不强挂某一天。材料已有的名称和种类必须提交，缺总价也不要只交备注。整体多服务报价按业务含义归类：地接/旅行社整体承接可归拼出；不要自动全部归为拼出。材料明确写种类其他时可以提交其他。供应商 ID 必须来自 searchSuppliers；材料点名的供应商可以使用。金额未知不要用 0；免费服务不生成费用行。只做预校验，不写入资源，也不提交应付。',
   getMaterialParseResult:

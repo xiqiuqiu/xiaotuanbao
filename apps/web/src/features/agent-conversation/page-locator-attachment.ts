@@ -11,7 +11,7 @@ import {
 
 export type AgentCurrentPageAttachment =
   | { kind: 'page_locator'; locator: PageLocator; objectLabel?: string }
-  | AgentTaskPageAttachment
+  | (AgentTaskPageAttachment & { reviewPackageId?: string })
 
 const PAGE_SECTION_LABELS: Partial<Record<PageLocator['section'] & string, string>> = {
   accounts: '往来账款',
@@ -47,12 +47,13 @@ export function currentPageAttachmentLabel(attachment: AgentCurrentPageAttachmen
     }
     return pageLocatorLabel(attachment.locator)
   }
-  return registeredTaskDescriptors.getByTaskType(attachment.taskType).attachmentLabel
+  const label = registeredTaskDescriptors.getByTaskType(attachment.taskType).attachmentLabel
+  return attachment.reviewPackageId ? `${label} · 修订审核建议` : label
 }
 
 export type ConversationSendContext =
   | { pageLocator: PageLocator; primaryTaskId?: never }
-  | { primaryTaskId: string; pageLocator?: never }
+  | { primaryTaskId: string; reviewPackageId?: string; pageLocator?: never }
   | { pageLocator?: never; primaryTaskId?: never }
 
 export function conversationSendContextFromAttachment(
@@ -64,7 +65,7 @@ export function conversationSendContextFromAttachment(
   if (attachment.kind === 'page_locator') {
     return { pageLocator: attachment.locator }
   }
-  return { primaryTaskId: attachment.taskId }
+  return { primaryTaskId: attachment.taskId, ...(attachment.reviewPackageId ? { reviewPackageId: attachment.reviewPackageId } : {}) }
 }
 
 export function nextPageAttachment(input: {

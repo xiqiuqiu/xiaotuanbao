@@ -28,6 +28,7 @@ export class AiConversationRecallService {
     organizationId: string
     conversationId: string
     inputBatchId: string
+    contextManifestId?: string
     rawInput: unknown
   }): Promise<ReadConversationHistoryOutput> {
     let input: { sequenceStart: number; sequenceEnd: number }
@@ -42,18 +43,30 @@ export class AiConversationRecallService {
         conversationId: params.conversationId,
         organizationId: params.organizationId,
       },
-      select: { conversationVersion: true },
+      select: { conversationVersion: true, userMessageEvent: { select: { sequence: true } } },
     })
     if (!batch) {
       throw new NotFoundException('输入批次不存在')
     }
-    const sequenceEnd = Math.min(input.sequenceEnd, batch.conversationVersion)
+    const manifest = params.contextManifestId
+      ? await this.prisma.aiContextManifest.findFirst({
+          where: { id: params.contextManifestId, organizationId: params.organizationId,
+            conversationId: params.conversationId, inputBatchId: params.inputBatchId },
+          select: { conversationVersion: true },
+        })
+      : null
+    if (params.contextManifestId && !manifest) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const conversationVersion = manifest?.conversationVersion ?? batch.conversationVersion
+    const sequenceEnd = Math.min(input.sequenceEnd, conversationVersion)
     const events = await this.prisma.aiConversationEvent.findMany({
       where: {
         conversationId: params.conversationId,
         organizationId: params.organizationId,
         sequence: { gte: input.sequenceStart, lte: sequenceEnd },
         kind: { in: ['user_message', 'agent_message', 'batch_status', 'error'] },
+        OR: [{ kind: { not: 'user_message' } }, { sequence: { lte: batch.userMessageEvent?.sequence ?? batch.conversationVersion } }],
       },
       orderBy: { sequence: 'asc' },
       take: CONVERSATION_HISTORY_READ_MAX_EVENTS,
@@ -86,7 +99,7 @@ export class AiConversationRecallService {
     })
     return readConversationHistoryOutputSchema.parse({
       conversationId: params.conversationId,
-      conversationVersion: batch.conversationVersion,
+      conversationVersion,
       truncated,
       preface: CONVERSATION_HISTORY_READ_PREFACE,
       events: projected,

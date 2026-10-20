@@ -1173,6 +1173,28 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('hands the same AI conversation from its creation task to the formal departure after navigation', async () => {
+    const user = userEvent.setup()
+    useAgentConversationStore.getState().persistConversation({ id: 'conv-handoff', title: '建团协作' })
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    act(() => useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'agent_task', taskType: 'departure_creation', taskId: 'task-1', reviewPackageId: 'review-old',
+    }))
+    const navigation = deferred<void>()
+    mockNavigate.mockImplementation((options) => options.to === '/departure/$departureId' ? navigation.promise : undefined)
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => expect(confirmAiCreateTask).toHaveBeenCalled())
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toMatchObject({ taskId: 'task-1' })
+    await act(async () => navigation.resolve())
+    await waitFor(() => expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'conv-handoff',
+      attachedPageAttachment: { kind: 'page_locator', locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' }, objectLabel: mockDeparture.departureNo },
+    }))
+    mockNavigate.mockReset()
+  })
+
   it('opens the already-created departure without stacking another wizard history entry', async () => {
     mockSearch = { taskId: 'task-1' }
     vi.mocked(getAiCreateTask).mockResolvedValue({

@@ -651,16 +651,31 @@ function useCreateDepartureWizardController() {
         return runConfirm()
       }
     },
-    onSuccess: (departure) => {
+    onSuccess: async (departure) => {
+      const context = useAgentConversationStore.getState()
+      const attachment = context.attachedPageAttachment
+      const continueConversation = context.conversationId && (
+        (attachment?.kind === 'agent_task' && attachment.taskId === taskIdRef.current) ||
+        (useAgentConversationRuntimeStore.getState().conversationId === context.conversationId &&
+          useAgentConversationRuntimeStore.getState().events.some((event) =>
+            event.payload.taskId === taskIdRef.current || event.payload.createdTaskId === taskIdRef.current))
+      )
       message.success('发团已创建')
       dirtyRef.current = false
       confirmIdempotencyKeyRef.current = null
       queryClient.invalidateQueries({ queryKey: ['departures'] })
       queryClient.invalidateQueries({ queryKey: ['route-templates'] })
-      navigate({
+      await navigate({
         ...agentTaskCompletedNavigation(departure.id),
         replace: true,
       })
+      if (continueConversation && useAgentConversationStore.getState().conversationId === context.conversationId) {
+        useAgentConversationStore.getState().attachCurrentPage({
+          kind: 'page_locator',
+          locator: { kind: 'departure', objectId: departure.id, section: 'overview' },
+          objectLabel: departure.departureNo,
+        })
+      }
     },
     onError: (error) => {
       const conflict = readAiCreateTaskConflict(error)

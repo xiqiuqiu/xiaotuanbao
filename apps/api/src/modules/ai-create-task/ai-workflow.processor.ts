@@ -45,6 +45,8 @@ import {
   DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
+  ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT,
+  SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT,
   reviewItemIdentity,
 } from '@xiaotuanbao/ai-contracts'
 import {
@@ -156,7 +158,9 @@ function isDepartureCollaborationReviewUnit(confirmationUnit: string) {
   return (
     confirmationUnit === SEGMENT_RESOURCE_CONFIRMATION_UNIT ||
     confirmationUnit === DEPARTURE_RESOURCE_CONFIRMATION_UNIT ||
-    confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
+    confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT ||
+    confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT ||
+    confirmationUnit === SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT
   )
 }
 
@@ -371,9 +375,7 @@ export class AiWorkflowProcessor {
                   'waiting_for_materials'::ai_input_batch_status,
                   'ready_for_agent'::ai_input_batch_status,
                   'preparing_context'::ai_input_batch_status,
-                  'agent_running'::ai_input_batch_status,
-                  'awaiting_user_input'::ai_input_batch_status,
-                  'awaiting_review'::ai_input_batch_status
+                  'agent_running'::ai_input_batch_status
                 )
             )
           ORDER BY origin.sequence ASC, b.conversation_version ASC
@@ -938,6 +940,21 @@ export class AiWorkflowProcessor {
     }
   }
 
+  private async loadAttemptHistory(job: ClaimedJob, originSequence: number) {
+    const historyEvents = await this.prisma.aiConversationEvent.findMany({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        OR: [{ kind: { not: AiConversationEventKind.user_message } }, { sequence: { lte: originSequence } }],
+      },
+      orderBy: { sequence: 'asc' },
+      select: { sequence: true, kind: true, payload: true },
+    })
+    // 认领前已完成的答复属于本轮上下文，后续排队的用户指令不属于。
+    const conversationVersion = Math.max(job.inputBatch.conversationVersion, historyEvents.at(-1)?.sequence ?? 0)
+    return { historyEvents, conversationVersion }
+  }
+
   private async prepareAttempt(
     job: ClaimedJob,
     permissionKeys: readonly string[],
@@ -1012,15 +1029,7 @@ export class AiWorkflowProcessor {
       })),
       sourceCatalog.sourceVersions,
     )
-    const historyEvents = await this.prisma.aiConversationEvent.findMany({
-      where: {
-        conversationId: job.conversationId,
-        organizationId: job.organizationId,
-        sequence: { lte: job.inputBatch.conversationVersion },
-      },
-      orderBy: { sequence: 'asc' },
-      select: { sequence: true, kind: true, payload: true },
-    })
+    const { historyEvents, conversationVersion } = await this.loadAttemptHistory(job, userEvent.sequence)
     const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
@@ -1049,14 +1058,24 @@ export class AiWorkflowProcessor {
           ? (businessSnapshot as AiCreateDraftSnapshot)
           : { mode: 'manual', routeName: '' },
       )
+      const messagePayload = userEvent.payload as Record<string, unknown>
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
+          ...(typeof messagePayload.reviewPackageId === 'string' ? { id: messagePayload.reviewPackageId } : {}),
           organizationId: job.organizationId,
           conversationId: job.conversationId,
+          taskId,
           status: AiReviewPackageStatus.pending,
         },
-        select: { id: true },
+        select: { id: true, version: true, candidates: true, userCorrections: true },
       })
+      const unresolvedState = {
+        pendingItems,
+        hasPendingReview: pendingReview != null,
+        reviewPackageId: messagePayload.reviewPackageId ?? pendingReview?.id ?? null,
+        expectedPackageVersion: messagePayload.expectedPackageVersion ?? null,
+        pendingReviews: pendingReview ? [pendingReview] : [],
+      }
       const availableToolNames = [...capabilitiesForPendingReview(
         pendingReview != null,
         task.departure != null,
@@ -1064,7 +1083,7 @@ export class AiWorkflowProcessor {
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         originUserMessageSequence: userEvent.sequence,
         currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
         events: excludeRetractedQueueMessages(historyEvents),
@@ -1080,11 +1099,7 @@ export class AiWorkflowProcessor {
           snapshot: businessSnapshot,
           fieldCoverage,
         },
-        unresolvedState: {
-          pendingItems,
-          hasPendingReview: pendingReview != null,
-          reviewPackageId: pendingReview?.id ?? null,
-        },
+        unresolvedState,
         modelId,
         toolNames: availableToolNames,
         systemInstructions: `${AI_CREATE_SYSTEM_INSTRUCTIONS}\n${WORK_ITEMS_INSTRUCTIONS}`,
@@ -1110,11 +1125,7 @@ export class AiWorkflowProcessor {
           snapshot: businessSnapshot,
           fieldCoverage,
         },
-        unresolvedState: {
-          pendingItems,
-          hasPendingReview: pendingReview != null,
-          reviewPackageId: pendingReview?.id ?? null,
-        },
+        unresolvedState,
         projection: withSourceIndexTruncation(
           preparedProjection.projection,
           modelInput.truncationReasons,
@@ -1127,7 +1138,7 @@ export class AiWorkflowProcessor {
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         eventSequences: eventSequencesForModelInput(
           budgetedContext.projection.recentTail,
           confirmedReviewContinuation
@@ -1370,15 +1381,7 @@ export class AiWorkflowProcessor {
       })),
       sourceCatalog.sourceVersions,
     )
-    const historyEvents = await this.prisma.aiConversationEvent.findMany({
-      where: {
-        conversationId: job.conversationId,
-        organizationId: job.organizationId,
-        sequence: { lte: job.inputBatch.conversationVersion },
-      },
-      orderBy: { sequence: 'asc' },
-      select: { sequence: true, kind: true, payload: true },
-    })
+    const { historyEvents, conversationVersion } = await this.loadAttemptHistory(job, userEvent.sequence)
     const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
@@ -1446,7 +1449,7 @@ export class AiWorkflowProcessor {
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         originUserMessageSequence: userEvent.sequence,
         currentUserMessageSequence: userEvent.sequence,
         events: excludeRetractedQueueMessages(historyEvents),
@@ -1491,7 +1494,7 @@ export class AiWorkflowProcessor {
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         eventSequences: eventSequencesForModelInput(
           budgetedContext.projection.recentTail,
           userEvent.sequence,
@@ -1692,15 +1695,7 @@ export class AiWorkflowProcessor {
     const pendingItems = await this.loadPendingItems(job)
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
-    const historyEvents = await this.prisma.aiConversationEvent.findMany({
-      where: {
-        conversationId: job.conversationId,
-        organizationId: job.organizationId,
-        sequence: { lte: job.inputBatch.conversationVersion },
-      },
-      orderBy: { sequence: 'asc' },
-      select: { sequence: true, kind: true, payload: true },
-    })
+    const { historyEvents, conversationVersion } = await this.loadAttemptHistory(job, userEvent.sequence)
     const parseIndex = await this.materialService.loadPinnedParseIndex(
       job.organizationId,
       job.inputBatchId,
@@ -1739,7 +1734,7 @@ export class AiWorkflowProcessor {
       const preparedProjection = await resolvePreparedProjection(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         originUserMessageSequence: userEvent.sequence,
         currentUserMessageSequence: userEvent.sequence,
         events: excludeRetractedQueueMessages(historyEvents),
@@ -1780,7 +1775,7 @@ export class AiWorkflowProcessor {
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
-        conversationVersion: job.inputBatch.conversationVersion,
+        conversationVersion,
         eventSequences: eventSequencesForModelInput(
           budgetedContext.projection.recentTail,
           userEvent.sequence,
@@ -2942,8 +2937,6 @@ export class AiWorkflowProcessor {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
-            AiInputBatchStatus.awaiting_user_input,
-            AiInputBatchStatus.awaiting_review,
           ],
         },
       },

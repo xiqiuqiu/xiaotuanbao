@@ -123,13 +123,13 @@ function pkg(overrides?: Partial<AiReviewPackageView>): AiReviewPackageView {
   }
 }
 
-function renderPanel(item = pkg()) {
+function renderPanel(item = pkg(), client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   getDepartureCollaboration.mockResolvedValue({
     items: [item],
     confirmations: [],
   })
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <App>
         <SourceOrderReceivableReviewPanel
           departureId="departure-1"
@@ -148,6 +148,14 @@ afterEach(() => {
   getDepartureCollaboration.mockReset()
   navigate.mockReset()
   closeGlobalForBusinessNavigation.mockReset()
+})
+
+it('refreshes the real receivable list cache when a confirmed receipt is restored', async () => {
+  const client = new QueryClient()
+  const key = ['departure-receivables', 'departure-1']
+  client.setQueryData(key, { items: [] })
+  renderPanel(pkg({ status: 'confirmed' }), client)
+  await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
 })
 
 it('lists every applicable path and confirms the whole source order', async () => {

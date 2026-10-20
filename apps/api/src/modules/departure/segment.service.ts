@@ -12,6 +12,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import { ResourceKind, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import {
+  type Prisma,
   type Departure,
   type ItinerarySegment,
   type SegmentResource,
@@ -168,9 +169,30 @@ export class SegmentService {
     segmentId: string,
     dto: UpdateItinerarySegmentDto,
   ): Promise<ItinerarySegmentSummary> {
-    const segment = await this.findSegmentOrThrow(organizationId, segmentId)
-    this.ensureDepartureEditable(segment.departure)
+    const updated = await this.prisma.$transaction((tx) =>
+      this.updateInTx(tx, organizationId, segmentId, dto),
+    )
+    const payableStatusByResourceId = await this.loadPayableStatusMap(
+      organizationId,
+      updated.resources.map((resource) => resource.id),
+    )
+    const sourceGuestTotal = await this.sumSourceGuestTotal(updated.departureId)
+    return this.toSegmentSummary(updated, payableStatusByResourceId, sourceGuestTotal)
+  }
 
+  async updateInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    segmentId: string,
+    dto: UpdateItinerarySegmentDto,
+    expectedDepartureId?: string,
+  ) {
+    const locator = await this.findSegmentOrThrow(organizationId, segmentId, tx)
+    if (expectedDepartureId && locator.departureId !== expectedDepartureId) {
+      throw new ConflictException('行程不属于当前发团')
+    }
+    await this.departureFinanceFacade.lockMutableById(tx, organizationId, locator.departureId, '编辑行程')
+    const segment = await this.findSegmentOrThrow(organizationId, segmentId, tx)
     validateSegmentFields({
       name: dto.name,
     })
@@ -190,7 +212,7 @@ export class SegmentService {
 
     const destination = normalizeOptionalText(dto.destination)
 
-    const updated = await this.prisma.itinerarySegment.update({
+    const updated = await tx.itinerarySegment.update({
       where: { id: segment.id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -226,12 +248,7 @@ export class SegmentService {
       },
     })
 
-    const payableStatusByResourceId = await this.loadPayableStatusMap(
-      organizationId,
-      updated.resources.map((resource) => resource.id),
-    )
-    const sourceGuestTotal = await this.sumSourceGuestTotal(updated.departureId)
-    return this.toSegmentSummary(updated, payableStatusByResourceId, sourceGuestTotal)
+    return updated
   }
 
   async remove(organizationId: string, segmentId: string): Promise<void> {
@@ -318,8 +335,12 @@ export class SegmentService {
     return departure
   }
 
-  private async findSegmentOrThrow(organizationId: string, segmentId: string) {
-    const segment = await this.prisma.itinerarySegment.findFirst({
+  private async findSegmentOrThrow(
+    organizationId: string,
+    segmentId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const segment = await client.itinerarySegment.findFirst({
       where: {
         id: segmentId,
         departure: { organizationId },
