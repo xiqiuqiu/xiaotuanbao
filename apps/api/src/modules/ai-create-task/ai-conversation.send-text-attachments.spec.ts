@@ -914,3 +914,40 @@ describe('AiConversationService.cancelInteraction sibling items', () => {
     },
   )
 })
+
+describe('taskless clarification replies retain their task binding', () => {
+  function setupReply() {
+    const harness = createHarness()
+    harness.tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-followup', organizationId, conversationId, inputBatchId: 'batch-original', eventId: 'event-followup',
+      type: AiConversationInteractionType.free_text, prompt: '请选择行程', options: null,
+      responseSchema: { type: 'string', minLength: 1 }, status: AiConversationInteractionStatus.pending, version: 1,
+      event: { payload: { taskId } },
+    })
+    harness.tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+    return harness
+  }
+  const reply = { replyToEventId: 'event-followup', interactionId: 'int-followup', interactionVersion: 1 }
+
+  it('links a clarification reply to its original task without page or explicit task attachment', async () => {
+    const { service, tx } = setupReply()
+    await service.sendTasklessText(organizationId, userId, conversationId, '12月15日拉萨', 'reply-preserves-task', reply)
+    expect(tx.aiInputBatch.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      taskLinks: { create: { organizationId, taskId, role: 'primary' } },
+    }) }))
+    expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({ data: expect.objectContaining({ taskId, type: 'agent_batch' }) })
+  })
+
+  it('does not bind the reply to a task outside the owned conversation links', async () => {
+    const { service, tx } = setupReply()
+    tx.conversationTaskLink.findMany.mockResolvedValue([])
+    await expect(service.sendTasklessText(organizationId, userId, conversationId, '12月15日拉萨', 'reply-rejects-foreign-task', reply)).rejects.toThrow('会话未关联该任务')
+    expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects an explicit task that differs from the clarification task', async () => {
+    const { service, tx } = setupReply()
+    await expect(service.sendTasklessText(organizationId, userId, conversationId, '12月15日拉萨', 'reply-rejects-different-task', reply, [], undefined, 'other-task')).rejects.toThrow('追问与本轮主任务不匹配')
+    expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
+  })
+})

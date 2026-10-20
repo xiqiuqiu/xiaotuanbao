@@ -473,7 +473,19 @@ export class AiConversationService {
       const batchStatus = waitingForMaterials
         ? AiInputBatchStatus.waiting_for_materials
         : AiInputBatchStatus.ready_for_agent
+      if (replyResult?.taskId && (
+        (requestedPrimaryTaskId && requestedPrimaryTaskId !== replyResult.taskId) ||
+        (targetReview?.taskId && targetReview.taskId !== replyResult.taskId)
+      )) {
+        throw new BadRequestException('追问与本轮主任务不匹配')
+      }
+      const replyTask = replyResult?.taskId
+        ? await this.resolvePrimaryDepartureTask(
+            tx, organizationId, userId, conversation.id, replyResult.taskId,
+          )
+        : null
       const primaryTask =
+        replyTask ??
         collaborationTask ??
         (await this.resolvePrimaryDepartureTask(
           tx,
@@ -2064,7 +2076,7 @@ export class AiConversationService {
   ): Promise<AiConversationEvent[]> {
     const pkg = await tx.aiReviewPackage.findFirst({
       where: { id: params.reviewPackageId, organizationId: params.organizationId, taskId: params.taskId },
-      select: { conversationId: true },
+      select: { conversationId: true, inputBatchId: true },
     })
     if (!pkg?.conversationId) return []
     const messages = await tx.aiConversationEvent.findMany({
@@ -2083,10 +2095,16 @@ export class AiConversationService {
     }
     const affectedIds = [...packagesByBatch].filter(([, ids]) => ids.size > 0).map(([id]) => id)
     if (params.inputBatchId) affectedIds.push(params.inputBatchId)
+    const boundBatchIds = [...packagesByBatch]
+      .filter(([, ids]) => ids.has(params.reviewPackageId)).map(([id]) => id)
+    if (pkg.inputBatchId) {
+      affectedIds.push(pkg.inputBatchId)
+      boundBatchIds.push(pkg.inputBatchId)
+    }
     const batches = await tx.aiInputBatch.findMany({
       where: {
         organizationId: params.organizationId, conversationId: pkg.conversationId,
-        taskLinks: { some: { taskId: params.taskId } },
+        OR: [{ taskLinks: { some: { taskId: params.taskId } } }, { id: { in: boundBatchIds } }],
         status: { in: [AiInputBatchStatus.awaiting_review, AiInputBatchStatus.awaiting_user_input] },
         ...(affectedIds.length ? { id: { in: affectedIds } } : {}),
       },
@@ -2602,6 +2620,7 @@ export class AiConversationService {
     interactionId: string
     text: string
     selectedOptionId?: string
+    taskId?: string
     events: AiConversationEvent[]
   }> {
     const reply = requireCompleteReply(params.reply)
@@ -2611,6 +2630,7 @@ export class AiConversationService {
         conversationId: params.conversationId,
         organizationId: params.organizationId,
       },
+      include: { event: { select: { payload: true } } },
     })
     if (!interaction) {
       throw new NotFoundException('追问不存在')
@@ -2655,7 +2675,11 @@ export class AiConversationService {
       },
     })
     const released = await this.releaseNextQueuedBatch(tx, params.conversationId)
+    const payload = interaction.event?.payload
+    const taskId = payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.taskId === 'string'
+      ? payload.taskId : undefined
     return {
+      taskId,
       replyToEventId: interaction.eventId,
       interactionId: interaction.id,
       text: resolved.text,

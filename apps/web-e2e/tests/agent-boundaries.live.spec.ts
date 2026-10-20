@@ -82,6 +82,8 @@ async function setup(page: Page, testInfo: TestInfo, suffix: string) {
     await save('before-confirm')
     await panel.getByRole('button', { name: '确认修改行程段' }).click()
     await expect(workspace.getByRole('button', { name: '查看行程段', exact: true })).toBeVisible({ timeout: 60_000 })
+    await expect.poll(async () => (await state()).events.filter(event => event.kind === 'batch_status').at(-1)?.payload.status,
+      { message: '审核写入后，本批次也应退出待审核状态', timeout: 15_000 }).toBe('completed')
     await save('after-confirm')
     await workspace.getByRole('button', { name: '返回业务页面', exact: true }).first().click()
   }
