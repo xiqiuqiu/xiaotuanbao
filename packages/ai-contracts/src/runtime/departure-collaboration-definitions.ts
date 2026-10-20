@@ -1,3 +1,4 @@
+import { ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT, ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA, SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT, SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA, itinerarySegmentUpdateReviewCandidateSchema, sourceOrderGuestsUpdateReviewCandidateSchema, submitDepartureEditReviewModelInputSchema } from '../review/departure-edit-schema'
 import { CONVERSATION_ROUTING_CAPABILITY, CONVERSATION_ROUTING_CAPABILITY_REF } from './conversation-routing-capability'
 import { z } from 'zod'
 import { AI_CREATE_CAPABILITY_DEFINITIONS, AI_CREATE_CAPABILITY_REFS_BY_TOOL } from './ai-create-definitions'
@@ -57,6 +58,9 @@ export const PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL = {
   version: 1,
 } as const
 
+export const PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL = { name: 'proposeDepartureEditReviewPackage', version: 1 } as const
+export const DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF = { key: 'departure.edit.propose', version: 1 } as const
+
 export const DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF = {
   key: 'departure.segment-resource.propose',
   version: PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL.version,
@@ -87,6 +91,7 @@ export const DEPARTURE_COLLABORATION_CAPABILITY_REFS_BY_TOOL = {
   },
   proposeSegmentResourceReviewPackage: DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY_REF,
   proposeDepartureResourceReviewPackage: DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY_REF,
+  proposeDepartureEditReviewPackage: DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF,
   readConversationHistory: CONVERSATION_HISTORY_READ_CAPABILITY_REF,
   readConversationSource: CONVERSATION_SOURCE_READ_CAPABILITY_REF,
 } as const
@@ -144,6 +149,30 @@ export const proposeDepartureResourceReviewPackageOutputSchema = z.discriminated
 export type ProposeDepartureResourceReviewPackageOutput = z.infer<
   typeof proposeDepartureResourceReviewPackageOutputSchema
 >
+
+export const proposeDepartureEditReviewPackageOutputSchema = z.union([
+  z.object({
+    status: z.literal('accepted'), objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(), expectedPackageVersion: z.number().int().positive().optional(),
+    confirmationUnit: z.literal(ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT),
+    payloadSchema: z.literal(ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA),
+    candidates: z.array(itinerarySegmentUpdateReviewCandidateSchema).min(2), normalizedProposal: normalizedEvidenceProposalSchemaV1,
+  }).strip(),
+  z.object({
+    status: z.literal('accepted'), objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(), expectedPackageVersion: z.number().int().positive().optional(),
+    confirmationUnit: z.literal(SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT),
+    payloadSchema: z.literal(SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA),
+    candidates: z.array(sourceOrderGuestsUpdateReviewCandidateSchema).length(2), normalizedProposal: normalizedEvidenceProposalSchemaV1,
+  }).strip(),
+  z.object({ status: z.literal('rejected'), errors: z.array(reviewProposalErrorSchema).min(1) }).strip(),
+]).superRefine((value, ctx) => {
+  if (value.status !== 'accepted') return
+  const { status, payloadSchema, normalizedProposal, ...input } = value
+  const parsed = submitDepartureEditReviewModelInputSchema.safeParse(input)
+  if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue(issue)
+})
+export type ProposeDepartureEditReviewPackageOutput = z.infer<typeof proposeDepartureEditReviewPackageOutputSchema>
 
 export const proposeSourceOrderReviewPackageOutputSchema = z.discriminatedUnion('status', [
   z.object({
@@ -248,6 +277,14 @@ export const DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY = {
   outputSchema: proposeDepartureResourceReviewPackageOutputSchema,
 } as const satisfies CapabilityDefinition
 
+export const DEPARTURE_EDIT_PROPOSE_CAPABILITY = {
+  ...DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
+  ...DEPARTURE_EDIT_PROPOSE_CAPABILITY_REF,
+  toolName: PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL.name,
+  inputSchema: submitDepartureEditReviewModelInputSchema,
+  outputSchema: proposeDepartureEditReviewPackageOutputSchema,
+} as const satisfies CapabilityDefinition
+
 export const DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY = {
   ...DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
   ...DEPARTURE_SOURCE_ORDER_PROPOSE_CAPABILITY_REF,
@@ -272,6 +309,7 @@ export const DEPARTURE_COLLABORATION_CAPABILITY_DEFINITIONS = [
   getMaterialParseResultCapability,
   DEPARTURE_SEGMENT_RESOURCE_PROPOSE_CAPABILITY,
   DEPARTURE_DEPARTURE_RESOURCE_PROPOSE_CAPABILITY,
+  DEPARTURE_EDIT_PROPOSE_CAPABILITY,
   CONVERSATION_HISTORY_READ_CAPABILITY,
   CONVERSATION_SOURCE_READ_CAPABILITY,
 ] as const satisfies readonly CapabilityDefinition[]
@@ -280,7 +318,9 @@ export const DEPARTURE_COLLABORATION_INSTRUCTIONS = [
   '用户明确要求新建另一个发团时，调用 routeConversation 登记 propose_departure_creation 和 goal，交给建团流程；不得把新团候选写入当前发团，也不要声称没有建团入口。该调用仅登记目标，不能声称已创建正式发团。',
   '你是小团宝已有发团协作助手，根据用户提供的对话和材料整理客源单、行程段资源或发团级资源费用。不得凭空生成业务记录。',
   '必须先调用 getTaskContext 查询当前正式发团。snapshot.sourceOrders 是已写入客源，guestCount、adultGuestCount、childGuestCount 是客源合计人数；expectedGuestCountHint 仅为建团时的预计提示，不能代替实际人数。查询客源或人数时依据这些正式事实回答，不得因草稿提示缺失而说没有客源或人数；已有客源不代表本次待新增客源，不能擅自沿用其报价或收款约定。',
+  'snapshot.resources 只含正式资源表的按日与发团级资源，count 和 totalAmountCents 是正式资源数量及约定成本；snapshot.financeSummary 复用正式发团概览的应收应付口径，所有金额单位为分。资源已录入不等于应付已提交，netReceivableCents 是团款结算应收而不是到账；开放未结清、关闭未结清、未提交应分开说明，关闭不等于已收或已付。查询当前状态必须使用本次 getTaskContext 返回值，不能把对话、历史回复、待审核或已拒绝候选加入正式汇总。',
   '【当前业务事实】含本团正式行程段列表。材料确定某日服务时，itinerarySegmentId 必须是该列表中的 id；不存在对应段时向 User 核实，不能凭页面日期或交流背景默认挂靠。',
+  '修改已有行程段、给已有客源追加或修改游客时调用 proposeDepartureEditReviewPackage，先读本次 getTaskContext 的 snapshot.itinerarySegments 或 snapshot.sourceOrders[].guests，使用真实目标 ID 与 objectVersion。行程修改用 itinerary_segment_update；名单修改用 source_order_guests_update，guestChanges.add 仅追加，update 以 guestId 定位。只提交用户要求改变的字段；不删除游客、不改变计费人数或报价，不把已有整份名单当成追加。无法唯一定位目标先询问。每次调用只改一个行程段或一个客源单，确认前仍是审核稿。',
   '明确全程或仅覆盖部分日期的整体费用调用 proposeDepartureResourceReviewPackage；跨日日期写进备注，不拆价，不强挂某一天。明确单日费用仍调用 proposeSegmentResourceReviewPackage。',
   '材料里已出现的资源名称、种类必须提交；缺总价时仍提交已有名称和种类，把日期写入备注，不要因此只交备注。',
   '不要编造数量、单价或容量字段。容量等执行冲突有材料依据时写入 capacityWarning 提醒，不要因此拒绝合法费用。',
@@ -317,6 +357,7 @@ export const DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES = [
   GET_MATERIAL_PARSE_RESULT_TOOL.name,
   PROPOSE_SEGMENT_RESOURCE_REVIEW_TOOL.name,
   PROPOSE_DEPARTURE_RESOURCE_REVIEW_TOOL.name,
+  PROPOSE_DEPARTURE_EDIT_REVIEW_TOOL.name,
   'readConversationHistory',
   'readConversationSource',
 ] as const

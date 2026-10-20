@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -122,12 +122,12 @@ function collaboration(items: AiReviewPackageView[]): DepartureCollaborationView
   }
 }
 
-function renderPanel() {
+function renderPanel(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <ConfigProvider locale={zhCN}>
       <App>
         <QueryClientProvider
-          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+          client={client}
         >
           <SegmentResourceReviewPanel departureId="dep-1" conversationId="conv-1" />
         </QueryClientProvider>
@@ -183,6 +183,32 @@ describe('SegmentResourceReviewPanel #449', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  it('refreshes previously cached segment resources after a successful receipt arrives', async () => {
+    const client = new QueryClient()
+    const key = ['segment-resources', 'seg-1']
+    client.setQueryData(key, { items: [] })
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView({ status: 'confirmed' })]))
+    renderPanel(client)
+    await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
+  })
+
+  it('refreshes resource details when collaboration polling reports a later successful write', async () => {
+    const client = new QueryClient()
+    const key = ['segment-resources', 'seg-current']
+    client.setQueryData(key, { items: [] })
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView()]))
+    renderPanel(client)
+    await screen.findByRole('button', { name: '确认写入资源' })
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false)
+    act(() => client.setQueryData(['departure-collaboration', 'dep-1', 'conv-1'], {
+      ...collaboration([packageView()]),
+      confirmations: [{ decisionCommandId: 'later-decision', accepted: true, items: [{
+        packageId: 'pkg-1', status: 'succeeded', resultRef: { objectKind: 'segment_resource', objectId: 'resource-written' },
+      }] }],
+    }))
+    await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
   })
 
   it('blocks only the item whose new materials are still processing', async () => {

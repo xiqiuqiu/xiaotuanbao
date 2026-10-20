@@ -1,3 +1,4 @@
+import { submitDepartureEditReviewModelInputSchema } from '../review/departure-edit-schema'
 import { z } from 'zod'
 import { AiCollaborationError, aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
@@ -201,6 +202,7 @@ const headlessReviewPackageSchema = z.union([
   submitReviewPackageModelInputSchema,
   submitSegmentResourceReviewModelInputSchema,
   submitDepartureResourceReviewModelInputSchema,
+  submitDepartureEditReviewModelInputSchema,
   submitSourceOrderReviewPackageModelInputSchema,
 ])
 

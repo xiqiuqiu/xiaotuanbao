@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common'
 import {
   nextReviewItemIdentity,
+  ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT,
+  ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA,
+  SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA,
+  sourceOrderGuestChangesSchema,
+  registeredReviewSchemas,
   requiredPermissionKeyForReviewPayloadSchema,
   SOURCE_ORDER_RECEIVABLE_CONFIRMATION_UNIT,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
@@ -40,6 +45,8 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { DepartureResourceService } from '../departure/departure-resource.service'
 import { formatDateOnly } from '../departure/departure-date.utils'
+import { SegmentService } from '../departure/segment.service'
+import { readDepartureEditSnapshot } from './formal-edit-snapshot'
 import { SegmentResourceService } from '../departure/segment-resource.service'
 import { SourceOrderService } from '../departure/source-order.service'
 import { AuthService } from '../auth/auth.service'
@@ -112,6 +119,7 @@ export class ReviewCollaborationService {
     private readonly auth: AuthService,
     private readonly finance: DepartureFinanceFacade,
     private readonly generation: DepartureFinanceGenerationService,
+    private readonly segments: SegmentService,
   ) {}
 
   async ensureDepartureCollaborationTask(
@@ -939,12 +947,12 @@ export class ReviewCollaborationService {
       }),
     )
     if (refs.length === 0) return confirmations
-    const sourceOrderIds = refs.filter((ref) => ref.objectKind === 'source_order').map((ref) => ref.objectId)
+    const sourceOrderIds = refs.filter((ref) => ref.objectKind === 'source_order' || ref.objectKind === 'source_order_guests').map((ref) => ref.objectId)
     const segmentIds = refs.filter((ref) => ref.objectKind === 'segment_resource').map((ref) => ref.objectId)
     const departureResourceIds = refs
       .filter((ref) => ref.objectKind === 'departure_resource')
       .map((ref) => ref.objectId)
-    const [sourceOrders, segmentResources, departureResources] = await Promise.all([
+    const [sourceOrders, segmentResources, departureResources, itinerarySegments] = await Promise.all([
       sourceOrderIds.length
         ? this.prisma.sourceOrder.findMany({
             where: { id: { in: sourceOrderIds }, departure: { organizationId } },
@@ -955,6 +963,7 @@ export class ReviewCollaborationService {
               childGuestCount: true,
               notes: true,
               partnerId: true,
+              guests: { orderBy: { id: 'asc' }, select: { id: true, name: true, phone: true, gender: true, notes: true } },
             },
           })
         : [],
@@ -985,9 +994,29 @@ export class ReviewCollaborationService {
             },
           })
         : [],
+      refs.some((ref) => ref.objectKind === 'itinerary_segment')
+        ? this.prisma.itinerarySegment.findMany({ where: {
+            id: { in: refs.filter((ref) => ref.objectKind === 'itinerary_segment').map((ref) => ref.objectId) },
+            departure: { organizationId },
+          }, select: { id: true, name: true, destination: true, startDate: true, endDate: true, notes: true,
+            fullTicketCount: true, halfTicketCount: true, studentTicketCount: true, freeTicketCount: true } })
+        : [],
     ])
     const currentByPackage = new Map<string, Record<string, unknown> | null>()
     for (const ref of refs) {
+      if (ref.objectKind === 'itinerary_segment') {
+        const row = itinerarySegments.find((segment) => segment.id === ref.objectId)
+        currentByPackage.set(ref.packageId, row ? { ...row, itinerarySegmentId: row.id,
+          startDate: row.startDate ? formatDateOnly(row.startDate) : null,
+          endDate: row.endDate ? formatDateOnly(row.endDate) : null,
+        } : null)
+        continue
+      }
+      if (ref.objectKind === 'source_order_guests') {
+        const row = sourceOrders.find((order) => order.id === ref.objectId)
+        currentByPackage.set(ref.packageId, row ? { sourceOrderId: row.id, displayName: row.displayName, guests: row.guests } : null)
+        continue
+      }
       if (ref.objectKind === 'source_order') {
         const row = sourceOrders.find((item) => item.id === ref.objectId)
         currentByPackage.set(
@@ -1221,7 +1250,16 @@ export class ReviewCollaborationService {
       if (!departure) {
         throw new ConflictException('发团不存在或已变化，请刷新后重试')
       }
-      if (current.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
+      if (current.payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA || current.payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA) {
+        await this.finance.lockMutableById(tx, organizationId, current.targetId, '确认修改审核')
+        const values = submittedValuesFromPackage(current) ?? {}
+        const snapshot = await readDepartureEditSnapshot(tx, organizationId, current.targetId, current.confirmationUnit, values)
+        const baseline = current.baselineSnapshot as Record<string, unknown>
+        const previous = Object.fromEntries(Object.keys(snapshot).map((key) => [key, baseline[key]]))
+        if (reviewProposalHash(snapshot) !== reviewProposalHash(previous)) {
+          throw new ConflictException('目标记录已变化，请重新读取并修订审核建议')
+        }
+      } else if (current.payloadSchema === SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA) {
         // 应收确认有意不卡发团 updatedAt：无关字段变更应放行。关闭/结清仍须当场拒绝。
         this.finance.assertAllowsNewObligation(departure, '提交应收')
       } else if (current.payloadSchema === RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA) {
@@ -1295,6 +1333,42 @@ export class ReviewCollaborationService {
     for (const event of events) {
       this.conversations.publish(event.conversationId, event)
     }
+  }
+
+  private async writeConfirmedDepartureEdit(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    pkg: AiReviewPackage,
+  ): Promise<{ objectKind: string; objectId: string }> {
+    const values = submittedValuesFromPackage(pkg) ?? {}
+    const view = toReviewPackageView(pkg)
+    if (!view.schemaSupported) throw new BadRequestException('修改审核内容无效，请重新生成')
+    const { unit } = registeredReviewSchemas.requireConfirmationUnit(pkg.payloadSchema, pkg.confirmationUnit)
+    for (const [key, value] of Object.entries(values)) {
+      const field = unit.fields.find((candidate) => candidate.key === key)
+      if (!field?.valueSchema.safeParse(value).success) throw new BadRequestException('修改审核内容无效，请修正后重试')
+    }
+    if (pkg.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT) {
+      const id = String(values.itinerarySegmentId)
+      const { itinerarySegmentId, ...changes } = values
+      await this.segments.updateInTx(tx, organizationId, id, changes, pkg.targetId)
+      return { objectKind: 'itinerary_segment', objectId: id }
+    }
+    const id = String(values.sourceOrderId)
+    const changes = sourceOrderGuestChangesSchema.parse(values.guestChanges)
+    for (const guest of changes.update ?? []) {
+      const { guestId, ...fields } = guest
+      await this.sourceOrders.updateGuestInTx(tx, organizationId, id, guestId, {
+        ...fields, gender: fields.gender === null ? 'unknown' : fields.gender,
+      })
+    }
+    for (const guest of changes.add ?? []) {
+      await this.sourceOrders.createGuestInTx(tx, organizationId, id, {
+        name: guest.name, phone: guest.phone ?? undefined, notes: guest.notes ?? undefined,
+        gender: guest.gender ?? undefined,
+      })
+    }
+    return { objectKind: 'source_order_guests', objectId: id }
   }
 
   private async writeConfirmedSegmentResource(
@@ -1466,7 +1540,9 @@ export class ReviewCollaborationService {
     scheduleIds?: string[]
     generation?: string
   } | null> {
-    const expectedKind = pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
+    const expectedKind = pkg.payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA ? 'itinerary_segment'
+      : pkg.payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA ? 'source_order_guests'
+      : pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA
       ? 'segment_resource'
       : pkg.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
         ? 'departure_resource'
@@ -1499,6 +1575,9 @@ export class ReviewCollaborationService {
     organizationId: string,
     pkg: AiReviewPackage,
   ): Promise<{ objectKind: string; objectId: string; scheduleIds?: string[]; generation?: string }> {
+    if (pkg.payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA || pkg.payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA) {
+      return this.writeConfirmedDepartureEdit(tx, organizationId, pkg)
+    }
     if (pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA) {
       return this.writeConfirmedSegmentResource(tx, organizationId, pkg)
     }

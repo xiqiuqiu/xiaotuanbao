@@ -21,6 +21,9 @@ jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool
 jest.mock('./propose-segment-resource-review.tool', () => ({
   createProposeSegmentResourceReviewTool: () => 'segment-resource-review-tool',
 }))
+jest.mock('./propose-departure-edit-review.tool', () => ({
+  createProposeDepartureEditReviewTool: () => 'departure-edit-review-tool',
+}))
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
 jest.mock('./read-conversation-history.tool', () => ({ createReadConversationHistoryTool: () => 'history-tool' }))
 jest.mock('./read-conversation-source.tool', () => ({ createReadConversationSourceTool: () => 'source-tool' }))
@@ -256,6 +259,22 @@ describe('Agent Factory', () => {
         grantedCapabilities: [{ key: 'departure.task-context.read', version: 999 }],
       }),
     ).toThrow('未注册')
+  })
+
+  it('only exposes departure edits when the collaboration capability is granted', () => {
+    const editContext = requestContextSchema.parse({
+      ...context,
+      agentDefinition: { key: 'departure.collaboration', version: 1 },
+      grantedCapabilities: [{ key: 'departure.edit.propose', version: 1 }],
+    })
+    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret' }, editContext)
+    expect(agentConfigs.at(-1)?.tools).toEqual({
+      proposeDepartureEditReviewPackage: 'departure-edit-review-tool', recordWorkItems: expect.anything(),
+    })
+    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret' }, {
+      ...editContext, grantedCapabilities: [],
+    })
+    expect(agentConfigs.at(-1)?.tools).not.toHaveProperty('proposeDepartureEditReviewPackage')
   })
 
   it('exposes the formal snapshot tool for a granted collaboration task', () => {

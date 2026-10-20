@@ -91,6 +91,33 @@ const pendingReview: AiReviewPackageView = {
 afterEach(() => cleanup())
 
 describe('SourceOrderReviewPanel', () => {
+  it.each(['reject', 'cancel'] as const)('allows %s with missing fields and conflicting suggestions without writing', async (action) => {
+    const callback = vi.fn().mockResolvedValue(undefined)
+    const confirm = vi.fn().mockResolvedValue(undefined)
+    const save = vi.fn().mockResolvedValue(undefined)
+    render(<SourceOrderReviewPanel pendingReview={pendingReview}
+      confirmationBlockedReason="请先核对差异"
+      onReject={action === 'reject' ? callback : undefined}
+      onCancel={action === 'cancel' ? callback : undefined}
+      onConfirm={confirm} onSaveGroup={save} />)
+    expect(screen.getByRole('button', { name: '确认写入客源单' })).toBeDisabled()
+    await userEvent.setup().click(screen.getByRole('button', {
+      name: action === 'reject' ? '拒绝建议' : '取消审核',
+    }))
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(confirm).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it.each([{ readOnly: true }, { confirming: true }, { saving: true }, { disposing: true }])(
+    'prevents disposition when the review cannot be changed: %j', (props) => {
+      render(<SourceOrderReviewPanel pendingReview={pendingReview} {...props}
+        onReject={vi.fn()} onCancel={vi.fn()} />)
+      expect(screen.getByRole('button', { name: '拒绝建议' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: '取消审核' })).toBeDisabled()
+    },
+  )
+
   it('does not overwrite an existing adjustment when confirming no discount', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
     render(<SourceOrderReviewPanel pendingReview={{

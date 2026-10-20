@@ -149,3 +149,19 @@ describe('getTaskContext contract v2', () => {
 it('accepts every capability actually returned by a departure collaboration context', () => {
   expect(() => getTaskContextOutputSchema.parse({ ...BASE, availableCapabilities: DEPARTURE_COLLABORATION_CONTEXT_TOOL_NAMES })).not.toThrow()
 })
+
+it('preserves formal resource and finance summaries without treating candidates as facts', () => {
+  const resources = { count: 1, totalAmountCents: 60_000, items: [
+    { id: 'resource-1', scope: 'segment', segmentId: 'segment-1', resourceKind: 'hotel', title: '正式酒店', amountCents: 60_000, supplierName: '酒店', partnerName: null },
+  ] }
+  const financeSummary = {
+    netReceivableCents: 200_000, receivedCents: 50_000, openUnreceivedCents: 140_000, closedUnreceivedCents: 10_000,
+    ungeneratedReceivableCents: 0, otherReceivableCents: 0, confirmedPayableCents: 60_000, paidCents: 10_000,
+    openUnpaidCents: 40_000, closedUnpaidCents: 10_000, ungeneratedPayableCents: 0, otherPayableCents: 0,
+    resourcePayableDifferenceCents: -100,
+  }
+  const parsed = getTaskContextOutputSchema.parse({ ...BASE, snapshot: { ...BASE.snapshot, resources, financeSummary, candidates: [{ amountCents: 999_999 }] } })
+  expect(parsed.snapshot).toMatchObject({ resources, financeSummary })
+  expect(parsed.snapshot).not.toHaveProperty('candidates')
+  expect(() => getTaskContextOutputSchema.parse({ ...BASE, snapshot: { ...BASE.snapshot, resources, financeSummary: { ...financeSummary, paidCents: 1.5 } } })).toThrow()
+})

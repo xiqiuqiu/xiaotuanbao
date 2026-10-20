@@ -323,6 +323,9 @@ describe('AiConversationService.sendText attachment upload', () => {
     expect(tx.aiConversationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
       kind: 'user_message', payload: expect.objectContaining({ reviewPackageId: 'pkg-1', expectedPackageVersion: 2 }),
     }) }))
+    expect(tx.aiInputBatch.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      taskLinks: { create: { organizationId, taskId, role: 'primary' } },
+    }) }))
   })
 
   it('rejects a cross-conversation or disposed target before creating a message', async () => {
@@ -333,6 +336,17 @@ describe('AiConversationService.sendText attachment upload', () => {
     tx.aiReviewPackage.findFirst.mockResolvedValue({ id: 'pkg-1', taskId, version: 2, status: 'confirmed' })
     await expect(service.sendText(organizationId, userId, taskId, conversationId, '请核对', 'target-done', [], {}, 'pkg-1')).rejects.toThrow('仅待审核事项')
     expect(tx.aiConversationEvent.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects a review reference belonging to a different explicit primary task before creating input', async () => {
+    const { service, tx } = createHarness()
+    await expect(service.sendTasklessText(
+      organizationId, userId, conversationId, '修改审核建议', 'target-other-task',
+      {}, [], undefined, 'another-task', 'pkg-1',
+    )).rejects.toThrow('审核事项与本轮主任务不匹配')
+    expect(tx.aiConversationEvent.create).not.toHaveBeenCalled()
+    expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
+    expect(tx.agentTask.create).not.toHaveBeenCalled()
   })
 
   it('uploads attachments before opening the conversation transaction', async () => {
@@ -740,20 +754,20 @@ describe('AiConversationService.sendText composer draft', () => {
 
 
 describe('AiConversationService.sendTasklessText while a follow-up card is open', () => {
-  it('queues the new free text behind the open card instead of starting another turn', async () => {
+  it.each([AiInputBatchStatus.awaiting_user_input, AiInputBatchStatus.awaiting_review])('starts independent input without disposing the %s waiting item', async (status) => {
     const { service, tx } = createHarness()
     const waiting = {
       id: 'batch-ask',
       organizationId,
       conversationId,
-      status: AiInputBatchStatus.awaiting_user_input,
+      status,
       conversationVersion: 4,
       sources: [],
       taskLinks: [],
     }
     tx.aiInputBatch.findFirst.mockImplementation(
       async ({ where }: { where: { status?: { in?: string[] } } }) =>
-        where.status?.in?.includes(AiInputBatchStatus.awaiting_user_input)
+        where.status?.in?.includes(status)
           ? waiting
           : null,
     )
@@ -773,7 +787,7 @@ describe('AiConversationService.sendTasklessText while a follow-up card is open'
     expect(result.events.map((event) => event.payload)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '这个团几间房' }),
-        expect.objectContaining({ queued: true, status: 'ready_for_agent' }),
+        expect.objectContaining({ queued: false, status: 'ready_for_agent' }),
       ]),
     )
     expect(tx.aiWorkflowJob.create).toHaveBeenCalledWith({
@@ -783,11 +797,13 @@ describe('AiConversationService.sendTasklessText while a follow-up card is open'
         status: 'pending',
       }),
     })
+    expect(tx.aiInputBatch.update).not.toHaveBeenCalled()
+    expect(tx.aiConversationInteraction.updateMany).not.toHaveBeenCalled()
   })
 })
 
 describe('AiConversationService.sendTasklessText while the model is still writing', () => {
-  it('interrupts the running turn and reruns immediately with the new text', async () => {
+  it('queues new input without cancelling the running turn', async () => {
     const { service, tx } = createHarness()
     const running = {
       id: 'batch-running',
@@ -800,8 +816,7 @@ describe('AiConversationService.sendTasklessText while the model is still writin
     }
     tx.aiInputBatch.findFirst.mockImplementation(
       async ({ where }: { where: { status?: { in?: string[] } } }) =>
-        where.status?.in?.length === 2 &&
-        where.status.in.includes(AiInputBatchStatus.agent_running)
+        where.status?.in?.includes(AiInputBatchStatus.agent_running)
           ? running
           : null,
     )
@@ -814,24 +829,9 @@ describe('AiConversationService.sendTasklessText while the model is still writin
       'steer-while-running',
     )
 
-    expect(tx.aiInputBatch.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'batch-running' },
-        data: { status: AiInputBatchStatus.cancelled },
-      }),
-    )
-    expect(tx.aiConversationEvent.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          kind: 'batch_status',
-          payload: expect.objectContaining({
-            batchId: 'batch-running',
-            status: 'cancelled',
-            reason: 'superseded_by_user_message',
-          }),
-        }),
-      }),
-    )
+    expect(tx.aiInputBatch.update).not.toHaveBeenCalled()
+    expect(tx.aiWorkflowJob.updateMany).not.toHaveBeenCalled()
+    expect(result.events.some((event) => event.payload.status === 'cancelled')).toBe(false)
     expect(result.batch).toMatchObject({
       status: AiInputBatchStatus.ready_for_agent,
       replyToEventId: undefined,
@@ -840,7 +840,7 @@ describe('AiConversationService.sendTasklessText while the model is still writin
     expect(result.events.map((event) => event.payload)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '改成两间房' }),
-        expect.objectContaining({ queued: false, status: 'ready_for_agent' }),
+        expect.objectContaining({ queued: true, status: 'ready_for_agent' }),
       ]),
     )
   })

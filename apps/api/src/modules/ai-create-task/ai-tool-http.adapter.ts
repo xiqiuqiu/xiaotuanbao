@@ -133,6 +133,7 @@ export class AiToolHttpAdapter {
         organizationId: user.organizationId,
         conversationId: user.conversationId,
         inputBatchId: user.inputBatchId,
+        contextManifestId: user.contextManifestId,
         rawInput: body,
       })
     })
@@ -183,6 +184,10 @@ export class AiToolHttpAdapter {
   ): Promise<ProposeDepartureResourceReviewPackageOutput> {
     const caller = requireTaskBoundUser(user)
     return this.domain.proposeDepartureResourceReview(caller, body)
+  }
+
+  proposeDepartureEditReviewPackage(user: AiToolRequestUser, body: unknown) {
+    return this.domain.proposeDepartureEditReview(requireTaskBoundUser(user), body)
   }
 
   submitReviewPackage(

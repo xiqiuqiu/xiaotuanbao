@@ -238,6 +238,8 @@ export const submitReviewPackageInputSchema = z
 export const submitReviewPackageModelInputSchema = z
   .object({
     objectVersion: z.number().int().positive(),
+    reviewPackageId: z.string().min(1).optional(),
+    expectedPackageVersion: z.number().int().positive().optional(),
     confirmationUnit: z.literal(AI_REVIEW_CONFIRMATION_UNIT).default(AI_REVIEW_CONFIRMATION_UNIT),
     candidates: z.array(aiReviewCandidateInputSchema).min(1),
   })
@@ -274,6 +276,8 @@ export const proposeReviewPackageOutputSchema = z.discriminatedUnion('status', [
     .object({
       status: z.literal('accepted'),
       objectVersion: z.number().int().positive(),
+      reviewPackageId: z.string().min(1).optional(),
+      expectedPackageVersion: z.number().int().positive().optional(),
       confirmationUnit: z.enum([AI_REVIEW_CONFIRMATION_UNIT, 'source_order_create']),
       candidates: z.array(aiReviewCandidateInputSchema).min(1),
       normalizedProposal: normalizedEvidenceProposalSchemaV1,
@@ -312,7 +316,7 @@ export const reviewPackageDecisionSchema = z.discriminatedUnion('status', [
 export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
 export function capabilitiesForPendingReview(
-  hasPendingReview: boolean,
+  _hasPendingReview: boolean,
   hasFormalDeparture = false,
 ): AiCreateToolName[] {
   if (hasFormalDeparture) {
@@ -322,19 +326,6 @@ export function capabilitiesForPendingReview(
       'searchSuppliers',
       'searchPartners',
       'proposeReviewPackage',
-      'getMaterialParseResult',
-      'readConversationHistory',
-      'readConversationSource',
-      'routeConversation',
-    ]
-  }
-  if (hasPendingReview) {
-    return [
-      'getTaskContext',
-      'searchRouteTemplates',
-      'searchUsers',
-      'searchSuppliers',
-      'searchPartners',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

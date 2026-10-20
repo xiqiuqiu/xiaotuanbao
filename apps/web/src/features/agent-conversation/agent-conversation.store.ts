@@ -32,7 +32,7 @@ function samePageAttachment(
     return (
       left.locator.kind === right.locator.kind &&
       left.locator.objectId === right.locator.objectId &&
-      left.locator.section === right.locator.section
+      (left.locator.kind === 'departure' || left.locator.section === right.locator.section)
     )
   }
   return (
@@ -227,7 +227,9 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         pageAttachmentSynced: true,
         observedPageAttachment: currentAttachment,
         attachedPageAttachment: attachmentMatches
-          ? currentAttachment
+          ? current.attachedPageAttachment?.kind === 'agent_task'
+            ? current.attachedPageAttachment
+            : currentAttachment
           : current.attachedPageAttachment
             ? null
             : current.view === 'history' || current.pageContextDismissed
@@ -256,9 +258,10 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       current.attachedPageAttachment.kind === 'page_locator' &&
       currentAttachment.kind === 'page_locator' &&
       samePageAttachment(current.attachedPageAttachment, currentAttachment) &&
-      current.attachedPageAttachment.objectLabel !== currentAttachment.objectLabel
+      (current.attachedPageAttachment.objectLabel !== currentAttachment.objectLabel ||
+        current.attachedPageAttachment.locator.section !== currentAttachment.locator.section)
     ) {
-      set({ attachedPageAttachment: currentAttachment })
+      set({ attachedPageAttachment: currentAttachment, observedPageAttachment: currentAttachment })
       persistPageContext(get())
     }
   },

@@ -158,7 +158,7 @@ async function invokeCopilotNode(response: ServerResponse, run: () => Promise<vo
 export function loadAgentConfigFromEnv(): AgentServerConfig {
   return {
     port: Number(process.env.AGENT_PORT ?? 4111),
-    apiBaseUrl: process.env.API_BASE_URL ?? 'http://127.0.0.1:3000',
+    apiBaseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000',
     serviceSecret: process.env.AGENT_SERVICE_SECRET ?? '',
     allowedOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173')
       .split(',')

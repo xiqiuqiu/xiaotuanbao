@@ -15,6 +15,7 @@ import {
 } from '../src/search-related-objects.tool'
 import { createSubmitReviewPackageTool } from '../src/submit-review-package.tool'
 import { createProposeDepartureResourceReviewTool } from '../src/propose-departure-resource-review.tool'
+import { createProposeDepartureEditReviewTool } from '../src/propose-departure-edit-review.tool'
 import { createProposeSegmentResourceReviewTool } from '../src/propose-segment-resource-review.tool'
 import { createConversationRoutingTool } from '../src/conversation-routing.tool'
 
@@ -33,6 +34,7 @@ const tools = {
   proposeReviewPackage: createSubmitReviewPackageTool(config),
   proposeSegmentResourceReviewPackage: createProposeSegmentResourceReviewTool(config),
   proposeDepartureResourceReviewPackage: createProposeDepartureResourceReviewTool(config),
+  proposeDepartureEditReviewPackage: createProposeDepartureEditReviewTool(config),
   proposeSourceOrderReviewPackage: createProposeSourceOrderReviewTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
   readConversationHistory: createReadConversationHistoryTool(config),

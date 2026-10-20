@@ -639,6 +639,31 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
   })
 
+  it('running input remains FIFO and the next attempt sees its late answer but not future input', async () => {
+    const marker = 'AGENT_ONLY_RESULT_48291'
+    agent.setOutcomes([
+      resolvedItemOutcome({ kind: 'answered', message: marker, completionBasis: { kind: 'final_answer' } }),
+      resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } }),
+    ])
+    const first = await sendFirst(coordinatorToken, `${testPrefix} 第一轮`, `${testPrefix}-watermark-a`).expect(201)
+    const conversationId = track(first.body.data.conversationId)
+    agent.holdNextCall()
+    const running = processor.processDueJobs(1)
+    await waitFor(async () => expect((await listEvents(coordinatorToken, conversationId)).activeBatch?.status).toBe('agent_running'))
+    const second = await sendFollowUp(coordinatorToken, conversationId, '请复述上一轮的结果', `${testPrefix}-watermark-b`).expect(201)
+    const thirdText = `${testPrefix} FUTURE_USER_MUST_NOT_LEAK`
+    await sendFollowUp(coordinatorToken, conversationId, thirdText, `${testPrefix}-watermark-c`).expect(201)
+    expect(second.body.data.batch.queued).toBe(true)
+    agent.release()
+    await running
+    await processor.processDueJobs(1)
+    expect(agent.lastUserText()).toContain(marker)
+    expect(agent.lastUserText()).not.toContain(thirdText)
+    const state = await listEvents(coordinatorToken, conversationId)
+    expect(state.events.some(event => event.payload.reason === 'superseded_by_user_message')).toBe(false)
+    await processor.processDueJobs(1)
+  })
+
   it('runs independent conversations in parallel', async () => {
     const first = await sendFirst(
       coordinatorToken,
@@ -675,7 +700,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
   })
 
-  it('等待回答时普通输入保持排队，显式回复后继续按序执行', async () => {
+  it('等待回答时独立输入照常执行，只有显式回复才能处置原追问', async () => {
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
@@ -722,7 +747,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(stillWaiting.pendingInteraction?.id).toBe(asked.pendingInteraction?.id)
     expect(stillWaiting.pendingInteraction?.status).toBe('pending')
     expect(stillWaiting.activeBatch?.status).toBe('awaiting_user_input')
-    expect(stillWaiting.queuedBatches).toHaveLength(1)
+    expect(stillWaiting.queuedBatches).toHaveLength(0)
 
     const batches = await prisma.aiInputBatch.findMany({
       where: { conversationId },
@@ -730,7 +755,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
     expect(batches.map((batch) => batch.status)).toEqual([
       AiInputBatchStatus.awaiting_user_input,
-      AiInputBatchStatus.ready_for_agent,
+      AiInputBatchStatus.completed,
     ])
 
     await sendFollowUp(
@@ -750,7 +775,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })).toBe(0)
   })
 
-  it('同一会话的新消息等待旧追问关闭后再生成追问', async () => {
+  it('同一会话可独立保留多个追问，取消其中一个不影响另一个', async () => {
     agent.setOutcome(resolvedItemOutcome({
       kind: 'awaiting_user_input',
       completionBasis: { kind: 'persistent_clarification' },
@@ -782,7 +807,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       await prisma.aiConversationInteraction.count({
         where: { conversationId, status: 'pending' },
       }),
-    ).toBe(1)
+    ).toBe(2)
     await authRequest(app, coordinatorToken)
       .post(`/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`)
       .set('Idempotency-Key', `${testPrefix}-multi-interaction-cancel`)
@@ -804,24 +829,19 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     ).toHaveLength(2)
   })
 
-  it('撤回排队消息并编辑重发后，新批次在前一追问取消后继续执行', async () => {
-    agent.setOutcomes([
-      resolvedItemOutcome({
-        kind: 'awaiting_user_input',
-        completionBasis: { kind: 'persistent_clarification' },
-        interaction: { type: 'free_text', prompt: '请补充信息' },
-      }),
-      resolvedItemOutcome({ kind: 'answered', message: COMPLETED_MESSAGE, completionBasis: { kind: 'final_answer' } })
-    ])
+  it('撤回排队消息并编辑重发后，新批次在前一运行完成后继续执行', async () => {
     const first = await sendFirst(
       coordinatorToken,
       `${testPrefix} 撤回排队消息`,
       `${testPrefix}-retract-first`,
     ).expect(201)
     const conversationId = track(first.body.data.conversationId as string)
-    await processor.processDueJobs(5)
-    const asked = await listEvents(coordinatorToken, conversationId)
-    expect(asked.pendingInteraction?.status).toBe('pending')
+    agent.holdNextCall()
+    const running = processor.processDueJobs(1)
+    await waitFor(async () => {
+      const state = await listEvents(coordinatorToken, conversationId)
+      expect(state.activeBatch?.status).toBe('agent_running')
+    })
 
     const queuedText = `${testPrefix} 先排队再编辑`
     const queued = await sendFollowUp(
@@ -863,11 +883,8 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
     expect(resent.body.data.batch.id).not.toBe(queued.body.data.batch.id)
     expect(resent.body.data.events.at(-1)?.payload.queued).toBe(true)
-    await authRequest(app, coordinatorToken)
-      .post(`/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`)
-      .set('Idempotency-Key', `${testPrefix}-retract-cancel-wait`)
-      .send({ version: 1 })
-      .expect(200)
+    agent.release()
+    await running
     await processor.processDueJobs(5)
 
     const batches = await prisma.aiInputBatch.findMany({
@@ -876,7 +893,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       select: { id: true, status: true },
     })
     expect(batches).toEqual([
-      { id: first.body.data.batch.id, status: AiInputBatchStatus.cancelled },
+      { id: first.body.data.batch.id, status: AiInputBatchStatus.completed },
       { id: queued.body.data.batch.id, status: AiInputBatchStatus.cancelled },
       { id: resent.body.data.batch.id, status: AiInputBatchStatus.completed },
     ])

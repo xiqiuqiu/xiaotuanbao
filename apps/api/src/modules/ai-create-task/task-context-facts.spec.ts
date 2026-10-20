@@ -1,3 +1,4 @@
+import { emptyDepartureReadModelAggregate } from '../departure/departure-read-model.utils'
 import { departureObjectVersion } from './departure-object-version'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
@@ -25,6 +26,20 @@ describe('getTaskContext formal business facts', () => {
       agentTask: { ownerUserId: caller.userId, status: 'active', statusVersion: 1, createdAt: now, updatedAt: now, reviewPackages: [] },
     }
     const sourceRead = jest.fn().mockResolvedValue([order])
+    const segmentRead = jest.fn().mockResolvedValue([
+      { id: 'hotel-1', segmentId: 'segment-1', resourceKind: 'hotel', title: '正式酒店', amountCents: 60_000, supplier: { name: '酒店供应商' }, partner: null },
+    ])
+    const departureResourceRead = jest.fn().mockResolvedValue([
+      { id: 'car-1', resourceKind: 'transport', title: '正式用车', amountCents: 185_000, supplier: { name: '用车供应商' }, partner: null },
+    ])
+    const detail = {
+      ...emptyDepartureReadModelAggregate(),
+      netReceivableCents: 200_000,
+      overviewStats: { ...emptyDepartureReadModelAggregate().overviewStats,
+        receivedCents: 50_000, openUnreceivedCents: 140_000, closedUnreceivedCents: 10_000,
+        confirmedPayableCents: 245_000, paidCents: 40_000, openUnpaidCents: 200_000, closedUnpaidCents: 5_000 },
+    }
+    const detailRead = jest.fn().mockResolvedValue(detail)
     const agentTask = {
       ...task.agentTask, id: caller.taskId, organizationId: caller.organizationId,
       type: 'departure_collaboration', departureId: task.departureId, departure: task.departure,
@@ -35,11 +50,14 @@ describe('getTaskContext formal business facts', () => {
       agentTask: { findFirst: jest.fn().mockResolvedValue(collaboration ? agentTask : null) },
       aiCreateTask: { findFirst: draftRead },
       aiAgentAttempt: { findFirst: jest.fn().mockResolvedValue({ id: caller.runId }) },
+      itinerarySegment: { findMany: jest.fn().mockResolvedValue([]) },
       sourceOrder: { findMany: sourceRead },
+      segmentResource: { findMany: segmentRead },
+      departureResource: { findMany: departureResourceRead },
     }
     const transaction = jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
-    const service = new AiCreateTaskService({ ...tx, $transaction: transaction } as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never)
-    return { service, sourceRead, draftRead, agentTask, tx, transaction }
+    const service = new AiCreateTaskService({ ...tx, $transaction: transaction } as never, { getById: detailRead } as never, {} as never, {} as never, {} as never, {} as never, {} as never)
+    return { service, sourceRead, draftRead, agentTask, tx, transaction, segmentRead, departureResourceRead, detailRead, detail }
   }
 
   it('reads formal facts for an independent collaboration task without any creation draft', async () => {
@@ -88,11 +106,40 @@ describe('getTaskContext formal business facts', () => {
     })
   })
 
+  it.each([false, true])('returns formal resources and finance for collaboration=%s, rereading after changes', async (collaboration) => {
+    const { service, segmentRead, departureResourceRead, detailRead, detail } = setup(true, collaboration)
+    const result = await service.getTaskContextForAgent(caller, caller)
+    expect(result.snapshot).toMatchObject({
+      resources: { count: 2, totalAmountCents: 245_000, items: [
+        { id: 'hotel-1', scope: 'segment', segmentId: 'segment-1', title: '正式酒店', amountCents: 60_000, supplierName: '酒店供应商' },
+        { id: 'car-1', scope: 'departure', segmentId: null, title: '正式用车', amountCents: 185_000 },
+      ] },
+      financeSummary: {
+        netReceivableCents: 200_000, receivedCents: 50_000, openUnreceivedCents: 140_000, closedUnreceivedCents: 10_000,
+        confirmedPayableCents: 245_000, paidCents: 40_000, openUnpaidCents: 200_000, closedUnpaidCents: 5_000,
+      },
+    })
+    expect(segmentRead).toHaveBeenCalledWith(expect.objectContaining({ where: { segment: { departureId: 'departure-1', departure: { organizationId: 'org-1' } } } }))
+    expect(departureResourceRead).toHaveBeenCalledWith(expect.objectContaining({ where: { departureId: 'departure-1', departure: { organizationId: 'org-1' } } }))
+    expect(detailRead).toHaveBeenCalledWith('org-1', 'departure-1')
+    segmentRead.mockResolvedValueOnce([])
+    departureResourceRead.mockResolvedValueOnce([])
+    detailRead.mockResolvedValueOnce({ ...detail, overviewStats: { ...detail.overviewStats, paidCents: 245_000, openUnpaidCents: 0, closedUnpaidCents: 0 } })
+    expect((await service.getTaskContextForAgent(caller, caller)).snapshot).toMatchObject({
+      resources: { count: 0, totalAmountCents: 0, items: [] }, financeSummary: { paidCents: 245_000, openUnpaidCents: 0 },
+    })
+  })
+
   it('keeps pre-creation estimates distinct and does not query formal orders', async () => {
-    const { service, sourceRead } = setup(false)
+    const { service, sourceRead, segmentRead, departureResourceRead, detailRead } = setup(false)
     const result = await service.getTaskContextForAgent(caller, caller)
     expect(result.snapshot.expectedGuestCountHint).toBe(99)
     expect(result.snapshot).not.toHaveProperty('guestCount')
     expect(sourceRead).not.toHaveBeenCalled()
+    expect(segmentRead).not.toHaveBeenCalled()
+    expect(departureResourceRead).not.toHaveBeenCalled()
+    expect(detailRead).not.toHaveBeenCalled()
+    expect(result.snapshot).not.toHaveProperty('financeSummary')
+    expect(result.snapshot).not.toHaveProperty('resources')
   })
 })

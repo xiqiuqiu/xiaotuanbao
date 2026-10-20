@@ -18,6 +18,8 @@ import {
 } from 'antd'
 import {
   SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA,
+  ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA,
+  SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA,
   SOURCE_ORDER_RECEIVABLE_REVIEW_PAYLOAD_SCHEMA,
   RESOURCE_PAYABLE_REVIEW_PAYLOAD_SCHEMA,
   SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA,
@@ -37,6 +39,7 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { canEditDeparture } from '@/features/departure/utils/departure-permission'
 import { DepartureSourceOrderReview } from '@/features/departure/components/DepartureSourceOrderReview'
 import { AgentConversationChat } from './AgentConversationChat'
+import { DepartureEditReviewPanel, formatDepartureEditReviewValue } from './DepartureEditReviewPanel'
 import { SegmentResourceReviewPanel } from './SegmentResourceReviewPanel'
 import { DepartureResourceReviewPanel } from './DepartureResourceReviewPanel'
 import { SourceOrderReceivableReviewPanel } from './SourceOrderReceivableReviewPanel'
@@ -58,7 +61,8 @@ const statusLabels: Record<string, string> = {
   superseded: '已有新版本',
 }
 function categoryOf(pkg: AiReviewPackageView) {
-  if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA) return '客源管理'
+  if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA || pkg.payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA) return '客源管理'
+  if (pkg.payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA) return '执行安排'
   if (
     pkg.payloadSchema === SEGMENT_RESOURCE_REVIEW_PAYLOAD_SCHEMA ||
     pkg.payloadSchema === DEPARTURE_RESOURCE_REVIEW_PAYLOAD_SCHEMA
@@ -69,6 +73,10 @@ function categoryOf(pkg: AiReviewPackageView) {
     return '财务'
   }
   return /receivable|payable|finance/.test(pkg.payloadSchema) ? '财务' : '发团信息'
+}
+
+function isEditReviewSchema(payloadSchema: string) {
+  return payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA || payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA
 }
 
 function isResourceReviewSchema(payloadSchema: string) {
@@ -226,6 +234,12 @@ export function DepartureCollaborationWorkspace({
   })
   const items = conversationId ? (collaboration.data?.items ?? []) : []
   const questionItem = items.find((pkg) => pkg.id === questionPackageId)
+  const activeQuestionPackageId = questionItem?.status === 'pending' ? questionItem.id : undefined
+  useEffect(() => {
+    if (questionPackageId && collaboration.isSuccess && questionItem?.status !== 'pending') {
+      clearQuestionTarget(questionPackageId)
+    }
+  }, [questionPackageId, questionItem?.status, collaboration.isSuccess, clearQuestionTarget])
   const visible = items.filter((pkg) => category === '全部事项' || categoryOf(pkg) === category)
   const selectedId =
     selection?.scope === scope
@@ -385,7 +399,7 @@ export function DepartureCollaborationWorkspace({
         <div className={styles.chat}>
           <AgentConversationChat
             onReviewRequested={requestReview}
-            reviewPackageId={questionPackageId ?? undefined}
+            reviewPackageId={activeQuestionPackageId}
             onReviewMessageSent={clearQuestionTarget}
             onReviewMessageRestored={restoreQuestionTarget}
           />
@@ -567,7 +581,7 @@ function WorkspaceReviewItem({
         >
           {statusLabels[selected.status] ?? selected.status}
         </Tag>
-        {selected.status === 'pending' || selected.status === 'conflict' ? (
+        {selected.status === 'pending' ? (
           <Button size="small" onClick={onAsk}>针对此项提问</Button>
         ) : null}
       </Space>
@@ -576,6 +590,9 @@ function WorkspaceReviewItem({
       ) : null}
       {selected.status === 'rejected' ? (
         <Alert type="info" showIcon title="此项已拒绝，草稿未写入" />
+      ) : null}
+      {selected.status === 'cancelled' ? (
+        <Alert type="info" showIcon title="此项已取消，草稿未写入" />
       ) : null}
       <ReviewRevisionHistory pkg={selected} focused={focused} />
       <ReviewMaterialConflicts pkg={selected} canEdit={canEdit} />
@@ -615,6 +632,9 @@ function WorkspaceReviewItem({
             },
           ]}
         />
+      ) : null}
+      {isEditReviewSchema(selected.payloadSchema) ? (
+        <DepartureEditReviewPanel key={selected.id} pkg={selected} departureId={departureId} canEdit={canEdit} confirmation={confirmationForPackage(confirmations, selected.id)} />
       ) : null}
       {selected.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ? (
         <DepartureSourceOrderReview
@@ -683,7 +703,7 @@ function WorkspaceReviewItem({
           confirmations={confirmations}
         />
       ) : null}
-      {selected.status === 'confirmed' && selected.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA ? (
+      {selected.status === 'confirmed' && (selected.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA || selected.payloadSchema === SOURCE_ORDER_GUESTS_UPDATE_REVIEW_PAYLOAD_SCHEMA) ? (
         <Button
           onClick={() => {
             useAgentConversationStore.getState().closeGlobalForBusinessNavigation()
@@ -696,6 +716,13 @@ function WorkspaceReviewItem({
         >
           查看客源单
         </Button>
+      ) : null}
+      {selected.status === 'confirmed' && selected.payloadSchema === ITINERARY_SEGMENT_UPDATE_REVIEW_PAYLOAD_SCHEMA ? (
+        <Button onClick={() => {
+          useAgentConversationStore.getState().closeGlobalForBusinessNavigation()
+          const segmentId = confirmationForPackage(confirmations, selected.id)?.resultRef?.objectId
+          void navigate({ to: '/departure/$departureId', params: { departureId }, search: { tab: 'execution', ...(segmentId ? { segmentId } : {}) } })
+        }}>查看行程段</Button>
       ) : null}
       {selected.status === 'confirmed' && isResourceReviewSchema(selected.payloadSchema) ? (
         <Button
@@ -790,7 +817,7 @@ function ConfirmedReceiptCompare({
             key,
             label:
               resolveReviewField(selected.payloadSchema, selected.confirmationUnit, key)?.label ??
-              key,
+              (key === 'guests' ? '游客名单' : key === 'displayName' ? '客源名称' : key),
             children: (
               <ReviewSnapshotValue
                 fieldKey={key}
@@ -838,6 +865,7 @@ function ReviewSnapshotValue({
       )
     },
   })
+  if (isEditReviewSchema(pkg.payloadSchema)) return <>{formatDepartureEditReviewValue(fieldKey, value, { ...pkg.baselineSnapshot })}</>
   if (pkg.payloadSchema === SOURCE_ORDER_REVIEW_PAYLOAD_SCHEMA && field) {
     return (
       <SourceOrderReviewField

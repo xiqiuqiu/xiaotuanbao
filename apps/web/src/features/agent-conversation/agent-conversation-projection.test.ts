@@ -210,6 +210,7 @@ describe('AI create chat status projection', () => {
       '已拒绝本次建议',
     )
     expect(batchStatusLabel('completed', null, { disposition: 'confirmed' })).toBe('已完成')
+    expect(batchStatusLabel('cancelled', null, { disposition: 'cancelled' })).toBe('已取消本次审核')
     expect(batchStatusLabel('cancelled', null, { reason: 'user_stop' })).toBe('已停止当前处理')
     expect(batchStatusLabel('cancelled', null, { reason: 'superseded_by_user_message' })).toBeNull()
     expect(batchStatusLabel('cancelled', null, { reason: 'interaction_cancelled' })).toBe(
@@ -1788,4 +1789,23 @@ it('clears stale streaming output when its batch enters review', () => {
   expect(isCopilotChatRunning(events, null, null, live)).toBe(false)
   expect(projectConversationFrame({ events, pendingText: null, liveAssistant: live }).some(message => message.id.startsWith('live-'))).toBe(false)
   expect(isCopilotChatRunning(events, null, null, { ...live, batchId: 'next-batch', attemptId: 'next-attempt' })).toBe(true)
+})
+
+it('marks only the cancelled review card as cancelled and preserves another pending review', () => {
+  const messages = toCopilotChatMessages([
+    { sequence: 1, kind: 'agent_message', createdAt: '2026-10-20T00:00:00Z', payload: {
+      text: '客源建议一', taskId: 'task', taskType: 'departure_collaboration', batchId: 'batch', reviewPackageId: 'cancelled-review', fieldKeys: ['partnerId'],
+    } },
+    { sequence: 2, kind: 'agent_message', createdAt: '2026-10-20T00:00:01Z', payload: {
+      text: '客源建议二', taskId: 'task', taskType: 'departure_collaboration', batchId: 'another-batch', reviewPackageId: 'pending-review', fieldKeys: ['partnerId'],
+    } },
+    { sequence: 3, kind: 'batch_status', createdAt: '2026-10-20T00:00:02Z', payload: {
+      taskId: 'task', batchId: 'batch', status: 'cancelled', reviewPackageId: 'cancelled-review', disposition: 'cancelled',
+    } },
+  ], null, null)
+  const reviews = messages.filter((message) => message.activityType === 'agent-review-package')
+  expect(reviews).toHaveLength(2)
+  expect(reviews[0]?.content).toMatchObject({ reviewPackageId: 'cancelled-review', disposition: 'cancelled' })
+  expect(reviews[1]?.content).not.toHaveProperty('disposition')
+  expect(messages).toContainEqual(expect.objectContaining({ activityType: 'agent-batch-status', content: expect.objectContaining({ label: '已取消本次审核' }) }))
 })

@@ -721,15 +721,22 @@ export class SourceOrderService {
     sourceOrderId: string,
     dto: CreateSourceOrderGuestDto,
   ): Promise<SourceOrderGuestSummary> {
-    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureEditable(order.departure)
+    return this.prisma.$transaction((tx) => this.createGuestInTx(tx, organizationId, sourceOrderId, dto))
+  }
 
+  async createGuestInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    sourceOrderId: string,
+    dto: CreateSourceOrderGuestDto,
+  ): Promise<SourceOrderGuestSummary> {
+    const order = await this.lockGuestListInTx(tx, organizationId, sourceOrderId)
     const name = dto.name.trim()
     if (!name) {
       throw new BadRequestException('姓名不能为空')
     }
 
-    const guest = await this.prisma.sourceOrderGuest.create({
+    const guest = await tx.sourceOrderGuest.create({
       data: {
         sourceOrderId: order.id,
         name,
@@ -748,16 +755,24 @@ export class SourceOrderService {
     guestId: string,
     dto: UpdateSourceOrderGuestDto,
   ): Promise<SourceOrderGuestSummary> {
-    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureEditable(order.departure)
-    const guest = await this.findGuestOrThrow(order.id, guestId)
+    return this.prisma.$transaction((tx) => this.updateGuestInTx(tx, organizationId, sourceOrderId, guestId, dto))
+  }
 
+  async updateGuestInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    sourceOrderId: string,
+    guestId: string,
+    dto: UpdateSourceOrderGuestDto,
+  ): Promise<SourceOrderGuestSummary> {
+    const order = await this.lockGuestListInTx(tx, organizationId, sourceOrderId)
+    const guest = await this.findGuestOrThrow(order.id, guestId, tx)
     const name = dto.name !== undefined ? dto.name.trim() : guest.name
     if (!name) {
       throw new BadRequestException('姓名不能为空')
     }
 
-    const updated = await this.prisma.sourceOrderGuest.update({
+    const updated = await tx.sourceOrderGuest.update({
       where: { id: guest.id },
       data: {
         name,
@@ -775,10 +790,21 @@ export class SourceOrderService {
     sourceOrderId: string,
     guestId: string,
   ): Promise<void> {
-    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureEditable(order.departure)
-    const guest = await this.findGuestOrThrow(order.id, guestId)
-    await this.prisma.sourceOrderGuest.delete({ where: { id: guest.id } })
+    await this.prisma.$transaction(async (tx) => {
+      const order = await this.lockGuestListInTx(tx, organizationId, sourceOrderId)
+      const guest = await this.findGuestOrThrow(order.id, guestId, tx)
+      await tx.sourceOrderGuest.delete({ where: { id: guest.id } })
+    })
+  }
+
+  private async lockGuestListInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    sourceOrderId: string,
+  ) {
+    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId, tx)
+    await this.departureFinanceFacade.lockMutableById(tx, organizationId, order.departureId, '编辑游客名单')
+    return this.findSourceOrderOrThrow(organizationId, sourceOrderId, tx)
   }
 
   private normalizeInput(dto: {
@@ -900,8 +926,12 @@ export class SourceOrderService {
     return order
   }
 
-  private async findGuestOrThrow(sourceOrderId: string, guestId: string) {
-    const guest = await this.prisma.sourceOrderGuest.findFirst({
+  private async findGuestOrThrow(
+    sourceOrderId: string,
+    guestId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const guest = await client.sourceOrderGuest.findFirst({
       where: { id: guestId, sourceOrderId },
     })
 

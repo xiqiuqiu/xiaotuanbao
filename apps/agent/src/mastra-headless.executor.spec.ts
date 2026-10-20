@@ -29,6 +29,49 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
+  it.each([
+    { confirmationUnit: 'itinerary_segment_update', candidates: [
+      { fieldKey: 'itinerarySegmentId', proposedValue: 'segment-1' },
+      { fieldKey: 'notes', proposedValue: null },
+    ] },
+    { confirmationUnit: 'source_order_guests_update', candidates: [
+      { fieldKey: 'sourceOrderId', proposedValue: 'source-1' },
+      { fieldKey: 'guestChanges', proposedValue: { add: [{ name: '小王' }], update: [{ guestId: 'guest-1', phone: null }] } },
+    ] },
+  ])('preserves accepted $confirmationUnit proposals and deduplicates streamed replay', async (proposal) => {
+    const reviewPackage = {
+      ...proposal, objectVersion: 2, reviewPackageId: 'review-1', expectedPackageVersion: 3,
+      candidates: proposal.candidates.map((candidate) => ({ ...candidate, clarity: 'clear',
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '按要求更新' }],
+      })),
+    }
+    const accepted = { toolName: 'proposeDepartureEditReviewPackage', toolCallId: 'edit-1',
+      result: { status: 'accepted', payloadSchema: 'server-metadata', normalizedProposal: {}, ...reviewPackage },
+    }
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '按要求更新',
+      stream: async () => ({
+        fullStream: (async function* () { yield { type: 'tool-result', payload: accepted } })(),
+        getFullOutput: async () => ({ text: '请审核', toolResults: [accepted] }),
+      }),
+    })
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
+      result: { kind: 'awaiting_review', reviewPackage, reviewPackages: [reviewPackage] },
+    })
+  })
+
+  it('fails a rejected departure edit instead of reporting success', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '修改行程',
+      generate: async () => ({ text: '已完成', toolResults: [{
+        toolName: 'proposeDepartureEditReviewPackage', result: { status: 'rejected', errors: [] },
+      }] }),
+    })
+    await expect(collectHeadlessRun(executor(PROPOSE))).resolves.toMatchObject({
+      result: { kind: 'failed', error: { code: 'INVALID_FORMAT' } },
+    })
+  })
+
   it('preserves streamed step durations in the parsed run diagnostic', async () => {
     let now = 1000
     const clock = jest.spyOn(Date, 'now').mockImplementation(() => now)

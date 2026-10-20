@@ -214,7 +214,7 @@ describe('submitReviewPackage contract v1', () => {
     })
   })
 
-  it('freezes proposeReviewPackage while a package is pending', () => {
+  it('keeps proposal capability available for revisions while a package is pending', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
@@ -233,6 +233,7 @@ describe('submitReviewPackage contract v1', () => {
       'searchUsers',
       'searchSuppliers',
       'searchPartners',
+      'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

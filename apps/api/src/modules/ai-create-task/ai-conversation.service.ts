@@ -119,12 +119,11 @@ import { PageLocatorResolver } from './page-locator.resolver'
 import { reviewBatchFollowUp } from './review-batch-disposition'
 import { ensureDepartureCollaborationTaskInTx } from './ensure-departure-collaboration-task'
 
-/** 还没结束、会挡住下一条排队消息的状态。不含 ready_for_agent：那是排队消息自己的状态。 */
+/** 仍占用执行顺序的状态；人工等待项拥有独立生命周期。 */
 const OPEN_TURN_BLOCKING_STATUSES: AiInputBatchStatus[] = [
+  AiInputBatchStatus.waiting_for_materials,
   AiInputBatchStatus.preparing_context,
   AiInputBatchStatus.agent_running,
-  AiInputBatchStatus.awaiting_user_input,
-  AiInputBatchStatus.awaiting_review,
 ]
 
 const TASK_INCLUDE = {
@@ -321,6 +320,9 @@ export class AiConversationService {
       const targetReview = reviewPackageId
         ? await this.lockTargetReview(tx, organizationId, userId, conversationId!, reviewPackageId)
         : null
+      if (targetReview && requestedPrimaryTaskId && requestedPrimaryTaskId !== targetReview.taskId) {
+        throw new BadRequestException('审核事项与本轮主任务不匹配')
+      }
       let conversation: AiConversation
       if (conversationId) {
         await lockConversationRuntime(tx, organizationId, conversationId)
@@ -366,7 +368,7 @@ export class AiConversationService {
         })
       }
       const collaborationTask =
-        resolvedPage?.locator.kind === 'departure' && !requestedPrimaryTaskId
+        resolvedPage?.locator.kind === 'departure' && !requestedPrimaryTaskId && !targetReview
           ? await ensureDepartureCollaborationTaskInTx(tx, {
               organizationId,
               userId,
@@ -402,10 +404,7 @@ export class AiConversationService {
       }
 
       const answering = isReplyAttempt(reply)
-      const steered = answering
-        ? null
-        : await this.supersedeRunningBatch(tx, conversation.id)
-      if (!answering && !steered) {
+      if (!answering) {
         await this.assertProcessingBatchCapacity(tx, {
           organizationId,
           userId,
@@ -421,8 +420,7 @@ export class AiConversationService {
           })
         : null
       const messageText = replyResult?.text ?? trimmed
-      const queued =
-        !replyResult && !steered && (await this.hasBlockingBatch(tx, conversation.id))
+      const queued = await this.hasBlockingBatch(tx, conversation.id)
       const lastEvent = await tx.aiConversationEvent.findFirst({
         where: { conversationId: conversation.id },
         orderBy: { sequence: 'desc' },
@@ -482,7 +480,7 @@ export class AiConversationService {
           organizationId,
           userId,
           conversation.id,
-          requestedPrimaryTaskId,
+          targetReview?.taskId ?? requestedPrimaryTaskId,
         ))
       const batch = await tx.aiInputBatch.create({
         data: {
@@ -621,7 +619,6 @@ export class AiConversationService {
             },
           })
       const events = [
-        ...(steered?.events ?? []).map(toEventView),
         ...(replyResult?.events ?? []).map(toEventView),
         toEventView(userEvent),
         toEventView(statusEvent),
@@ -1284,7 +1281,7 @@ export class AiConversationService {
           ? AiInputBatchStatus.waiting_for_materials
           : AiInputBatchStatus.ready_for_agent
 
-        const queued = !replyResult && (await this.hasBlockingBatch(tx, conversation.id))
+        const queued = await this.hasBlockingBatch(tx, conversation.id)
         const batch = await tx.aiInputBatch.create({
           data: {
             organizationId,
@@ -2062,7 +2059,7 @@ export class AiConversationService {
       userId: string
       reviewPackageId: string
       inputBatchId: string | null
-      disposition: 'confirmed' | 'rejected'
+      disposition: 'confirmed' | 'rejected' | 'cancelled'
     },
   ): Promise<AiConversationEvent[]> {
     const pkg = await tx.aiReviewPackage.findFirst({
@@ -2099,7 +2096,7 @@ export class AiConversationService {
     const events: AiConversationEvent[] = []
     for (const batch of batches) {
       events.push(...await this.finalizeReviewBatch(tx, params, batch, [...(packagesByBatch.get(batch.id) ?? [])],
-        !events.some((event) => (event.payload as Record<string, unknown>).status === AiInputBatchStatus.ready_for_agent)))
+        !events.some((event) => event.kind === AiConversationEventKind.agent_message)))
     }
     return events
   }
@@ -2108,17 +2105,17 @@ export class AiConversationService {
     tx: Prisma.TransactionClient,
     params: {
       organizationId: string; taskId: string; userId: string; reviewPackageId: string
-      inputBatchId: string | null; disposition: 'confirmed' | 'rejected'
+      inputBatchId: string | null; disposition: 'confirmed' | 'rejected' | 'cancelled'
     },
     batch: AiInputBatch,
     referencedIds: string[],
-    allowContinuation: boolean,
+    allowReceipt: boolean,
   ): Promise<AiConversationEvent[]> {
     const remainingPending = await tx.aiReviewPackage.count({
       where: {
         OR: [{ inputBatchId: batch.id }, { id: { in: referencedIds } }],
         organizationId: params.organizationId,
-        status: 'pending',
+        status: params.disposition === 'cancelled' ? { in: ['pending', 'conflict'] } : 'pending',
         id: { not: params.reviewPackageId },
       },
     })
@@ -2147,7 +2144,8 @@ export class AiConversationService {
         actorUserId: params.userId,
         kind: TaskActivityKind.progress,
         summary:
-          params.disposition === 'confirmed' ? 'User 已确认审核项' : 'User 已拒绝审核项',
+          params.disposition === 'confirmed' ? 'User 已确认审核项'
+            : params.disposition === 'cancelled' ? 'User 已取消指定审核等待项' : 'User 已拒绝审核项',
         payload: { reviewPackageId: params.reviewPackageId },
       },
     })
@@ -2172,12 +2170,14 @@ export class AiConversationService {
       return [statusEvent]
     }
 
+    const completedStatus = params.disposition === 'cancelled' ? AiInputBatchStatus.cancelled : AiInputBatchStatus.completed
     await tx.aiInputBatch.update({
       where: { id: batch.id },
-      data: { status: AiInputBatchStatus.completed },
+      data: { status: completedStatus },
     })
     const taskPending = await tx.aiReviewPackage.count({
-      where: { organizationId: params.organizationId, taskId: params.taskId, status: AiReviewPackageStatus.pending },
+      where: { organizationId: params.organizationId, taskId: params.taskId,
+        status: params.disposition === 'cancelled' ? { in: ['pending', 'conflict'] } : AiReviewPackageStatus.pending },
     })
     const taskPendingInteractions = await tx.aiConversationInteraction.count({
       where: {
@@ -2197,12 +2197,12 @@ export class AiConversationService {
       kind: AiConversationEventKind.batch_status,
       payload: {
         batchId: batch.id,
-        status: AiInputBatchStatus.completed,
+        status: completedStatus,
         ...reviewPayload,
       },
     })
     const events = [statusEvent, ...(await this.releaseNextQueuedBatch(tx, batch.conversationId))]
-    if (followUp !== 'complete_with_continuation' || !allowContinuation || !directlyAffected || taskPendingInteractions > 0) {
+    if (followUp !== 'complete_with_receipt' || !allowReceipt || !directlyAffected || taskPendingInteractions > 0) {
       await tx.aiConversation.update({
         where: { id: batch.conversationId },
         data: { updatedAt: new Date() },
@@ -2210,46 +2210,17 @@ export class AiConversationService {
       return events
     }
 
-    const continuation = await tx.aiInputBatch.create({
-      data: {
-        organizationId: params.organizationId,
-        conversationId: batch.conversationId,
-        creatorUserId: params.userId,
-        userMessageEventId: batch.userMessageEventId,
-        conversationVersion: statusEvent.sequence,
-        status: AiInputBatchStatus.ready_for_agent,
-        taskLinks: {
-          create: {
-            organizationId: params.organizationId,
-            taskId: params.taskId,
-            role: InputBatchTaskRole.primary,
-          },
-        },
-      },
-    })
-    await tx.aiWorkflowJob.create({
-      data: {
-        organizationId: params.organizationId,
-        taskId: params.taskId,
-        conversationId: batch.conversationId,
-        inputBatchId: continuation.id,
-        type: AiWorkflowJobType.agent_batch,
-        jobKey: agentBatchJobKey(continuation.id),
-        status: AiWorkflowJobStatus.pending,
-      },
-    })
-    const readyEvent = await this.appendEvent(tx, {
+    const receipt = await this.appendEvent(tx, {
       organizationId: params.organizationId,
       conversationId: batch.conversationId,
-      kind: AiConversationEventKind.batch_status,
+      kind: AiConversationEventKind.agent_message,
       payload: {
-        batchId: continuation.id,
-        status: AiInputBatchStatus.ready_for_agent,
-        reviewPackageId: params.reviewPackageId,
-        disposition: 'confirmed',
+        taskId: params.taskId,
+        batchId: batch.id,
+        text: '本次审核建议已写入建团草稿。',
       },
     })
-    events.push(readyEvent)
+    events.push(receipt)
     await tx.aiConversation.update({
       where: { id: batch.conversationId },
       data: { updatedAt: new Date() },
@@ -2319,65 +2290,7 @@ export class AiConversationService {
       conversationId: string | null
     },
   ): Promise<AiConversationEvent[]> {
-    if (params.inputBatchId) {
-      await tx.aiInputBatch.updateMany({
-        where: {
-          id: params.inputBatchId,
-          status: AiInputBatchStatus.awaiting_review,
-        },
-        data: { status: AiInputBatchStatus.cancelled },
-      })
-    }
-    const remaining = await tx.aiReviewPackage.count({
-      where: {
-        taskId: params.taskId,
-        status: { in: ['pending', 'conflict'] },
-      },
-    })
-    if (remaining === 0) {
-      await tx.agentTask.updateMany({
-        where: { id: params.taskId, status: AgentTaskStatus.waiting },
-        data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
-      })
-    }
-    await tx.taskActivity.create({
-      data: {
-        organizationId: params.organizationId,
-        taskId: params.taskId,
-        actorUserId: params.userId,
-        kind: TaskActivityKind.progress,
-        summary: 'User 已取消指定审核等待项',
-        payload: { reviewPackageId: params.reviewPackageId },
-      },
-    })
-    const conversationId =
-      params.conversationId ??
-      (
-        await tx.aiInputBatch.findFirst({
-          where: { id: params.inputBatchId ?? '' },
-          select: { conversationId: true },
-        })
-      )?.conversationId
-    if (!conversationId) {
-      return []
-    }
-    const statusEvent = await this.appendEvent(tx, {
-      organizationId: params.organizationId,
-      conversationId,
-      kind: AiConversationEventKind.batch_status,
-      payload: {
-        batchId: params.inputBatchId,
-        status: AiInputBatchStatus.cancelled,
-        reason: 'review_package_cancelled',
-        reviewPackageId: params.reviewPackageId,
-      },
-    })
-    const released = await this.releaseNextQueuedBatch(tx, conversationId)
-    await tx.aiConversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    })
-    return [statusEvent, ...released]
+    return this.finalizeReviewDisposition(tx, { ...params, disposition: 'cancelled' })
   }
 
   async startReviewRegenerate(
@@ -2827,8 +2740,6 @@ export class AiConversationService {
             AiInputBatchStatus.ready_for_agent,
             AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
-            AiInputBatchStatus.awaiting_user_input,
-            AiInputBatchStatus.awaiting_review,
           ],
         },
       },
@@ -2975,31 +2886,10 @@ export class AiConversationService {
     })
   }
 
-  private async supersedeRunningBatch(
-    tx: Prisma.TransactionClient,
-    conversationId: string,
-  ): Promise<{ events: AiConversationEvent[] } | null> {
-    const running = await tx.aiInputBatch.findFirst({
-      where: {
-        conversationId,
-        status: {
-          in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context],
-        },
-      },
-      include: BATCH_MATERIAL_INCLUDE,
-      orderBy: { conversationVersion: 'asc' },
-    })
-    if (!running) {
-      return null
-    }
-    const cancelled = await this.cancelRunningBatch(tx, running, 'superseded_by_user_message')
-    return { events: cancelled.events }
-  }
-
   private async cancelRunningBatch(
     tx: Prisma.TransactionClient,
     batch: BatchWithMaterials,
-    reason: 'user_stop' | 'superseded_by_user_message',
+    reason: 'user_stop',
   ): Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }> {
     if (batch.status === AiInputBatchStatus.cancelled) {
       return { batch, events: [] }
@@ -3280,9 +3170,9 @@ function pickActiveBatch(batches: BatchWithMaterials[]): BatchWithMaterials | nu
     [AiInputBatchStatus.agent_running]: 0,
     [AiInputBatchStatus.preparing_context]: 0,
     [AiInputBatchStatus.waiting_for_materials]: 1,
-    [AiInputBatchStatus.awaiting_user_input]: 2,
-    [AiInputBatchStatus.awaiting_review]: 3,
-    [AiInputBatchStatus.ready_for_agent]: 4,
+    [AiInputBatchStatus.ready_for_agent]: 2,
+    [AiInputBatchStatus.awaiting_user_input]: 3,
+    [AiInputBatchStatus.awaiting_review]: 4,
   }
   return (
     [...batches].sort((left, right) => {

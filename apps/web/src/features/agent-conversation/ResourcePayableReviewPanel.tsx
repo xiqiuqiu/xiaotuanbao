@@ -15,7 +15,7 @@ import {
   getReviewConfirmation,
   prepareResourcePayableReviews,
 } from '@/services/agent-collaboration.service'
-import { confirmationForPackage } from './review-confirmation-for-package'
+import { confirmationForPackage, useConfirmedReviewInvalidation } from './review-confirmation-for-package'
 import { useAgentConversationStore } from './agent-conversation.store'
 import styles from './SegmentResourceReviewPanel.module.css'
 
@@ -112,6 +112,7 @@ function ResourcePayableReviewItem({
   const { message } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const invalidateSucceeded = useConfirmedReviewInvalidation(departureId, pkg, confirmation)
   const values = useMemo(() => candidateValues(pkg.candidates), [pkg.candidates])
   const historyStatus = typeof values.historyStatus === 'string' ? values.historyStatus : ''
   const sourceId = typeof values.sourceId === 'string' ? values.sourceId : undefined
@@ -192,6 +193,7 @@ function ResourcePayableReviewItem({
     },
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
+      invalidateSucceeded(item?.status)
       if (item?.status === 'succeeded') {
         message.success(successCopy(historyStatus, item.resultRef?.generation).toast)
         setUnknownCommandId(null)
@@ -212,9 +214,6 @@ function ResourcePayableReviewItem({
       await queryClient.invalidateQueries({
         queryKey: ['departure-collaboration', departureId],
       })
-      await queryClient.invalidateQueries({
-        queryKey: ['departure-payables', departureId],
-      })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '确认审核失败')
@@ -225,6 +224,7 @@ function ResourcePayableReviewItem({
     mutationFn: async (decisionCommandId: string) => getReviewConfirmation(decisionCommandId),
     onSuccess: async (result) => {
       const item = result.items.find((entry) => entry.packageId === pkg.id) ?? result.items[0]
+      invalidateSucceeded(item?.status)
       if (item?.status === 'succeeded') {
         setUnknownCommandId(null)
         message.success(successCopy(historyStatus, item.resultRef?.generation).toast)

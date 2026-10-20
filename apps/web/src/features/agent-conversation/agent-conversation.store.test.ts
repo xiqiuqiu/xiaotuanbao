@@ -312,6 +312,19 @@ describe('agent conversation page locator #371', () => {
     })
   })
 
+  it('retains a departure across tabs, updates its section, and respects explicit removal', () => {
+    const attachment = { kind: 'page_locator' as const, locator: { kind: 'departure' as const, objectId: 'departure-1', section: 'overview' } }
+    const store = useAgentConversationStore.getState()
+    store.startNewConversation(attachment)
+    store.syncDefaultPageAttachment(attachment)
+    const execution = { ...attachment, locator: { ...attachment.locator, section: 'execution' } }
+    store.syncDefaultPageAttachment(execution)
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual(execution)
+    store.detachCurrentPage()
+    store.syncDefaultPageAttachment(attachment)
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toBeNull()
+  })
+
   it('keeps the conversation but clears a stale page attachment after navigation', () => {
     useAgentConversationStore.getState().startNewConversation({
       kind: 'page_locator',
@@ -360,5 +373,22 @@ describe('agent conversation page locator #371', () => {
         locator: { kind: 'departure', objectId: 'departure-1', section: 'execution' },
       },
     })
+  })
+
+  it('keeps the review reference when rehydrating on the same task page', () => {
+    const store = useAgentConversationStore.getState()
+    store.persistConversation({ id: 'c-review', title: '修订审核' })
+    const attachment = {
+      kind: 'agent_task' as const,
+      taskType: 'departure_creation',
+      taskId: 'task-1',
+      reviewPackageId: 'review-1',
+    }
+    store.attachCurrentPage(attachment)
+    store.hydrateFromSession()
+    store.syncDefaultPageAttachment({
+      kind: 'agent_task', taskType: 'departure_creation', taskId: 'task-1',
+    })
+    expect(useAgentConversationStore.getState().attachedPageAttachment).toEqual(attachment)
   })
 })

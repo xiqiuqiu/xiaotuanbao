@@ -7,6 +7,11 @@ import {
 } from './page-locator-attachment'
 
 describe('current page attachment #371 #411', () => {
+  it('keeps an explicitly opened review attached to its original task', () => {
+    expect(conversationSendContextFromAttachment({
+      kind: 'agent_task', taskType: 'departure_creation', taskId: 'task-original', reviewPackageId: 'review-original',
+    })).toEqual({ primaryTaskId: 'task-original', reviewPackageId: 'review-original' })
+  })
   it('has no attachment on workbench, list, and unsaved departure-creation pages', () => {
     expect(currentPageAttachmentFromLocation('/', '')).toBeNull()
     expect(currentPageAttachmentFromLocation('/partner', '')).toBeNull()

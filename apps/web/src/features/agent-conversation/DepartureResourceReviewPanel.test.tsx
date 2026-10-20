@@ -117,12 +117,12 @@ function collaboration(items: AiReviewPackageView[]): DepartureCollaborationView
   }
 }
 
-function renderPanel() {
+function renderPanel(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <ConfigProvider locale={zhCN}>
       <App>
         <QueryClientProvider
-          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+          client={client}
         >
           <DepartureResourceReviewPanel departureId="dep-1" conversationId="conv-1" />
         </QueryClientProvider>
@@ -132,6 +132,14 @@ function renderPanel() {
 }
 
 describe('DepartureResourceReviewPanel #450', () => {
+  it('refreshes previously cached departure resources after a successful receipt arrives', async () => {
+    const client = new QueryClient()
+    const key = ['departure-resources', 'dep-1']
+    client.setQueryData(key, { items: [] })
+    getDepartureCollaboration.mockResolvedValue(collaboration([packageView({ status: 'confirmed' })]))
+    renderPanel(client)
+    await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
+  })
   beforeEach(() => {
     useAuthStore.setState({ actionKeys: ['departure:write'] })
     getDepartureCollaboration.mockReset()

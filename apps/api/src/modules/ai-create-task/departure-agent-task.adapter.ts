@@ -87,6 +87,12 @@ export class DepartureAgentTaskAdapter implements AgentTaskDomainAdapter {
     )
   }
 
+  proposeDepartureEditReview(caller: TaskBoundAiToolRequestUser, input: unknown) {
+    return this.tasks.proposeDepartureEditReviewPackageForAgent(
+      caller as Parameters<AiCreateTaskService['proposeDepartureEditReviewPackageForAgent']>[0], input,
+    )
+  }
+
   submitReview(caller: TaskBoundAiToolRequestUser, input: unknown, options: SubmitReviewOptions) {
     return this.tasks.submitReviewPackageForAgent(caller as ReviewCaller, input, options)
   }

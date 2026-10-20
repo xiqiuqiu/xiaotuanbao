@@ -134,7 +134,7 @@ function createService() {
     },
     aiAction: { create: writes.actionCreate, findFirst: jest.fn(), count: jest.fn() },
     aiReviewPackage: { create: writes.reviewCreate, findFirst: jest.fn(), count: jest.fn() },
-    aiInputBatch: { update: writes.batchUpdate },
+    aiInputBatch: { update: writes.batchUpdate, findFirst: jest.fn().mockResolvedValue({ userMessageEvent: { payload: {} } }) },
     conversationSourceParseRun: {
       findMany: jest.fn().mockResolvedValue([]),
     },
@@ -158,6 +158,51 @@ function createService() {
 }
 
 describe('AiCreateTaskService.proposeReviewPackageForAgent', () => {
+  it('binds a revision to the review and version frozen in the user message', async () => {
+    const { service, prisma } = createService()
+    prisma.aiInputBatch.findFirst.mockResolvedValue({ userMessageEvent: {
+      payload: { reviewPackageId: 'review-original', expectedPackageVersion: 2 },
+    } })
+    prisma.aiReviewPackage.findFirst.mockResolvedValue({ id: 'review-original', version: 2 })
+    const result = await service.proposeReviewPackageForAgent(caller, { ...validProposal, taskId, runId })
+    expect(result).toMatchObject({ status: 'accepted', reviewPackageId: 'review-original', expectedPackageVersion: 2 })
+    expect(prisma.aiReviewPackage.findFirst).toHaveBeenCalledWith({ where: expect.objectContaining({
+      id: 'review-original', taskId, conversationId, organizationId, status: 'pending', version: 2,
+    }) })
+  })
+
+  it('rejects a revision when the referenced package has changed since the user sent it', async () => {
+    const { service, prisma, writes } = createService()
+    prisma.aiInputBatch.findFirst.mockResolvedValue({ userMessageEvent: {
+      payload: { reviewPackageId: 'review-original', expectedPackageVersion: 2 },
+    } })
+    prisma.aiReviewPackage.findFirst.mockResolvedValue(null)
+
+    await expect(service.proposeReviewPackageForAgent(caller, {
+      ...validProposal, taskId, runId,
+    })).rejects.toMatchObject({ response: { data: { code: 'VERSION_CONFLICT' } } })
+
+    expect(prisma.aiReviewPackage.findFirst).toHaveBeenCalledWith({ where: expect.objectContaining({
+      id: 'review-original', taskId, conversationId, organizationId, status: 'pending', version: 2,
+    }) })
+    expect(writes.reviewCreate).not.toHaveBeenCalled()
+    expect(writes.batchUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a malformed frozen review version before querying the target package', async () => {
+    const { service, prisma, writes } = createService()
+    prisma.aiInputBatch.findFirst.mockResolvedValue({ userMessageEvent: {
+      payload: { reviewPackageId: 'review-original', expectedPackageVersion: '2' },
+    } })
+
+    await expect(service.proposeReviewPackageForAgent(caller, {
+      ...validProposal, taskId, runId,
+    })).rejects.toMatchObject({ response: { data: { code: 'DELEGATION_INVALID' } } })
+
+    expect(prisma.aiReviewPackage.findFirst).not.toHaveBeenCalled()
+    expect(writes.reviewCreate).not.toHaveBeenCalled()
+  })
+
   it('returns a server-normalized proposal without creating an Action, Review Package or batch result', async () => {
     const { service, writes } = createService()
 

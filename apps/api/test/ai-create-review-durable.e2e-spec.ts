@@ -9,9 +9,9 @@ import { startDeterministicParseWorker } from './support/deterministic-parse-wor
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
-const CONTINUATION_MESSAGE = '已写入团名，可以继续完善出团日期。'
+const CONFIRMATION_RECEIPT = '本次审核建议已写入建团草稿。'
 
-describe('Durable form review batch continuation (e2e) #319', () => {
+describe('Durable form review disposition and receipts (e2e) #319', () => {
   let app: INestApplication
   let prisma: PrismaClient
   let processor: AiWorkflowProcessor
@@ -318,11 +318,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     ).toBe(true)
   })
 
-  it('keeps corrections as candidates and confirms with CAS, then continues from the latest snapshot', async () => {
+  it('confirms corrected candidates with CAS and persists the receipt even when the model cannot produce an outcome', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
+    const callsAfterSubmit = agent.callCount()
 
     const pending = (
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
@@ -340,11 +341,9 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       `${testPrefix}-修正团名`,
     )
 
-    agent.setOutcome(resolvedItemOutcome({
-      kind: 'answered',
-      message: CONTINUATION_MESSAGE,
-      completionBasis: { kind: 'final_answer' },
-    }))
+    agent.setOutcome({ kind: 'failed', error: {
+      code: 'AGENT_OUTCOME_INCOMPLETE', message: '模型未形成回执', retryable: false,
+    } })
     const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
@@ -380,25 +379,18 @@ describe('Durable form review batch continuation (e2e) #319', () => {
           event.payload.status === 'ready_for_agent' &&
           event.payload.disposition === 'confirmed',
       ),
-    ).toBe(true)
+    ).toBe(false)
 
     await processor.processDueJobs(5)
-    await waitFor(async () => {
-      const listed = await listEvents(taskId, conversationId)
-      expect(listed.events.some((event) => event.payload.text === CONTINUATION_MESSAGE)).toBe(true)
-    })
-
-    const context = agent.lastTaskContext() as {
-      data?: { snapshot?: { name?: string }; currentUserMessage?: string }
-    }
-    expect(context.data?.snapshot?.name).toBe(`${testPrefix}-修正团名`)
-    expect(context.data).not.toHaveProperty('currentUserMessage')
-    expect(agent.lastUserText()).toContain('已在中间表单确认')
-    expect(agent.lastUserText()).toContain('【本轮指令】')
-    expect(agent.lastUserText()).not.toBe('请按这个团名建团')
+    expect(agent.callCount()).toBe(callsAfterSubmit)
+    const listed = await listEvents(taskId, conversationId)
+    expect(listed.events.filter((event) => event.payload.text === CONFIRMATION_RECEIPT)).toHaveLength(1)
+    expect(listed.events.some((event) => event.kind === 'error')).toBe(false)
+    expect(listed.activeBatch).toBeNull()
+    expect(await prisma.aiInputBatch.count({ where: { conversationId } })).toBe(1)
   })
 
-  it('awaiting_review 将普通输入排队，并先完成同批次确认续执行', async () => {
+  it('审核回执不占用模型，独立用户输入仍按自己的批次执行', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -415,9 +407,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(ordinary.body.data.batch).toMatchObject({
       status: 'ready_for_agent',
     })
-    expect(ordinary.body.data.batch.queued).toBe(true)
-    await processor.processDueJobs(5)
-    expect(agent.callCount()).toBe(callsAfterSubmit)
+    expect(ordinary.body.data.batch.queued).not.toBe(true)
 
     const pending = (
       await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
@@ -425,7 +415,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     agent.setOutcome(resolvedItemOutcome({
       kind: 'answered',
-      message: CONTINUATION_MESSAGE,
+      message: '已处理这条独立消息。',
       completionBasis: { kind: 'final_answer' },
     }))
     await authRequest(app, coordinatorToken)
@@ -436,15 +426,51 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       })
       .expect(200)
 
+    const confirmed = await listEvents(taskId, conversationId)
+    expect(confirmed.events.filter((event) => event.payload.text === CONFIRMATION_RECEIPT)).toHaveLength(1)
     await processor.processDueJobs(1)
     expect(agent.callCount()).toBe(callsAfterSubmit + 1)
-    expect(agent.lastUserText()).toContain('已在中间表单确认')
-    expect(agent.lastUserText()).not.toContain(ordinaryText)
-
-    agent.setOutcome(resolvedItemOutcome({ kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: COMPLETED_MESSAGE }, completionBasis: { kind: 'persistent_clarification' } }))
-    await processor.processDueJobs(5)
-    expect(agent.callCount()).toBe(callsAfterSubmit + 2)
     expect(agent.lastUserText()).toContain(ordinaryText)
+    expect(await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: ordinary.body.data.batch.id } }))
+      .toMatchObject({ status: 'completed' })
+
+    await processor.processDueJobs(5)
+    expect(agent.callCount()).toBe(callsAfterSubmit + 1)
+    expect(await prisma.aiInputBatch.count({ where: { conversationId } })).toBe(2)
+  })
+
+  it('基础审核确认保留同一输入中尚未回答的追问，不将混合诉求标为完成', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    agent.setOutcome({ kind: 'resolved_items', message: '团名待审核，接送安排待补充。',
+      items: [
+        { id: 'basic-info', request: '请按这个团名建团', goal: 'propose_change',
+          resolution: { kind: 'awaiting_review', reviewPackageIndexes: [0] } },
+        { id: 'transfer', request: '核实接送安排', goal: 'clarify',
+          resolution: { kind: 'awaiting_user_input', interaction: { type: 'free_text', prompt: '接送日期是哪天？' } } },
+      ],
+      reviewPackages: [reviewOutcome(opened.task.draft.version).reviewPackage],
+      completionBasis: { kind: 'resolved_items' },
+    })
+    await sendMessage(taskId, conversationId, '请按这个团名建团，并核实接送安排', `mixed-review-${taskId}`).expect(201)
+    await processor.processDueJobs(5)
+    const pending = await prisma.aiReviewPackage.findFirstOrThrow({ where: { taskId, status: 'pending' } })
+    const interaction = await prisma.aiConversationInteraction.findFirstOrThrow({ where: { conversationId, status: 'pending' } })
+    const callsAfterSubmit = agent.callCount()
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
+      .send({ expectedVersion: opened.task.draft.version, expectedPackageVersion: pending.version })
+      .expect(200)
+    await processor.processDueJobs(5)
+
+    expect(agent.callCount()).toBe(callsAfterSubmit)
+    expect(await prisma.aiConversationInteraction.findUniqueOrThrow({ where: { id: interaction.id } }))
+      .toMatchObject({ status: 'pending', prompt: '接送日期是哪天？' })
+    expect(await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: interaction.inputBatchId } }))
+      .toMatchObject({ status: 'awaiting_user_input' })
+    expect(await prisma.aiInputBatch.count({ where: { conversationId } })).toBe(1)
   })
 
   it('待审核时短回复“对”不确认，取消后追加信息也不复活审核项', async () => {
@@ -575,7 +601,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
           event.payload.disposition === 'confirmed',
       ),
     ).toBe(false)
-    expect(listed.events.some((event) => event.payload.text === CONTINUATION_MESSAGE)).toBe(false)
+    expect(listed.events.some((event) => event.payload.text === CONFIRMATION_RECEIPT)).toBe(false)
   })
 
   it('lets the first confirm win CAS and tells the other device the package was already handled', async () => {
@@ -590,7 +616,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     agent.setOutcome(resolvedItemOutcome({
       kind: 'answered',
-      message: CONTINUATION_MESSAGE,
+      message: CONFIRMATION_RECEIPT,
       completionBasis: { kind: 'final_answer' },
     }))
     const body = {
@@ -629,7 +655,8 @@ describe('Durable form review batch continuation (e2e) #319', () => {
           event.payload.status === 'ready_for_agent' &&
           event.payload.disposition === 'confirmed',
       ),
-    ).toHaveLength(1)
+    ).toHaveLength(0)
+    expect(listed.events.filter((event) => event.payload.text === CONFIRMATION_RECEIPT)).toHaveLength(1)
     expect(
       listed.events.filter(
         (event) =>

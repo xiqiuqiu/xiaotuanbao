@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common'
 import {
   DEPARTURE_RESOURCE_CONFIRMATION_UNIT,
+  ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT,
+  SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT,
+  type SubmitDepartureEditReviewModelInput,
   SEGMENT_RESOURCE_CONFIRMATION_UNIT,
   SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT,
   type SubmitDepartureResourceReviewModelInput,
@@ -21,7 +24,7 @@ export class AiToolWorkerAdapter {
 
   async projectReviewPackage(params: {
     actor: AiActionActor
-    input: SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput | SubmitDepartureResourceReviewModelInput | SubmitSourceOrderReviewPackageModelInput
+    input: SubmitDepartureEditReviewModelInput | SubmitReviewPackageModelInput | SubmitSegmentResourceReviewModelInput | SubmitDepartureResourceReviewModelInput | SubmitSourceOrderReviewPackageModelInput
     persist: (context: AiActionForwardContext) => Promise<string>
   }): Promise<{ action: AiActionSummary | null; reviewPackageId: string }> {
     const executed = await this.gateway.execute({
@@ -30,6 +33,8 @@ export class AiToolWorkerAdapter {
           ? 'proposeSegmentResourceReviewPackage'
           : params.input.confirmationUnit === DEPARTURE_RESOURCE_CONFIRMATION_UNIT
             ? 'proposeDepartureResourceReviewPackage'
+          : params.input.confirmationUnit === ITINERARY_SEGMENT_UPDATE_CONFIRMATION_UNIT || params.input.confirmationUnit === SOURCE_ORDER_GUESTS_UPDATE_CONFIRMATION_UNIT
+            ? 'proposeDepartureEditReviewPackage'
           : params.input.confirmationUnit === SOURCE_ORDER_REVIEW_CONFIRMATION_UNIT
             ? 'proposeSourceOrderReviewPackage'
             : 'proposeReviewPackage',

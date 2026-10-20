@@ -41,8 +41,8 @@ describe('context contract versions', () => {
   })
 
   it('does not reuse conversation.general prompt or tool schema ids for departure.collaboration', () => {
-    expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).toBe('departure-collaboration/v6')
-    expect(DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION).toBe('departure-collaboration-tools/v4')
+    expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).toBe('departure-collaboration/v7')
+    expect(DEPARTURE_COLLABORATION_TOOL_SCHEMA_VERSION).toBe('departure-collaboration-tools/v5')
     expect(DEPARTURE_COLLABORATION_SYSTEM_PROMPT_VERSION).not.toBe(
       CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
     )

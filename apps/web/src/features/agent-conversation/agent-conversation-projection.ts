@@ -181,7 +181,7 @@ export type InteractionActivityContent = {
 }
 
 export type ReviewPackageActivityContent = {
-  disposition?: 'confirmed' | 'rejected'
+  disposition?: 'confirmed' | 'rejected' | 'cancelled'
   reviewPackageId: string
   fieldKeys: string[]
   payloadSchema?: string
@@ -235,6 +235,7 @@ export function batchStatusLabel(
   }
   if (status === 'failed') return failedBatchLabel(extra?.errorCode)
   if (status === 'cancelled') {
+    if (extra?.disposition === 'cancelled') return '已取消本次审核'
     if (extra?.reason === 'interaction_cancelled') return '已取消等待'
     if (extra?.reason === 'user_stop') return '已停止当前处理'
     if (extra?.reason === 'superseded_by_user_message') return null
@@ -663,7 +664,7 @@ export function toCopilotChatMessages(
       const payload = event.payload
       const status = String(payload.status ?? '')
       const review = typeof payload.reviewPackageId === 'string' ? reviewCards.get(payload.reviewPackageId) : undefined
-      if (review && (payload.disposition === 'confirmed' || payload.disposition === 'rejected')) {
+      if (review && (payload.disposition === 'confirmed' || payload.disposition === 'rejected' || payload.disposition === 'cancelled')) {
         review.disposition = payload.disposition
       }
       if (taskId) {

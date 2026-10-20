@@ -289,6 +289,7 @@ describe('ReviewCollaborationService #447', () => {
       auth as never,
       finance as never,
       generation as never,
+      {} as never,
     )
     return {
       service,

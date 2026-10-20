@@ -14,6 +14,7 @@ import { DEPARTURE_RESOURCE_REVIEW_SCHEMA } from './departure-resource-schema'
 import { SEGMENT_RESOURCE_REVIEW_SCHEMA } from './segment-resource-schema'
 import { SOURCE_ORDER_CREATE_REVIEW_SCHEMA } from './source-order-schema'
 import { SOURCE_ORDER_RECEIVABLE_REVIEW_SCHEMA } from './source-order-receivable-schema'
+import { ITINERARY_SEGMENT_UPDATE_REVIEW_SCHEMA, SOURCE_ORDER_GUESTS_UPDATE_REVIEW_SCHEMA } from './departure-edit-schema'
 import { RESOURCE_PAYABLE_REVIEW_SCHEMA } from './resource-payable-schema'
 
 export type ReviewFieldControl = 'text' | 'date' | 'integer' | 'choice' | 'reference' | 'list'
@@ -193,6 +194,8 @@ export const registeredReviewSchemas = new ReviewSchemaRegistry([
   SOURCE_ORDER_CREATE_REVIEW_SCHEMA,
   SOURCE_ORDER_RECEIVABLE_REVIEW_SCHEMA,
   RESOURCE_PAYABLE_REVIEW_SCHEMA,
+  ITINERARY_SEGMENT_UPDATE_REVIEW_SCHEMA,
+  SOURCE_ORDER_GUESTS_UPDATE_REVIEW_SCHEMA,
 ])
 
 export function resolveReviewField(

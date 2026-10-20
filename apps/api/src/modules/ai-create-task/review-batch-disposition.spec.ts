@@ -35,13 +35,13 @@ describe('reviewBatchFollowUp #447', () => {
     ).toBe('complete_without_continuation')
   })
 
-  it('keeps create-departure continuation only after the last pending item is confirmed', () => {
+  it('records a creation receipt only after the last pending item is confirmed', () => {
     expect(
       reviewBatchFollowUp({
         remainingPendingCount: 0,
         taskType: 'departure_creation',
         disposition: 'confirmed',
       }),
-    ).toBe('complete_with_continuation')
+    ).toBe('complete_with_receipt')
   })
 })

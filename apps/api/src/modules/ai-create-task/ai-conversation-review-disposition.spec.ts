@@ -93,14 +93,29 @@ describe('revision batches finish with the reviewed item', () => {
     })
   })
 
+  it('cancels only batches without remaining review items and reconciles their revision batches', async () => {
+    const { tx, service, batches } = setup(['pkg-a', 'pkg-c'])
+    await service.finalizeReviewCancel(tx as never, {
+      organizationId: 'org-1', taskId: 'task-1', userId: 'user-1', conversationId: 'conv-1',
+      reviewPackageId: 'pkg-b', inputBatchId: 'original',
+    })
+    expect(batches.map(({ id, status }) => ({ id, status }))).toEqual([
+      { id: 'original', status: 'awaiting_review' },
+      { id: 'revision-1', status: 'cancelled' },
+      { id: 'revision-2', status: 'cancelled' },
+      { id: 'multi', status: 'awaiting_review' },
+    ])
+    expect(tx.agentTask.updateMany).not.toHaveBeenCalled()
+  })
+
 })
 
-it('keeps sibling clarifications pending after the last review is confirmed', async () => {
+it.each(['confirmed', 'cancelled'] as const)('keeps sibling clarifications pending after the last review is %s', async (disposition) => {
   const { tx, service, batches } = setup([], ['original'])
   tx.agentTask.findFirst.mockResolvedValue({ type: 'departure_creation' })
   await service.finalizeReviewDisposition(tx as never, {
     organizationId: 'org-1', taskId: 'task-1', userId: 'user-1',
-    reviewPackageId: 'pkg-b', inputBatchId: 'original', disposition: 'confirmed',
+    reviewPackageId: 'pkg-b', inputBatchId: 'original', disposition,
   })
   expect(tx.aiConversationInteraction.count).toHaveBeenCalledWith({ where: {
     organizationId: 'org-1', inputBatchId: 'original', status: 'pending',
@@ -108,9 +123,12 @@ it('keeps sibling clarifications pending after the last review is confirmed', as
   expect(batches[0].status).toBe('awaiting_user_input')
   expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
   expect(tx.agentTask.updateMany).not.toHaveBeenCalled()
+  expect(tx.aiConversationEvent.create).not.toHaveBeenCalledWith(expect.objectContaining({
+    data: expect.objectContaining({ kind: 'agent_message' }),
+  }))
 })
 
-it('queues only one creation continuation when all waiting items are resolved', async () => {
+it('records one creation receipt without a model batch when all waiting items are resolved', async () => {
   const { tx, service } = setup([])
   tx.agentTask.findFirst.mockResolvedValue({ type: 'departure_creation' })
   const params = {
@@ -119,6 +137,12 @@ it('queues only one creation continuation when all waiting items are resolved', 
   }
   await service.finalizeReviewDisposition(tx as never, params)
   await service.finalizeReviewDisposition(tx as never, params)
-  expect(tx.aiInputBatch.create).toHaveBeenCalledTimes(1)
-  expect(tx.aiWorkflowJob.create).toHaveBeenCalledTimes(1)
+  expect(tx.aiInputBatch.create).not.toHaveBeenCalled()
+  expect(tx.aiWorkflowJob.create).not.toHaveBeenCalled()
+  expect(tx.aiConversationEvent.create.mock.calls.filter(([{ data }]) => data.kind === 'agent_message'))
+    .toEqual([[{ data: expect.objectContaining({
+      conversationId: 'conv-1', kind: 'agent_message', payload: {
+        taskId: 'task-1', batchId: 'original', text: '本次审核建议已写入建团草稿。',
+      },
+    }) }]])
 })

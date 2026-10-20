@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties, PropsWithChildren } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -45,7 +45,8 @@ export function MainLayout({ children }: PropsWithChildren) {
   const isGlobalAgent = globalOpen || routeIsGlobalAgent
   const businessDepartureId = useBusinessDepartureId()
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Restore before child effects persist the current page context.
     hydrateFromSession()
   }, [hydrateFromSession])
 

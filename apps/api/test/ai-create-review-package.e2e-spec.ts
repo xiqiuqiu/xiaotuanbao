@@ -171,6 +171,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       'searchUsers',
       'searchSuppliers',
       'searchPartners',
+      'proposeReviewPackage',
       'getMaterialParseResult',
       'readConversationHistory',
       'readConversationSource',

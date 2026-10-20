@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -177,7 +177,7 @@ it('binds questions to a package ID while retaining the draft, and clears only a
   fireEvent.click(screen.getByRole('button', { name: '协作二' }))
   expect(screen.getByRole('button', { name: '发送定向问题' })).not.toHaveAttribute('data-review-package-id')
   fireEvent.click(await screen.findByRole('button', { name: '协作一' }))
-  expect(screen.getByRole('button', { name: '发送定向问题' })).toHaveAttribute('data-review-package-id', 'resource-1')
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送定向问题' })).toHaveAttribute('data-review-package-id', 'resource-1'))
   fireEvent.click(screen.getByRole('button', { name: '发送定向问题' }))
   expect(screen.queryByText('针对：resource-1')).not.toBeInTheDocument()
   expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBeNull()
@@ -529,4 +529,33 @@ it('keeps CopilotKit attachment menus above the expanded workspace overlay', () 
   )
   expect(css).toMatch(/\[data-expanded\][\s\S]*?z-index:\s*1001/)
   expect(css).toMatch(/data-radix-popper-content-wrapper[\s\S]*?z-index:\s*1100\s*!important/)
+})
+
+
+it.each(['confirmed', 'rejected', 'cancelled', 'conflict', 'missing'])('clears a referenced review when authoritative status becomes %s', async (status) => {
+  const client = createQueryClient()
+  render(<QueryClientProvider client={client}>{view(true)}</QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('tab', { name: 'resource-1 待审核' }))
+  fireEvent.click(screen.getByRole('button', { name: '针对此项提问' }))
+  fireEvent.change(screen.getByLabelText('会话输入'), { target: { value: '保留未发内容' } })
+  act(() => client.setQueryData(['departure-collaboration', 'dep-1', 'conv-1'], {
+    items: status === 'missing' ? [] : [item('resource-1', resource, status)], confirmations: [],
+  }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送定向问题' })).not.toHaveAttribute('data-review-package-id'))
+  expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBeNull()
+  expect(screen.queryByRole('button', { name: '针对此项提问' })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('会话输入')).toHaveValue('保留未发内容')
+})
+
+it('waits for authoritative reviews before clearing a restored target', async () => {
+  sessionStorage.setItem('collaboration-question:dep-1:conv-1', 'resource-1')
+  let resolveReviews!: (value: unknown) => void
+  getCollaboration.mockImplementation((_id, conversationId) => conversationId
+    ? new Promise((resolve) => { resolveReviews = resolve })
+    : Promise.resolve({ items: [], conversations: [], confirmations: [] }))
+  render(<QueryClientProvider client={createQueryClient()}>{view(true)}</QueryClientProvider>)
+  expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBe('resource-1')
+  expect(screen.getByRole('button', { name: '发送定向问题' })).not.toHaveAttribute('data-review-package-id')
+  await act(async () => resolveReviews({ items: [item('resource-1', resource, 'confirmed')], confirmations: [] }))
+  await waitFor(() => expect(sessionStorage.getItem('collaboration-question:dep-1:conv-1')).toBeNull())
 })
