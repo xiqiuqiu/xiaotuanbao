@@ -38,7 +38,7 @@ async function openSupportedDeparturePage(
 }
 
 test.describe('agent page locator #371', () => {
-  test('新会话默认带当前页面标签，发送时携带 locator', async ({ page }) => {
+  test('新会话默认带当前团，跨页签与发送后保留最新 locator', async ({ page }) => {
     await loginAs(page, coordinatorUser)
     const { departureNo } = await openSupportedDeparturePage(page)
 
@@ -50,14 +50,13 @@ test.describe('agent page locator #371', () => {
     )
 
     await page.getByRole('tab', { name: '执行安排' }).click()
-    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
-    await pane.getByRole('button', { name: '获取当前页面' }).click()
     await expect(pane.getByTestId('current-page-chip')).toContainText(
       `当前页：${departureNo} · 执行安排`,
     )
     await page.getByRole('tab', { name: '概览信息' }).click()
-    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
-    await pane.getByRole('button', { name: '获取当前页面' }).click()
+    await expect(pane.getByTestId('current-page-chip')).toContainText(
+      `当前页：${departureNo} · 概览信息`,
+    )
 
     const locatorRequest = page.waitForRequest(
       (request) =>
@@ -74,8 +73,9 @@ test.describe('agent page locator #371', () => {
     expect(
       (attached.postDataJSON() as { pageLocator?: { section?: string } }).pageLocator?.section,
     ).toBe('overview')
-    await expect(pane.getByTestId('current-page-chip')).toHaveCount(0)
-    await expect(pane.getByRole('button', { name: '获取当前页面' })).toBeVisible()
+    await expect(pane.getByTestId('current-page-chip')).toContainText(
+      `当前页：${departureNo} · 概览信息`,
+    )
   })
 
   test('刷新同一页面恢复未发送草稿和当前页附件', async ({ page }) => {

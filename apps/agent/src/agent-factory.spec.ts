@@ -65,8 +65,9 @@ const context = requestContextSchema.parse({
 
 describe('Agent Factory', () => {
   it.each(['enabled', 'disabled'] as const)('passes explicit DeepSeek thinking=%s to model execution', (modelThinking) => {
-    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-v4-flash', modelThinking }, context)
+    createAiCreateMastraFromDefinition({ apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-flash', modelThinking }, context)
     expect(agentConfigs.at(-1)).toMatchObject({
+      model: { id: 'deepseek/deepseek-flash' },
       defaultOptions: {
         providerOptions: {
           deepseek: {
@@ -86,22 +87,23 @@ describe('Agent Factory', () => {
     }
   })
 
-  it('rewrites retired DeepSeek chat/reasoner aliases onto deepseek-v4-flash', () => {
+  it.each(['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek/deepseek-v4-flash'])('rewrites legacy %s onto deepseek-flash', (model) => {
     createAiCreateMastraFromDefinition(
-      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-chat' },
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model },
       context,
     )
     expect(agentConfigs.at(-1)).toMatchObject({
-      model: { id: 'deepseek/deepseek-v4-flash' },
+      model: { id: 'deepseek/deepseek-flash' },
     })
   })
 
-  it('defaults DeepSeek thinking to enabled with medium effort when unset', () => {
+  it('defaults to deepseek-flash with thinking enabled and medium effort when unset', () => {
     createAiCreateMastraFromDefinition(
-      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret', model: 'deepseek/deepseek-v4-flash' },
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
       context,
     )
     expect(agentConfigs.at(-1)).toMatchObject({
+      model: { id: 'deepseek/deepseek-flash' },
       defaultOptions: {
         providerOptions: {
           deepseek: { thinking: { type: 'enabled' }, reasoningEffort: 'medium' },

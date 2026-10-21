@@ -95,7 +95,7 @@ function chatChunk(delta: Record<string, unknown>, finishReason: string | null =
     id: 'chatcmpl-test',
     object: 'chat.completion.chunk',
     created: 1_704_000_000,
-    model: 'deepseek-v4-flash',
+    model: 'deepseek-flash',
     choices: [{ index: 0, delta, finish_reason: finishReason }],
   }
 }
@@ -207,7 +207,7 @@ async function runAgainstMock(
         apiBaseUrl: 'http://api.local',
         serviceSecret: 'test-only',
         modelApiKey: 'test-only-not-a-secret',
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek/deepseek-flash',
         modelBaseUrl: mock.baseUrl,
         modelThinking: options?.modelThinking ?? 'enabled',
       },
@@ -239,6 +239,7 @@ test('sends thinking.type=enabled with medium effort and keeps tool-step reasoni
     assert.equal(hasToolResult(mock.bodies[0]?.messages), false)
     assert.equal(hasToolResult(mock.bodies[1]?.messages), true)
     for (const [index, body] of mock.bodies.entries()) {
+      assert.equal(body.model, 'deepseek-flash')
       assert.equal(
         Object.prototype.hasOwnProperty.call(body, 'reasoningEffort'),
         false,
@@ -280,6 +281,7 @@ test('omits reasoning_effort when thinking is explicitly disabled', async () => 
   try {
     assert.equal(mock.bodies.length, 2)
     for (const [index, body] of mock.bodies.entries()) {
+      assert.equal(body.model, 'deepseek-flash')
       assert.deepEqual(
         thinkingFromBody(body),
         { type: 'disabled' },
@@ -306,6 +308,7 @@ test('does not publish tool-step soliloquy when routing asks a clarification', a
   try {
     assert.ok(mock.bodies.length >= 1)
     for (const [index, body] of mock.bodies.entries()) {
+      assert.equal(body.model, 'deepseek-flash')
       assert.deepEqual(
         thinkingFromBody(body),
         { type: 'enabled' },

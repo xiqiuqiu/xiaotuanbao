@@ -18,7 +18,7 @@ for (const longToolChain of [false, true]) test(`production loop completes the l
     { items: [{ ...question, resolution: { kind: 'answered', message: answer } }] },
     answer,
   ]
-  const requests: Array<{ messages: unknown[] }> = []
+  const requests: Array<{ model: string; messages: unknown[] }> = []
   const server = createServer((request, response) => {
     void (async () => {
       const chunks: Buffer[] = []
@@ -28,7 +28,7 @@ for (const longToolChain of [false, true]) test(`production loop completes the l
       const toolCall = typeof reply === 'object'
       response.setHeader('Content-Type', 'application/json')
       response.end(JSON.stringify({
-        id: `completion-${requests.length}`, object: 'chat.completion', created: 1, model: 'deepseek-v4-flash',
+        id: `completion-${requests.length}`, object: 'chat.completion', created: 1, model: 'deepseek-flash',
         choices: [{ index: 0, finish_reason: toolCall ? 'tool_calls' : 'stop', message: {
           role: 'assistant', content: toolCall ? null : reply,
           ...(toolCall ? { tool_calls: [{ id: `record-${requests.length}`, type: 'function',
@@ -44,7 +44,7 @@ for (const longToolChain of [false, true]) test(`production loop completes the l
   try {
     const mastra = createAiCreateMastraFromDefinition({
       apiBaseUrl: 'http://api.local', serviceSecret: 'fixture-only', currentUserText: question.request,
-      model: 'deepseek/deepseek-v4-flash', modelThinking: 'disabled',
+      model: 'deepseek/deepseek-flash', modelThinking: 'disabled',
       modelBaseUrl: `http://127.0.0.1:${address.port}/v1`, modelApiKey: 'fixture-only',
     }, requestContextSchema.parse({
       organizationId: 'org-1', userId: 'user-1', conversationId: 'conversation-1', inputBatchId: 'batch-1',
@@ -55,6 +55,7 @@ for (const longToolChain of [false, true]) test(`production loop completes the l
     const result = await mastra.getAgent(AI_CREATE_AGENT_ID).generate(question.request)
     assert.equal(result.text, answer)
     assert.equal(requests.length, replies.length)
+    for (const request of requests) assert.equal(request.model, 'deepseek-flash')
     if (!longToolChain) assert.match(JSON.stringify(requests[2]!.messages), /ITEM_UNRESOLVED/)
     assert.equal(result.tripwire, undefined)
   } finally {
