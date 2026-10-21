@@ -95,6 +95,13 @@ describe('ReviewCollaborationService #447', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       aiCreateIdempotencyRecord: {
+        createMany: jest.fn().mockImplementation(({ data }: { data: Array<Record<string, unknown>> }) => {
+          for (const create of data) {
+            const key = String(create.idempotencyKey)
+            if (!batchRecords.has(key)) batchRecords.set(key, { id: `idem-batch-${key}`, completedAt: null, resultJson: null, ...create })
+          }
+          return Promise.resolve({ count: data.length })
+        }),
         upsert: jest.fn().mockImplementation(
           ({
             create,
@@ -135,8 +142,8 @@ describe('ReviewCollaborationService #447', () => {
           ({
             where,
           }: {
-            where: { organizationId_operation_idempotencyKey: { idempotencyKey: string } }
-          }) => itemRecords.get(where.organizationId_operation_idempotencyKey.idempotencyKey),
+            where: { organizationId_operation_idempotencyKey: { idempotencyKey: string; operation: string } }
+          }) => (where.organizationId_operation_idempotencyKey.operation === REVIEW_CONFIRM_BATCH_OPERATION ? batchRecords : itemRecords).get(where.organizationId_operation_idempotencyKey.idempotencyKey),
         ),
         update: jest.fn().mockImplementation(
           ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {

@@ -1,3 +1,4 @@
+import { clearPendingSendKey, pendingSendKey } from './conversation-send-idempotency'
 import { CopilotRuntimeRecovery } from './CopilotRuntimeRecovery'
 import { ConversationUserMessage } from './conversation-materials'
 import { getAiCreateTask } from '@/services/ai-create-task.service'
@@ -857,7 +858,15 @@ function useAgentConversationChatController(
       }
       setErrorText(null)
       const outboundText = nextText || DEFAULT_TASKLESS_ATTACHMENT_TEXT
-      const sendIdempotencyKey = current.sendIdempotencyKey ?? crypto.randomUUID()
+      const attachment = useAgentConversationStore.getState().attachedPageAttachment
+      const payload = {
+        text: outboundText,
+        ...conversationSendContextFromAttachment(attachment),
+        ...(reviewPackageId ? { reviewPackageId } : {}),
+        ...(files.length > 0 ? { files } : {}),
+      }
+      const sendScope = `${useAuthStore.getState().user?.id ?? 'anonymous'}:${conversationIdRef.current ?? 'new'}`
+      const sendIdempotencyKey = pendingSendKey(sendScope, payload)
       setPendingUploadCount(files.length)
       useAgentConversationRuntimeStore.getState().hydrate({
         conversationId: conversationIdRef.current,
@@ -867,17 +876,8 @@ function useAgentConversationChatController(
         sendIdempotencyKey,
       })
       try {
-        const attachment = useAgentConversationStore.getState().attachedPageAttachment
-        const result = await sendAgentConversationText(
-          conversationIdRef.current,
-          {
-            text: outboundText,
-            ...conversationSendContextFromAttachment(attachment),
-            ...(reviewPackageId ? { reviewPackageId } : {}),
-            ...(files.length > 0 ? { files } : {}),
-          },
-          sendIdempotencyKey,
-        )
+        const result = await sendAgentConversationText(conversationIdRef.current, payload, sendIdempotencyKey)
+        clearPendingSendKey(sendScope, sendIdempotencyKey)
         useAgentConversationRuntimeStore.getState().hydrate({
           conversationId: result.conversationId,
           events: mergeEvents(useAgentConversationRuntimeStore.getState().events, result.events),

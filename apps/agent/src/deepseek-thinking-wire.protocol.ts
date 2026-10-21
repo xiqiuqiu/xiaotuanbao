@@ -37,6 +37,7 @@ const TOOL_CALL_ID = 'call_route_conversation'
 const TOOL_ARGS = JSON.stringify({
   decision: DEPARTURE_CREATION_ROUTING_DECISION,
   goal: '帮我建一个喀纳斯3日团',
+  userExcerpt: IDENTITY.userText,
 })
 const CLARIFY_ARGS = JSON.stringify({
   decision: 'request_clarification',
@@ -206,6 +207,7 @@ async function runAgainstMock(
       {
         apiBaseUrl: 'http://api.local',
         serviceSecret: 'test-only',
+        currentUserText: IDENTITY.userText,
         modelApiKey: 'test-only-not-a-secret',
         model: 'deepseek/deepseek-flash',
         modelBaseUrl: mock.baseUrl,

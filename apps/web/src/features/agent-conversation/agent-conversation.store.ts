@@ -1,3 +1,4 @@
+import { clearPendingSendKeys } from './conversation-send-idempotency'
 import { create } from 'zustand'
 import {
   agentConversationPath,
@@ -181,6 +182,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
     persistPageContext(get())
   },
   startNewConversation: (currentAttachment) => {
+    clearPendingSendKeys('new')
     persistSelectedConversation(null)
     sessionStorage.removeItem('conversation-pending-draft:new')
     set({
@@ -345,6 +347,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
     })
   },
   reset: () => {
+    clearPendingSendKeys()
     persistReturnLocation(null)
     persistSelectedConversation(null)
     sessionStorage.removeItem(PAGE_CONTEXT_STORAGE_KEY)

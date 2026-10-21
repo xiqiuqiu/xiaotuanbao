@@ -3,13 +3,14 @@ import { createConversationRoutingTool } from './conversation-routing.tool'
 
 describe('createConversationRoutingTool', () => {
   it('maps the bounded departure decision to a registered intent without agent or capability fields', async () => {
-    const tool = createConversationRoutingTool()
+    const tool = createConversationRoutingTool('创建七月喀纳斯团')
 
     await expect(
       tool.execute?.(
         {
           decision: 'propose_departure_creation',
           goal: '创建七月喀纳斯团',
+          userExcerpt: '创建七月喀纳斯团',
           agentDefinition: { key: 'evil.agent', version: 999 },
           grantedCapabilities: ['everything'],
         } as never,
@@ -27,8 +28,8 @@ describe('createConversationRoutingTool', () => {
   })
 
   it('accepts model flat fields without confusing creation and clarification', async () => {
-    const tool = createConversationRoutingTool()
-    await expect(tool.execute?.({ decision: 'propose_departure_creation', goal: '创建指定团', prompt: '', options: [] }, {} as never))
+    const tool = createConversationRoutingTool('请创建指定团')
+    await expect(tool.execute?.({ decision: 'propose_departure_creation', goal: '创建指定团', userExcerpt: '创建指定团', prompt: '', options: [] }, {} as never))
       .resolves.toMatchObject({ status: 'accepted', registeredIntent: { goal: '创建指定团' } })
     await expect(tool.execute?.({ decision: 'request_clarification', goal: '', prompt: '选择哪份资料？', options: [] }, {} as never))
       .resolves.toMatchObject({ status: 'accepted', interaction: { type: 'free_text' } })
@@ -57,6 +58,15 @@ describe('createConversationRoutingTool', () => {
         message: expect.stringContaining('propose_departure_creation'),
       }),
     )
+  })
+
+  it('rejects a new task whose authorization excerpt is absent from the current instruction', async () => {
+    const currentUserText = '另一个独立指令：只把已有第1天改名，不新增发团。'
+    const tool = createConversationRoutingTool(currentUserText)
+    await expect(tool.execute?.({ decision: 'propose_departure_creation', goal: '另建一个发团', userExcerpt: '另建一个新的发团' }, {} as never))
+      .resolves.toMatchObject({ status: 'rejected', reason: expect.stringContaining('本轮原话') })
+    await expect(tool.execute?.({ decision: 'propose_departure_creation', goal: '另建一个发团' }, {} as never))
+      .resolves.toMatchObject({ status: 'rejected' })
   })
 
   it('maps an ambiguous decision to a structured clarification', async () => {

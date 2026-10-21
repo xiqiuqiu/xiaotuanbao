@@ -563,6 +563,7 @@ describe('AgentConversationChat page locator #371', () => {
     expect(sendAgentConversationText).toHaveBeenLastCalledWith(null,
       expect.objectContaining({ text: '只核对这项', reviewPackageId: 'pkg-1' }), expect.any(String))
     expect(onSent).toHaveBeenCalledWith('pkg-1')
+    expect(vi.mocked(sendAgentConversationText).mock.calls[1]![2]).toBe(vi.mocked(sendAgentConversationText).mock.calls[0]![2])
   })
 
   it('shows one task chip and sends it as the primary task candidate', async () => {
