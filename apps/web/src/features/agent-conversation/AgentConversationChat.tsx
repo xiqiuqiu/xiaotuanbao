@@ -6,7 +6,7 @@ import {
   CopilotChatConfigurationProvider,
   CopilotChatInput,
   CopilotChatView,
-  CopilotKit,
+  CopilotKitProvider,
   type CopilotChatInputProps,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
@@ -1523,11 +1523,9 @@ export function AgentConversationChat({
         <Typography.Text type="secondary">正在加载会话</Typography.Text>
       ) : (
         <BatchRepairContext.Provider value={batchRepairContextValue}>
-        <CopilotKit
+        <CopilotKitProvider
           runtimeUrl="/copilotkit"
           useSingleEndpoint={false}
-          enableInspector={false}
-          showDevConsole={false}
           renderActivityMessages={activityRenderers}
         >
           <CopilotRuntimeRecovery />
@@ -1559,7 +1557,7 @@ export function AgentConversationChat({
               updateDraft={updateDraft}
             />
           </CopilotChatConfigurationProvider>
-        </CopilotKit>
+        </CopilotKitProvider>
         </BatchRepairContext.Provider>
       )}
     </div>

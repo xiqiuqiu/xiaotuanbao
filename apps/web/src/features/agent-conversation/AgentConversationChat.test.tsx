@@ -263,7 +263,7 @@ vi.mock('@copilotkit/react-core/v2', () => {
   }
 
   return {
-    CopilotKit: ({
+    CopilotKitProvider: ({
       children,
       renderActivityMessages,
     }: {

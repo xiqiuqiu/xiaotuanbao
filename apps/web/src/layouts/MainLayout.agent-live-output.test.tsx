@@ -84,7 +84,7 @@ vi.mock('@/features/agent-conversation/ConversationHistoryList', () => ({
 }))
 
 vi.mock('@copilotkit/react-core/v2', () => ({
-  CopilotKit: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  CopilotKitProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CopilotChatConfigurationProvider: ({ children }: { children: React.ReactNode }) => children,
   CopilotChatReasoningMessage: Object.assign(
     () => null,
