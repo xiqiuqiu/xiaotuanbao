@@ -378,6 +378,44 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     return authRequest(app, token).get(`/api/agent/review-decisions/${decisionCommandId}`)
   }
 
+  it('keeps collaboration readable while a mixed task continuation fails, preserving its pending review', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-失败后回读`)
+    const text = '只把已有行程改名为回读核定行程，并另建一个新的发团；均不直接写入正式数据'
+    const version = await objectVersion(departureId)
+    agent.setOutcomes([{
+      kind: 'resolved_items', message: '已有行程待审核，新团继续准备。',
+      completionBasis: { kind: 'resolved_items' },
+      items: [
+        { id: 'new-departure', request: '另建一个新的发团', goal: 'governed_action', resolution: {
+          kind: 'registered_intent', intent: { key: 'task.departure-creation.requested', confidence: 'high', goal: '另建一个新的发团' },
+        } },
+        { id: 'rename-segment', request: '已有行程改名为回读核定行程', goal: 'propose_change',
+          resolution: { kind: 'awaiting_review', reviewPackageIndexes: [0] } },
+      ],
+      reviewPackages: [{ objectVersion: version, confirmationUnit: 'itinerary_segment_update', candidates: [
+        { fieldKey: 'itinerarySegmentId', proposedValue: segmentId, clarity: 'clear', evidence: evidence(text, 1) },
+        { fieldKey: 'name', proposedValue: '回读核定行程', clarity: 'clear', evidence: evidence(text, 1) },
+      ] }],
+    }, { kind: 'failed', error: { code: 'INVALID_FORMAT', message: '固定重放续跑失败', retryable: false } }])
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-failed-read`)
+    await processor.processDueJobs(1)
+    const review = (await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)).body.data.items
+    expect(review).toHaveLength(1)
+    const failure = processor.processDueJobs(1)
+    for (let i = 0; i < 20; i++) {
+      await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    }
+    await failure
+    const view = await authRequest(app, coordinatorToken).get(`/api/agent/conversations/${conversationId}`).expect(200)
+    expect(view.body.data.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'batch_status', payload: expect.objectContaining({ status: 'failed', errorCode: 'INVALID_FORMAT' }) }),
+    ]))
+    const after = await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    expect(after.body.data.items).toEqual(review)
+    const segments = await authRequest(app, coordinatorToken).get(`/api/departures/${departureId}/segments`).expect(200)
+    expect(segments.body.data.items.find((item: { id: string }) => item.id === segmentId).name).not.toBe('回读核定行程')
+  })
+
   it('edits an existing segment and appends/updates guests only after review, preserving unrelated guests and quotes', async () => {
     const { departureId, segmentId } = await createDeparture(`${testPrefix}-已有对象修改`)
     const partner = await createPartner('名单修改客户')
