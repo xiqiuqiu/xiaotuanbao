@@ -1,3 +1,4 @@
+import { CopilotRuntimeRecovery } from './CopilotRuntimeRecovery'
 import { ConversationUserMessage } from './conversation-materials'
 import { getAiCreateTask } from '@/services/ai-create-task.service'
 import { AgentWorkContext } from '@/features/agent-conversation/agent-work-context'
@@ -1526,8 +1527,10 @@ export function AgentConversationChat({
           runtimeUrl="/copilotkit"
           useSingleEndpoint={false}
           enableInspector={false}
+          showDevConsole={false}
           renderActivityMessages={activityRenderers}
         >
+          <CopilotRuntimeRecovery />
           <CopilotChatConfigurationProvider
             agentId={COPILOTKIT_RUNTIME_AGENT_ID}
             threadId={conversationId ?? 'new'}
