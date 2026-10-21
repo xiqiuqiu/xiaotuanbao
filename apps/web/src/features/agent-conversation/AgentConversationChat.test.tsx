@@ -30,6 +30,8 @@ import {
 import { useAuthStore } from '@/app/store/auth.store'
 import { DirectoryProfileStatus, PARTNER_WRITE_ACTION_KEY } from '@xiaotuanbao/shared'
 
+vi.mock('./CopilotRuntimeRecovery', () => ({ CopilotRuntimeRecovery: () => null }))
+
 const routerState = vi.hoisted(() => ({
   location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
   navigate: vi.fn(),
