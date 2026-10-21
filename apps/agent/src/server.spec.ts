@@ -73,7 +73,7 @@ describe('agent server', () => {
     delete process.env.AI_MODEL_THINKING_EFFORT
     try {
       expect(loadAgentConfigFromEnv()).toMatchObject({
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek/deepseek-flash',
         modelThinking: 'enabled',
         modelThinkingEffort: 'medium',
       })

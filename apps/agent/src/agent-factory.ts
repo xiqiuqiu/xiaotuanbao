@@ -88,7 +88,7 @@ function createMastra(
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),
   ) as Partial<typeof registeredTools>
-  const modelId = toModelId(config.model ?? 'deepseek/deepseek-v4-flash')
+  const modelId = toModelId(config.model ?? 'deepseek/deepseek-flash')
   const limiterLimit = tokenLimiterLimitForModel(modelId)
   const workItems = createWorkItemsRuntime(config.pendingItems, config.currentUserText)
   const requiresLedger = executionGoal === 'resolve_items'

@@ -24,8 +24,8 @@ const CONTEXT_CAPACITY_PROFILES: Readonly<Record<string, ContextCapacityProfile>
     providerFramingTokens: 1_024,
     safetyMarginTokens: 2_048,
   },
-  'deepseek/deepseek-v4-flash': {
-    profileVersion: 'ai-create-deepseek-v4-flash-32k/v1',
+  'deepseek/deepseek-flash': {
+    profileVersion: 'ai-create-deepseek-flash-32k/v1',
     contextWindowTokens: 32_768,
     softInputLimitTokens: 24_576,
     outputReserveTokens: 4_096,
@@ -35,11 +35,13 @@ const CONTEXT_CAPACITY_PROFILES: Readonly<Record<string, ContextCapacityProfile>
 }
 
 const MODEL_ID_ALIASES: Readonly<Record<string, string>> = {
-  'deepseek-chat': 'deepseek/deepseek-v4-flash',
-  'deepseek/deepseek-chat': 'deepseek/deepseek-v4-flash',
-  'deepseek-reasoner': 'deepseek/deepseek-v4-flash',
-  'deepseek/deepseek-reasoner': 'deepseek/deepseek-v4-flash',
-  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
+  'deepseek-chat': 'deepseek/deepseek-flash',
+  'deepseek/deepseek-chat': 'deepseek/deepseek-flash',
+  'deepseek-reasoner': 'deepseek/deepseek-flash',
+  'deepseek/deepseek-reasoner': 'deepseek/deepseek-flash',
+  'deepseek-flash': 'deepseek/deepseek-flash',
+  'deepseek-v4-flash': 'deepseek/deepseek-flash',
+  'deepseek/deepseek-v4-flash': 'deepseek/deepseek-flash',
 }
 
 export function canonicalModelId(modelId: string): string {

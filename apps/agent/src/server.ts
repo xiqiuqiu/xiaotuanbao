@@ -164,7 +164,7 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),
-    model: process.env.AI_MODEL ?? 'deepseek/deepseek-v4-flash',
+    model: process.env.AI_MODEL ?? 'deepseek/deepseek-flash',
     ...deepseekThinkingFromEnv(),
     modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
     modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
