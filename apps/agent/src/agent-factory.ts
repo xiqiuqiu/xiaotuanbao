@@ -83,7 +83,7 @@ function createMastra(
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),
-    routeConversation: createConversationRoutingTool(),
+    routeConversation: createConversationRoutingTool(config.currentUserText),
   }
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),

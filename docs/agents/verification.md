@@ -7,7 +7,7 @@ How this repo keeps `main` stable. Summary for agents also lives in root `AGENTS
 | Layer | When | What | Blocks |
 | ----- | ---- | ---- | ------ |
 | Local L2 | Before push (hook `pnpm hooks:install`); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related; permission-matrix guard if API routes changed | Dirty push / Agent handoff |
-| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + core unit tests + Web unit tests for Web-related changes + API e2e (E2) | Merge into `main` (required checks) |
+| CI C1 | Every PR and every push to `main` | `pnpm typecheck` + core unit tests + Web unit tests for Web-related changes + API e2e (E2) + deterministic browser P0 | Merge into `main` (required checks) |
 | Release R1 | Version tag or manual home-image build | Core unit tests + 4-way sharded Web unit tests | Build and push release images |
 
 There is **no** hard pre-commit gate. Full API e2e is **not** required on every local commit.
@@ -52,7 +52,7 @@ Jobs / checks (names must match branch protection):
 
 1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
 2. **`unit-tests`** — 聚合门禁：shared、AI contracts、Agent、API 单测始终执行；仅当 `apps/web`、Web 直接依赖或测试配置变化时，4 路并行执行 Web 单元/回归测试
-3. **`api-e2e`** — empty Postgres (Actions service) → `pnpm test:e2e:ci` provisions a private schema → migrate → seed → test → drop schema
+3. **`api-e2e`** — empty Postgres (Actions service) → `pnpm test:e2e:ci` provisions a private schema → migrate → seed → API test → drop schema; then `pnpm test:e2e:web:p0` starts a second owned schema with real API/Worker, a deterministic Agent and production Web UI. Browser P0 failures block this existing check.
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
 
@@ -159,9 +159,11 @@ pnpm hooks:install   # git config core.hooksPath .githooks
 
 Currently runs the **permission-matrix guard (R2)** — the recurring `main`-reddening foot-gun. Bypass with `git push --no-verify` only for network/env issues. typecheck + Doctor remain agent/manual L2 for now (Doctor via `npx` is slow/network-bound; add to the hook if desired).
 
-## Optional local browser E2E (not C1)
+## Browser P0 in C1; full browser and real AI suites local
 
-Manual Playwright smoke + thin create-departure / Agent UI flows. **Not** a required CI check; does not block merge.
+`pnpm test:e2e:web:p0` is a required part of `api-e2e`: 16 browser tests in `agent-p0.spec.ts` run against owned API/Worker/database processes and scripted Agent outcomes. The runner builds the API, migrates/seeds a private schema, starts an isolated Vite instance, retains failure traces and drops its schema on exit. It does not reuse or stop developer services. CI uploads P0 evidence for seven days.
+
+The broader browser suite (`pnpm test:e2e:web`) and 12 real-model scenarios remain local acceptance checks. Run real AI when changing the model, prompts, tools or Agent execution; they are outside CI because they require provider credentials and have variable cost/latency. See `apps/web-e2e/README.md` for commands and scenario coverage.
 
 Agents must **not** verify UI via browser MCP / computer-use / clicking demo pages. New UI features and bugfixes add Playwright under `apps/web-e2e` and run `pnpm test:e2e:web` (or a scoped file). Prefer `getByRole` / `getByTestId`. On failure, stabilize the script then fix product until green. **Web Vitest stays a gate** — Playwright does not replace it. Amounts, permissions, and closed/archived finance gates stay on API Jest e2e; do not re-assert them in browser scripts. See root `AGENTS.md`.
 
@@ -169,6 +171,7 @@ Agents must **not** verify UI via browser MCP / computer-use / clicking demo pag
 # Prerequisites: db up, seed, pnpm dev:api, pnpm dev:web
 pnpm --filter web-e2e exec playwright install chromium   # once per machine
 pnpm test:e2e:web
+pnpm test:e2e:web:p0   # isolated deterministic browser P0; CI also runs it
 ```
 
 See `apps/web-e2e/README.md` and `docs/superpowers/specs/2026-08-04-web-browser-e2e-design.md`.
@@ -178,4 +181,4 @@ See `apps/web-e2e/README.md` and `docs/superpowers/specs/2026-08-04-web-browser-
 - [ ] Branch protection: require ≥1 approving review (V1)
 - [ ] Extend pre-push hook with typecheck (+ Doctor) if the team wants full L2 enforced locally
 - [x] Web 单元测试基线已清零并纳入 `test:unit:ci`
-- [ ] Optional: promote browser E2E smoke to a non-blocking or required CI job after the suite is stable
+- [x] Deterministic browser P0 is part of the existing api-e2e required gate; broader browser/live AI remains local

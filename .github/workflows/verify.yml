@@ -243,3 +243,18 @@ jobs:
           # A local development worker on the same PostgreSQL database therefore
           # cannot claim CI/Jest workflow jobs.
         run: pnpm test:e2e:ci
+
+      - name: Install browser for deterministic P0
+        run: pnpm --filter web-e2e exec playwright install --with-deps chromium
+
+      - name: Browser P0 (isolated API, Worker and deterministic Agent)
+        run: pnpm test:e2e:web:p0
+
+      - name: Upload browser P0 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-p0-evidence
+          path: apps/web-e2e/test-results
+          retention-days: 7
+          if-no-files-found: ignore

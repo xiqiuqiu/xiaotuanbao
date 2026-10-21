@@ -658,15 +658,13 @@ export class ReviewCollaborationService {
           throw new ForbiddenException('无权确认该事项')
         }
       }
-      const record = await tx.aiCreateIdempotencyRecord.upsert({
-        where: {
-          organizationId_operation_idempotencyKey: {
-            organizationId,
-            operation: REVIEW_CONFIRM_BATCH_OPERATION,
-            idempotencyKey: dto.decisionCommandId,
-          },
-        },
-        create: {
+      // Match the Worker lock order before inserting task foreign keys; sort multi-task selections.
+      for (const taskId of [...new Set(packages.map(pkg => pkg.taskId!))].sort()) {
+        await lockAiCreateTask(tx, organizationId, taskId)
+      }
+      // Empty-update upsert can race in Prisma; ON CONFLICT waits for the first command's transaction.
+      await tx.aiCreateIdempotencyRecord.createMany({
+        data: [{
           organizationId,
           operation: REVIEW_CONFIRM_BATCH_OPERATION,
           idempotencyKey: dto.decisionCommandId,
@@ -674,8 +672,13 @@ export class ReviewCollaborationService {
           requestSnapshot: dto as unknown as Prisma.InputJsonValue,
           operatorUserId: userId,
           taskId: packages[0]?.taskId,
-        },
-        update: {},
+        }],
+        skipDuplicates: true,
+      })
+      const record = await tx.aiCreateIdempotencyRecord.findUniqueOrThrow({
+        where: { organizationId_operation_idempotencyKey: {
+          organizationId, operation: REVIEW_CONFIRM_BATCH_OPERATION, idempotencyKey: dto.decisionCommandId,
+        } },
       })
       if (record.requestHash !== requestHash) {
         throw new ConflictException('幂等键已用于不同的确认选择')
@@ -689,7 +692,6 @@ export class ReviewCollaborationService {
         if (!pkg?.conversationId || !pkg.inputBatchId || !pkg.taskId) {
           throw new BadRequestException('审核事项缺少来源会话，无法受理确认')
         }
-        await lockAiCreateTask(tx, organizationId, pkg.taskId)
         const current = await tx.aiReviewPackage.findFirst({
           where: { id: pkg.id, organizationId, taskId: pkg.taskId },
         })

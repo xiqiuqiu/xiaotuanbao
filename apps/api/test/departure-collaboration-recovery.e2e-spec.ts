@@ -902,6 +902,30 @@ describe('Departure collaboration recovery / concurrency / permission (e2e) #455
     expect(new Set(written.map((row) => row.id)).size).toBe(2)
   })
 
+  it('replays concurrent identical confirmation commands without 500 or duplicate effects', async () => {
+    const { departureId, segmentId } = await createDeparture(`${testPrefix}-并发同键确认`)
+    const text = '只将第一天名称改成并发确认核定名称'
+    agent.setOutcome(resolvedItemOutcome(reviewOutcome(await objectVersion(departureId), [{
+      confirmationUnit: 'itinerary_segment_update',
+      candidates: [candidate('itinerarySegmentId', segmentId, text, 1), candidate('name', '并发确认核定名称', text, 1)],
+    }])))
+    const { conversationId } = await openCollaboration(departureId, text, `${testPrefix}-same-command`)
+    await processJobs(conversationId)
+    await waitForPendingPackages(conversationId, 1)
+    const listed = await listCollaboration(departureId, coordinatorToken, conversationId).expect(200)
+    const pkg = listed.body.data.items[0] as { id: string; version: number }
+    const key = `${testPrefix}-same-decision`
+    const responses = await Promise.all(Array.from({ length: 8 }, () => accept(coordinatorToken, key,
+      [{ packageId: pkg.id, expectedPackageVersion: pkg.version }])))
+    expect(responses.map(response => response.status)).toEqual(Array(8).fill(200))
+    expect(responses.map(response => response.body.data.decisionCommandId)).toEqual(Array(8).fill(key))
+    await processJobs(conversationId)
+    const receipt = await getConfirmation(coordinatorToken, key).expect(200)
+    expect(receipt.body.data.items).toEqual([expect.objectContaining({ packageId: pkg.id, status: 'succeeded' })])
+    const formal = await authRequest(app, coordinatorToken).get(`/api/departures/${departureId}/segments`).expect(200)
+    expect(formal.body.data.items.filter((item: { name: string }) => item.name === '并发确认核定名称')).toHaveLength(1)
+  })
+
   it('rejects a concurrent stale revision from a second device without merging titles', async () => {
     const { departureId, segmentId } = await createDeparture(`${testPrefix}-双设备`)
     const supplier = await createSupplier('双设备供应商', [ResourceKind.hotel])

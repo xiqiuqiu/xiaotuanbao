@@ -1,102 +1,10 @@
-import { writeFile } from 'node:fs/promises'
-import { expect, test, type APIResponse, type Page, type TestInfo } from '@playwright/test'
-import type {
-  AiConversationView,
-  DepartureCollaborationView,
-  ItinerarySegmentSummary,
-  SendAiConversationMessageResult,
-} from '../../../packages/shared/src/types/api.types'
-import { createDeparture, loginCoordinator } from '../support/collaboration'
+import { expect, test } from '@playwright/test'
+import type { SendAiConversationMessageResult } from '../../../packages/shared/src/types/api.types'
+import { apiData, setupAgentConversation as setup } from '../support/agent-conversation'
 
 test.skip(process.env.WEB_E2E_LIVE_AI !== 'true', '设置 WEB_E2E_LIVE_AI=true 后连接本地真实 AI')
 test.setTimeout(420_000)
 test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 })
-
-async function apiData<T>(response: APIResponse): Promise<T> {
-  expect(response.ok(), `${response.url()}: ${response.status()} ${await response.text()}`).toBe(true)
-  return (await response.json()).data as T
-}
-
-async function setup(page: Page, testInfo: TestInfo, suffix: string) {
-  await loginCoordinator(page)
-  const departureId = await createDeparture(page, `e2e-live-boundary-${suffix}`)
-  const headers = { Origin: new URL(page.url()).origin }
-  const segments = () => page.request.get(`/api/departures/${departureId}/segments`)
-    .then(apiData<{ items: ItinerarySegmentSummary[] }>)
-  const baseline = await segments()
-  expect(baseline.items.length).toBeGreaterThan(1)
-  const errors: unknown[] = []
-  page.on('pageerror', (error) => errors.push({ kind: 'pageerror', message: error.message }))
-  page.on('response', (response) => {
-    if (response.url().includes('/api/agent/') && response.status() >= 400) {
-      errors.push({ kind: 'http', url: response.url(), status: response.status() })
-    }
-  })
-  let conversationId: string | undefined
-  const pane = page.getByRole('complementary', { name: '电子化助理' })
-  const state = () => {
-    expect(conversationId).toBeTruthy()
-    return page.request.get(`/api/agent/conversations/${conversationId}`).then(apiData<AiConversationView>)
-  }
-  const collaboration = () => page.request.get(`/api/agent/departures/${departureId}/collaboration`, {
-    params: conversationId ? { conversationId } : {},
-  }).then(apiData<DepartureCollaborationView>)
-  const save = async (step: string) => {
-    const facts = {
-      departureId, conversationId, errors,
-      conversation: conversationId ? await state() : null,
-      collaboration: await collaboration(), segments: await segments(),
-    }
-    await writeFile(testInfo.outputPath(`${step}.json`), JSON.stringify(facts, null, 2))
-    await page.screenshot({ path: testInfo.outputPath(`${step}.png`), fullPage: true, timeout: 10_000 })
-    console.log(`[${suffix}] ${step}: ${departureId} ${conversationId ?? ''}`)
-    return facts
-  }
-  const send = async (text: string) => {
-    const response = page.waitForResponse((item) => item.request().method() === 'POST'
-      && /\/api\/agent\/conversations(?:\/[^/]+)?\/messages$/.test(new URL(item.url()).pathname))
-    await pane.getByRole('textbox', { name: '询问小团宝业务' }).fill(text)
-    await pane.getByRole('button', { name: '发送', exact: true }).click()
-    const sent = await apiData<SendAiConversationMessageResult>(await response)
-    conversationId = sent.conversationId
-    return sent
-  }
-  const wait = async (label: string, predicate: (view: AiConversationView) => boolean) => {
-    const deadline = Date.now() + 180_000
-    while (Date.now() < deadline) {
-      const latest = await state()
-      const failed = latest.events.filter((event) => event.kind === 'batch_status' && event.payload.status === 'failed')
-      expect(failed, `${label}: ${JSON.stringify(failed)}`).toEqual([])
-      if (predicate(latest)) return latest
-      const latestStatus = latest.events.filter(event => event.kind === 'batch_status').at(-1)?.payload.status
-      expect(latestStatus, `${label}: ${latest.pendingInteraction?.prompt ?? ''}`).not.toBe('awaiting_user_input')
-      await page.waitForTimeout(1000)
-    }
-    throw new Error(`${label}: 180秒内未到达预期状态`)
-  }
-  const confirmSegment = async () => {
-    await pane.getByRole('button', { name: '查看审核内容', exact: true }).last().click()
-    const workspace = page.getByRole('complementary', { name: '发团协作工作区' })
-    const panel = workspace.getByRole('region', { name: '行程段修改审核' })
-    await expect(panel).toBeVisible()
-    await save('before-confirm')
-    await panel.getByRole('button', { name: '确认修改行程段' }).click()
-    await expect(workspace.getByRole('button', { name: '查看行程段', exact: true })).toBeVisible({ timeout: 60_000 })
-    await expect.poll(async () => (await state()).events.filter(event => event.kind === 'batch_status').at(-1)?.payload.status,
-      { message: '审核写入后，本批次也应退出待审核状态', timeout: 15_000 }).toBe('completed')
-    await save('after-confirm')
-    await workspace.getByRole('button', { name: '返回业务页面', exact: true }).first().click()
-  }
-  await page.goto(`/departure/${departureId}?tab=execution`)
-  await page.getByRole('button', { name: '展开电子化助理' }).click()
-  await pane.getByRole('button', { name: '打开会话历史' }).click()
-  await page.getByRole('dialog', { name: '会话历史' }).getByRole('button', { name: '新建会话' }).click()
-  const attach = pane.getByRole('button', { name: '获取当前页面' })
-  if (await attach.isVisible()) await attach.click()
-  await expect(pane.getByTestId('current-page-chip')).toBeVisible()
-  console.log(`测试团：http://localhost:5173/departure/${departureId}`)
-  return { departureId, headers, baseline, pane, state, segments, collaboration, save, send, wait, confirmSegment }
-}
 
 test('真实 AI：操作咨询交付具体步骤正文，不能用进度回执假完成', async ({ page }, testInfo) => {
   const live = await setup(page, testInfo, 'answer')
